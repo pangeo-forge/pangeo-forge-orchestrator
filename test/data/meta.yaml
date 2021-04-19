@@ -1,0 +1,15 @@
+title: "NOAA Optimum Interpolated SST"
+description: "Analysis-ready Zarr datasets derived from NOAA OISST NetCDF"
+pangeo_forge_version: "0.0.1"  # do we need a separate spec version
+recipes:
+  - id: noaa-oisst-avhrr-only
+    module: recipe.py  # the module where to find the recipe
+    name: recipe  # the name of the object to import
+bakery:
+  id: devseed.bakery.development.aws.us-west-2  # must come from a valid list of bakeries
+  target: pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl
+  target_endpoint: private
+  resources:
+    memory: 4096
+    cpu: 1024
+    

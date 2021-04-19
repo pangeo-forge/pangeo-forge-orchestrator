@@ -1,0 +1,23 @@
+---
+devseed.bakery.development.aws.us-west-2:
+  region: aws.us-west-2
+  targets:
+    pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl:
+      region: aws.us-west-2
+      description: "Internal bucket"
+      private:
+        protocol: s3
+        storage_options:
+          anonymous: True
+  cluster:
+    type: aws.fargate
+    worker_image: 552819999234.dkr.ecr.us-west-2.amazonaws.com/pangeo-forge-aws-bakery-worker
+    vpc: vpc-0e519fd83fa521d72
+    cluster_arn: arn:aws:ecs:us-west-2:552819999234:cluster/pangeo-forge-aws-bakery-pangeo-forge-dask-bakeryclusterpangeoforgedask71B831F8-BTL3Vmp8cuso
+    task_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskrolepangeo-3R73K3Z1XU70
+    execution_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskexecutionr-5ZGMH0A8LVXF
+    security_groups:
+      - sg-0c4d6e997637c801d 
+    flow_storage: pangeo-forge-aws-bakery-flowstoragebucketpangeof-71w6gsnambj9
+
+
