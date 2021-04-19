@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="pangeo_forge_prefect",
@@ -15,5 +15,8 @@ setup(
         "rechunker@git+https://github.com/pangeo-data/rechunker#egg=rechunker",
         "pangeo_forge@git+https://github.com/pangeo-forge/pangeo-forge#egg=pangeo_forge",
     ],
-    extras_require={"dev": ["flake8", "black"], "test": ["flake8", "pytest"]}
+    extras_require={
+        "dev": ["flake8", "black", "pre-commit", "pre-commit-hooks", "isort"],
+        "test": ["flake8", "pytest"],
+    },
 )

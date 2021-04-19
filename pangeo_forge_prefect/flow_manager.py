@@ -1,22 +1,29 @@
-import yaml
-import os
 import importlib
 import logging
+import os
 from dataclasses import dataclass
-from dacite import from_dict
 from functools import wraps
-from rechunker.executors import PrefectPipelineExecutor
+
+import yaml
+from dacite import from_dict
+from pangeo_forge.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
 from prefect.run_configs import ECSRun
+from rechunker.executors import PrefectPipelineExecutor
 from s3fs import S3FileSystem
-from pangeo_forge.storage import FSSpecTarget, CacheFSSpecTarget
+
+from pangeo_forge_prefect.meta_types.bakery import (
+    FARGATE_CLUSTER,
+    S3_PROTOCOL,
+    Bakery,
+    Cluster,
+)
 from pangeo_forge_prefect.meta_types.meta import Meta, RecipeBakery
-from pangeo_forge_prefect.meta_types.bakery import Bakery, Cluster, S3_PROTOCOL, FARGATE_CLUSTER
 
 
 @dataclass
-class Targets():
+class Targets:
     target: FSSpecTarget
     cache: CacheFSSpecTarget
 
@@ -28,14 +35,19 @@ def set_log_level(func):
         logging.getLogger("pangeo_forge.recipe").setLevel(level=logging.DEBUG)
         result = func(*args, **kwargs)
         return result
+
     return wrapper
 
 
 def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str):
     target = bakery.targets[recipe_bakery.target]
-    if (target.private.protocol == S3_PROTOCOL):
+    if target.private.protocol == S3_PROTOCOL:
         if (target.private.storage_options.key) is None:
-            fs = S3FileSystem(anon=False, default_cache_type='none', default_fill_cache=False,)
+            fs = S3FileSystem(
+                anon=False,
+                default_cache_type="none",
+                default_fill_cache=False,
+            )
             target_path = f"s3://{recipe_bakery.target}/{recipe_name}/target"
             target = FSSpecTarget(fs, target_path)
             cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
@@ -44,7 +56,9 @@ def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: 
 
 
 def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
-    if (cluster.type == FARGATE_CLUSTER):
+    worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
+    worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
+    if cluster.type == FARGATE_CLUSTER:
         dask_executor = DaskExecutor(
             cluster_class="dask_cloudprovider.aws.FargateCluster",
             cluster_kwargs={
@@ -57,16 +71,14 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                 "n_workers": 4,
                 "scheduler_cpu": 1024,
                 "scheduler_mem": 2048,
-                "worker_cpu": recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024,
-                "worker_mem": recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096,
+                "worker_cpu": worker_cpu,
+                "worker_mem": worker_mem,
                 "scheduler_timeout": "15 minutes",
-                "environment": {
-                    "PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge.recipe']"
-                },
+                "environment": {"PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge.recipe']"},
                 "tags": {
                     "Project": "pangeo-forge",
                     "Recipe": recipe_name,
-                }
+                },
             },
         )
         return dask_executor
@@ -77,10 +89,8 @@ def configure_run_config(cluster: Cluster, recipe_name: str):
         "networkMode": "awsvpc",
         "cpu": 1024,
         "memory": 2048,
-        "containerDefinitions": [
-            {"name": "flow"}
-        ],
-        "executionRoleArn": cluster.execution_role_arn
+        "containerDefinitions": [{"name": "flow"}],
+        "executionRoleArn": cluster.execution_role_arn,
     }
     run_config = ECSRun(
         image=cluster.worker_image,
@@ -90,7 +100,7 @@ def configure_run_config(cluster: Cluster, recipe_name: str):
         run_task_kwargs={
             "tags": [
                 {"key": "Project", "value": "pangeo-forge"},
-                {"key": "Recipe", "value": recipe_name}
+                {"key": "Recipe", "value": recipe_name},
             ]
         },
     )
@@ -135,4 +145,4 @@ def register_flow(meta_path, bakeries_path):
             flow.register(project_name="pangeo-forge-aws-bakery")
 
 
-
+register_flow("./test/data/meta.yaml", "./test/data/bakeries.yaml")

@@ -17,7 +17,5 @@ devseed.bakery.development.aws.us-west-2:
     task_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskrolepangeo-3R73K3Z1XU70
     execution_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskexecutionr-5ZGMH0A8LVXF
     security_groups:
-      - sg-0c4d6e997637c801d 
+      - sg-0c4d6e997637c801d
     flow_storage: pangeo-forge-aws-bakery-flowstoragebucketpangeof-71w6gsnambj9
-
-

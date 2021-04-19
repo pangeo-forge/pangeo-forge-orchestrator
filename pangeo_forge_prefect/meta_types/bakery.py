@@ -1,5 +1,5 @@
-from typing import Literal, Optional, Dict, List
 from dataclasses import dataclass
+from typing import Dict, List, Literal, Optional
 
 regions = Literal[
     "aws.us-east-1",

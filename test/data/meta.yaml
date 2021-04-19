@@ -12,4 +12,3 @@ bakery:
   resources:
     memory: 4096
     cpu: 1024
-    
