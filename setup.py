@@ -16,7 +16,7 @@ setup(
         "pangeo_forge@git+https://github.com/pangeo-forge/pangeo-forge#egg=pangeo_forge",
     ],
     extras_require={
-        "dev": ["flake8", "black", "pre-commit", "pre-commit-hooks", "isort"],
+        "dev": ["flake8", "black", "pre-commit", "pre-commit-hooks", "isort", "pytest"],
         "test": ["flake8", "pytest"],
     },
 )

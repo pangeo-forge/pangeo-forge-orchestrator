@@ -84,27 +84,27 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
         return dask_executor
 
 
-def configure_run_config(cluster: Cluster, recipe_name: str):
-    definition = {
-        "networkMode": "awsvpc",
-        "cpu": 1024,
-        "memory": 2048,
-        "containerDefinitions": [{"name": "flow"}],
-        "executionRoleArn": cluster.execution_role_arn,
-    }
-    run_config = ECSRun(
-        image=cluster.worker_image,
-        # Fix this to use bakery.id
-        labels=["dask_test"],
-        task_definition=definition,
-        run_task_kwargs={
-            "tags": [
-                {"key": "Project", "value": "pangeo-forge"},
-                {"key": "Recipe", "value": recipe_name},
-            ]
-        },
-    )
-    return run_config
+def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
+    if cluster.type == FARGATE_CLUSTER:
+        definition = {
+            "networkMode": "awsvpc",
+            "cpu": 1024,
+            "memory": 2048,
+            "containerDefinitions": [{"name": "flow"}],
+            "executionRoleArn": cluster.execution_role_arn,
+        }
+        run_config = ECSRun(
+            image=cluster.worker_image,
+            labels=[recipe_bakery.id],
+            task_definition=definition,
+            run_task_kwargs={
+                "tags": [
+                    {"key": "Project", "value": "pangeo-forge"},
+                    {"key": "Recipe", "value": recipe_name},
+                ]
+            },
+        )
+        return run_config
 
 
 def register_flow(meta_path, bakeries_path):
@@ -134,7 +134,7 @@ def register_flow(meta_path, bakeries_path):
             pipeline = recipe.to_pipelines()
             flow = executor.pipelines_to_plan(pipeline)
             flow.storage = storage.S3(bucket=bakery.cluster.flow_storage)
-            run_config = configure_run_config(bakery.cluster, recipe_meta.id)
+            run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_meta.id)
             flow.run_config = run_config
             flow.executor = dask_executor
 
@@ -145,4 +145,4 @@ def register_flow(meta_path, bakeries_path):
             flow.register(project_name="pangeo-forge-aws-bakery")
 
 
-register_flow("./test/data/meta.yaml", "./test/data/bakeries.yaml")
+#  register_flow("./test/data/meta.yaml", "./test/data/bakeries.yaml")
