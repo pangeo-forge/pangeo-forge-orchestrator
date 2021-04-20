@@ -1,5 +1,5 @@
 ## Pangeo Forge Prefect
-This module takes a Pangeo Forge recipe [meta.yaml](https://github.com/pangeo-forge/roadmap/blob/master/doc/adr/0002-use-meta-yaml-to-track-feedstock-metadata.md) and [bakeries.yaml](https://github.com/pangeo-forge/roadmap/blob/master/doc/adr/0004-use-yaml-file-for-bakery-database.md) and register's the `meta.yaml`'s recipes with Prefect Cloud using the it's specified bakery information.
+This module takes a Pangeo Forge recipe [meta.yaml](https://github.com/pangeo-forge/roadmap/blob/master/doc/adr/0002-use-meta-yaml-to-track-feedstock-metadata.md) and [bakeries.yaml](https://github.com/pangeo-forge/roadmap/blob/master/doc/adr/0004-use-yaml-file-for-bakery-database.md) and registers the `meta.yaml`'s recipes with Prefect Cloud using the its specified bakery information.
 
 It is intended for use with Github Actions in the `pangeo-forge/staged-recipe` and `feedstock` repositories as outlined [here](https://github.com/pangeo-forge/roadmap/blob/master/doc/adr/0001-github-workflows.md).
 
@@ -19,8 +19,6 @@ PREFECT_PROJECT_NAME
 To be set to the Pangeo Forge Prefect Cloud [project](https://docs.prefect.io/orchestration/concepts/projects.html#projects) name.
 
 ## Install
-The use of a virtual environment is recommended.
-
 From source
 ```
 $ pip install git+https://github.com/developmentseed/pangeo-forge-prefect.git
@@ -32,8 +30,8 @@ $ tox
 ```
 
 ## Contributing
-###
-Dev install
+The use of a virtual environment is recommended.
+### Dev install
 ```
 $ git clone https://github.com/developmentseed/pangeo-forge-prefect
 $ cd pangeo-forge-prefect
