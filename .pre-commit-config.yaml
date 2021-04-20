@@ -42,7 +42,7 @@ repos:
         language: system
         entry: black
         types: [python]
-        args: ["--check", "--line-length", "100"]
+        args: ["--line-length", "100"]
 
       - id: flake8
         name: flake8
