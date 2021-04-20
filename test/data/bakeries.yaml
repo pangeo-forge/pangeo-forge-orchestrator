@@ -7,8 +7,6 @@ devseed.bakery.development.aws.us-west-2:
       description: "Internal bucket"
       private:
         protocol: s3
-        storage_options:
-          anonymous: True
   cluster:
     type: aws.fargate
     worker_image: 552819999234.dkr.ecr.us-west-2.amazonaws.com/pangeo-forge-aws-bakery-worker

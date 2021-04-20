@@ -35,7 +35,7 @@ class StorageOptions:
 @dataclass
 class Endpoint:
     protocol: Literal[S3_PROTOCOL]
-    storage_options: StorageOptions
+    storage_options: Optional[StorageOptions] = None
     prefix: Optional[str] = None
 
 

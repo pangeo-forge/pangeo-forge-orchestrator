@@ -42,7 +42,7 @@ def set_log_level(func):
 def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str):
     target = bakery.targets[recipe_bakery.target]
     if target.private.protocol == S3_PROTOCOL:
-        if (target.private.storage_options.key) is None:
+        if (target.private.storage_options) is None:
             fs = S3FileSystem(
                 anon=False,
                 default_cache_type="none",
