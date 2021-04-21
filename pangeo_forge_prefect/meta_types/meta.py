@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 
 @dataclass
@@ -24,11 +24,32 @@ class RecipeBakery:
 
 
 @dataclass
+class Provider:
+    name: str
+    description: str
+    roles: List[Literal["producer", "licensor"]]
+    url: str
+
+
+@dataclass
+class Provenance:
+    providers: List[Provider]
+    license: str
+
+
+@dataclass
+class Maintainer:
+    name: str
+    orcid: Optional[str]
+    github: Optional[str]
+
+
+@dataclass
 class Meta:
     title: str
     description: str
     pangeo_forge_version: str
     recipes: List[Recipe]
     bakery: RecipeBakery
-    provenance: Optional[str]
-    maintainers: Optional[str]
+    provenance: Optional[Provenance]
+    maintainers: Optional[List[Maintainer]]
