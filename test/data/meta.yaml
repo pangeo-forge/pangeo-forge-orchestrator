@@ -21,7 +21,6 @@ maintainers:
 bakery:
   id: "devseed.bakery.development.aws.us-west-2"  # must come from a valid list of bakeries
   target: pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl
-  target_endpoint: private
   resources:
     memory: 4096
     cpu: 1024

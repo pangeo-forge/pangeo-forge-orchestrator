@@ -19,7 +19,6 @@ class Resources:
 class RecipeBakery:
     id: str
     target: str
-    target_endpoint: str
     resources: Optional[Resources] = None
 
 
