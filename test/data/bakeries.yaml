@@ -7,6 +7,9 @@ devseed.bakery.development.aws.us-west-2:
       description: "Internal bucket"
       private:
         protocol: s3
+        storage_options:
+          key: pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl.key
+          secret: pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl.secret
   cluster:
     type: aws.fargate
     worker_image: 552819999234.dkr.ecr.us-west-2.amazonaws.com/pangeo-forge-aws-bakery-worker

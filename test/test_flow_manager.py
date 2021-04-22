@@ -1,6 +1,8 @@
+import os
+from unittest.mock import patch
+
 from dask_cloudprovider.aws.ecs import FargateCluster
 from prefect.run_configs import ECSRun
-from s3fs import S3FileSystem
 
 from pangeo_forge_prefect.flow_manager import (
     configure_dask_executor,
@@ -11,10 +13,18 @@ from pangeo_forge_prefect.flow_manager import (
 from .data.classes import bakery, meta
 
 
-def test_configure_targets():
+@patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
+@patch.dict(os.environ, {"BUCKET_KEY": "key", "BUCKET_SECRET": "secret"})
+def test_configure_targets(S3FileSystem):
     recipe_name = "test"
     targets = configure_targets(bakery, meta.bakery, recipe_name)
-    assert type(targets.target.fs) == S3FileSystem
+    S3FileSystem.assert_called_once_with(
+        anon=False,
+        default_cache_type="none",
+        default_fill_cache=False,
+        key="key",
+        secret="secret",
+    )
     assert targets.target.root_path == f"s3://{meta.bakery.target}/{recipe_name}/target"
 
 

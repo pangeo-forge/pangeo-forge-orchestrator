@@ -42,7 +42,7 @@ class Endpoint:
 @dataclass
 class Target:
     region: regions
-    private: Endpoint
+    private: Optional[Endpoint] = None
     description: Optional[str] = None
     prefix: Optional[str] = None
 

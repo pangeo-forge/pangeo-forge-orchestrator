@@ -42,11 +42,15 @@ def set_log_level(func):
 def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str):
     target = bakery.targets[recipe_bakery.target]
     if target.private.protocol == S3_PROTOCOL:
-        if (target.private.storage_options) is None:
+        if target.private.storage_options:
+            key = os.environ["BUCKET_KEY"]
+            secret = os.environ["BUCKET_SECRET"]
             fs = S3FileSystem(
                 anon=False,
                 default_cache_type="none",
                 default_fill_cache=False,
+                key=key,
+                secret=secret,
             )
             target_path = f"s3://{recipe_bakery.target}/{recipe_name}/target"
             target = FSSpecTarget(fs, target_path)
