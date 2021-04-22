@@ -3,6 +3,7 @@ import logging
 import os
 from dataclasses import dataclass
 from functools import wraps
+from typing import Dict
 
 import yaml
 from dacite import from_dict
@@ -39,12 +40,12 @@ def set_log_level(func):
     return wrapper
 
 
-def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str):
+def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict):
     target = bakery.targets[recipe_bakery.target]
     if target.private.protocol == S3_PROTOCOL:
         if target.private.storage_options:
-            key = os.environ["BUCKET_KEY"]
-            secret = os.environ["BUCKET_SECRET"]
+            key = secrets[target.private.storage_options.key]
+            secret = secrets[target.private.storage_options.secret]
             fs = S3FileSystem(
                 anon=False,
                 default_cache_type="none",
@@ -111,7 +112,7 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
         return run_config
 
 
-def register_flow(meta_path, bakeries_path):
+def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
     with open(meta_path) as meta_yaml, open(bakeries_path) as bakeries_yaml:
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
         meta = from_dict(data_class=Meta, data=meta_dict)
@@ -128,7 +129,7 @@ def register_flow(meta_path, bakeries_path):
             spec.loader.exec_module(module)
             recipe = module.recipe
 
-            targets = configure_targets(bakery, meta.bakery, recipe_meta.id)
+            targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
             recipe.target = targets.target
             recipe.input_cache = targets.cache
             recipe.metadata_cache = targets.target
