@@ -57,6 +57,8 @@ class Cluster:
     execution_role_arn: str
     security_groups: List[str]
     flow_storage: str
+    flow_storage_protocol: Literal[S3_PROTOCOL]
+    flow_storage_options: StorageOptions
 
 
 @dataclass

@@ -5,6 +5,7 @@ from prefect.run_configs import ECSRun
 
 from pangeo_forge_prefect.flow_manager import (
     configure_dask_executor,
+    configure_flow_storage,
     configure_run_config,
     configure_targets,
 )
@@ -30,6 +31,21 @@ def test_configure_targets(S3FileSystem):
         secret=secret,
     )
     assert targets.target.root_path == f"s3://{meta.bakery.target}/{recipe_name}/target"
+
+
+@patch("pangeo_forge_prefect.flow_manager.storage")
+def test_configure_flow_storage(storage):
+    key = "key"
+    secret = "secret"
+    secrets = {
+        "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
+        "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
+    }
+    configure_flow_storage(bakery.cluster, secrets)
+    storage.S3.assert_called_once_with(
+        bucket=bakery.cluster.flow_storage,
+        client_options={"aws_access_key_id": key, "aws_secret_access_key": secret},
+    )
 
 
 def test_configure_dask_executor():

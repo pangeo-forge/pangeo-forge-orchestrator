@@ -112,6 +112,17 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
         return run_config
 
 
+def configure_flow_storage(cluster: Cluster, secrets):
+    key = secrets[cluster.flow_storage_options.key]
+    secret = secrets[cluster.flow_storage_options.secret]
+    if cluster.flow_storage_protocol == S3_PROTOCOL:
+        flow_storage = storage.S3(
+            bucket=cluster.flow_storage,
+            client_options={"aws_access_key_id": key, "aws_secret_access_key": secret},
+        )
+        return flow_storage
+
+
 def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
     with open(meta_path) as meta_yaml, open(bakeries_path) as bakeries_yaml:
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
@@ -138,7 +149,7 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
             executor = PrefectPipelineExecutor()
             pipeline = recipe.to_pipelines()
             flow = executor.pipelines_to_plan(pipeline)
-            flow.storage = storage.S3(bucket=bakery.cluster.flow_storage)
+            flow.storage = configure_flow_storage(bakery.cluster, secrets)
             run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_meta.id)
             flow.run_config = run_config
             flow.executor = dask_executor
@@ -148,6 +159,3 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
 
             flow.name = recipe_meta.id
             flow.register(project_name="pangeo-forge-aws-bakery")
-
-
-#  register_flow("./test/data/meta.yaml", "./test/data/bakeries.yaml")

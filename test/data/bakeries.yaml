@@ -20,3 +20,7 @@ devseed.bakery.development.aws.us-west-2:
     security_groups:
       - sg-0c4d6e997637c801d
     flow_storage: pangeo-forge-aws-bakery-flowstoragebucketpangeof-71w6gsnambj9
+    flow_storage_protocol: s3
+    flow_storage_options:
+      key: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY
+      secret: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET
