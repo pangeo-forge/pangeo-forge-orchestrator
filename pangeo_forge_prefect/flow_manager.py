@@ -22,6 +22,8 @@ from pangeo_forge_prefect.meta_types.bakery import (
 )
 from pangeo_forge_prefect.meta_types.meta import Meta, RecipeBakery
 
+project_name = os.environ("PREFECT_PROJECT_NAME")
+
 
 @dataclass
 class Targets:
@@ -178,4 +180,4 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
                 flow_task.run = set_log_level(flow_task.run)
 
             flow.name = recipe_meta.id
-            flow.register(project_name="pangeo-forge-aws-bakery")
+            flow.register(project_name=project_name)
