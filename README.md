@@ -18,7 +18,6 @@ PREFECT_PROJECT_NAME
 ```
 To be set to the Pangeo Forge Prefect Cloud [project](https://docs.prefect.io/orchestration/concepts/projects.html#projects) name.
 
-```
 
 ## Install
 From source
@@ -33,6 +32,7 @@ $ tox
 
 ## Contributing
 The use of a virtual environment is recommended.
+
 ### Dev install
 ```
 $ git clone https://github.com/developmentseed/pangeo-forge-prefect
