@@ -19,10 +19,6 @@ PREFECT_PROJECT_NAME
 To be set to the Pangeo Forge Prefect Cloud [project](https://docs.prefect.io/orchestration/concepts/projects.html#projects) name.
 
 ```
-BUCKET_KEY
-BUCKET_SECRET
-```
-Should be set to the values corresponding to the storage target from `bakeries.yaml`.
 
 ## Install
 From source
