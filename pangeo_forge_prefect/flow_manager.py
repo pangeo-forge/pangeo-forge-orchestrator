@@ -146,6 +146,22 @@ def configure_flow_storage(cluster: Cluster, secrets):
 
 
 def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
+    """
+    Convert a pangeo-forge to a Prefect recipe and register with Prefect Cloud.
+
+    Uses values from a recipe's meta.yaml, values from a bakeries.yaml
+    file and a dictionary of pangeo-forge bakery secrets to configure the
+    storage, dask cluster and parameters for a Prefect flow and registers this
+    flow with a Prefect Cloud account.
+
+    Parameters
+    ----------
+    meta_path : str
+        Path to a recipe's meta.yaml file
+    bakeries_path : str
+        Path to a bakeries.yaml file containing an entry for the recipe's
+        bakery.id
+    """
     with open(meta_path) as meta_yaml, open(bakeries_path) as bakeries_yaml:
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
         meta = from_dict(data_class=Meta, data=meta_dict)
