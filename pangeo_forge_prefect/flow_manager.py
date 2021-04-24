@@ -29,6 +29,18 @@ class Targets:
     cache: CacheFSSpecTarget
 
 
+class UnsupportedTarget(Exception):
+    pass
+
+
+class UnsupportedClusterType(Exception):
+    pass
+
+
+class UnsupportedFlowStorage(Exception):
+    pass
+
+
 def set_log_level(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -58,6 +70,8 @@ def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: 
             cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
             return Targets(target=target, cache=cache_target)
+    else:
+        raise UnsupportedTarget
 
 
 def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
@@ -87,6 +101,8 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
             },
         )
         return dask_executor
+    else:
+        raise UnsupportedClusterType
 
 
 def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
@@ -110,6 +126,8 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
             },
         )
         return run_config
+    else:
+        raise UnsupportedClusterType
 
 
 def configure_flow_storage(cluster: Cluster, secrets):
@@ -121,6 +139,8 @@ def configure_flow_storage(cluster: Cluster, secrets):
             client_options={"aws_access_key_id": key, "aws_secret_access_key": secret},
         )
         return flow_storage
+    else:
+        raise UnsupportedFlowStorage
 
 
 def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
