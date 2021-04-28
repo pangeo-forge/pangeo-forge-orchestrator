@@ -59,6 +59,7 @@ class Cluster:
     flow_storage: str
     flow_storage_protocol: Literal[S3_PROTOCOL]
     flow_storage_options: StorageOptions
+    max_workers: int
 
 
 @dataclass

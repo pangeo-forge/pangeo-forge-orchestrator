@@ -101,6 +101,7 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                     "Recipe": recipe_name,
                 },
             },
+            adapt_kwargs={"maximum": cluster.max_workers},
         )
         return dask_executor
     else:

@@ -24,3 +24,4 @@ devseed.bakery.development.aws.us-west-2:
     flow_storage_options:
       key: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY
       secret: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET
+    max_workers: 10

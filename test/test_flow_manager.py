@@ -88,6 +88,7 @@ def test_configure_dask_executor(aws_bakery, meta):
     assert dask_executor.cluster_class == FargateCluster
     assert dask_executor.cluster_kwargs["worker_cpu"] == meta.bakery.resources.cpu
     assert dask_executor.cluster_kwargs["worker_mem"] == meta.bakery.resources.memory
+    assert dask_executor.adapt_kwargs["maximum"] == aws_bakery.cluster.max_workers
 
     meta.bakery.resources = None
     dask_executor = configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
