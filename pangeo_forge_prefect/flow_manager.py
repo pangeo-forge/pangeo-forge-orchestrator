@@ -45,7 +45,7 @@ def set_log_level(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         logging.basicConfig()
-        logging.getLogger("pangeo_forge.recipe").setLevel(level=logging.DEBUG)
+        logging.getLogger("pangeo_forge.recipes.xarray_zarr").setLevel(level=logging.DEBUG)
         result = func(*args, **kwargs)
         return result
 
@@ -93,7 +93,9 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                 "worker_cpu": worker_cpu,
                 "worker_mem": worker_mem,
                 "scheduler_timeout": "15 minutes",
-                "environment": {"PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge.recipe']"},
+                "environment": {
+                    "PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge.recipes.xarray_zarr']"
+                },
                 "tags": {
                     "Project": "pangeo-forge",
                     "Recipe": recipe_name,
