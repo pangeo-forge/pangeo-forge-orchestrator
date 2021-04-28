@@ -1,7 +1,5 @@
 import pandas as pd
 from pangeo_forge.patterns import pattern_from_file_sequence
-
-#  from pangeo_forge.recipe import NetCDFtoZarrSequentialRecipe
 from pangeo_forge.recipes import XarrayZarrRecipe
 
 input_url_pattern = (
@@ -15,9 +13,4 @@ input_urls = [
 ]
 pattern = pattern_from_file_sequence(input_urls, "time", nitems_per_file=1)
 
-#  recipe = NetCDFtoZarrSequentialRecipe(
-#  input_urls=input_urls,
-#  sequence_dim="time",
-#  inputs_per_chunk=20,
-#  )
 recipe = XarrayZarrRecipe(pattern, inputs_per_chunk=20)
