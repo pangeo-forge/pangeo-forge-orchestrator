@@ -87,6 +87,7 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                 "task_role_arn": cluster.task_role_arn,
                 "execution_role_arn": cluster.execution_role_arn,
                 "security_groups": cluster.security_groups,
+                "n_workers": 4,
                 "scheduler_cpu": 1024,
                 "scheduler_mem": 2048,
                 "worker_cpu": worker_cpu,
