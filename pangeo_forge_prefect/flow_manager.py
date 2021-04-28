@@ -45,7 +45,7 @@ def set_log_level(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         logging.basicConfig()
-        logging.getLogger("pangeo_forge.recipe").setLevel(level=logging.DEBUG)
+        logging.getLogger("pangeo_forge.recipes.xarray_zarr").setLevel(level=logging.DEBUG)
         result = func(*args, **kwargs)
         return result
 
