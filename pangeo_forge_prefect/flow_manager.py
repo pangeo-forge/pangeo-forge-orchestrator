@@ -7,7 +7,7 @@ from typing import Dict
 
 import yaml
 from dacite import from_dict
-from pangeo_forge.storage import CacheFSSpecTarget, FSSpecTarget
+from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
 from prefect.run_configs import ECSRun
