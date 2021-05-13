@@ -197,7 +197,7 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
         bakeries_dict = yaml.load(bakeries_yaml, Loader=yaml.FullLoader)
         bakery = from_dict(data_class=Bakery, data=bakeries_dict[meta.bakery.id])
 
-        check_versions(meta, bakery.cluster, Versions)
+        check_versions(meta, bakery.cluster, versions)
 
         for recipe_meta in meta.recipes:
             # Load module from meta.yaml
