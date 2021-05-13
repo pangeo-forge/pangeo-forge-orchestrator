@@ -10,7 +10,9 @@ from prefect.run_configs import ECSRun
 from pangeo_forge_prefect.flow_manager import (
     UnsupportedClusterType,
     UnsupportedFlowStorage,
+    UnsupportedPangeoVersion,
     UnsupportedTarget,
+    check_versions,
     configure_dask_executor,
     configure_flow_storage,
     configure_run_config,
@@ -18,6 +20,7 @@ from pangeo_forge_prefect.flow_manager import (
 )
 from pangeo_forge_prefect.meta_types.bakery import Bakery
 from pangeo_forge_prefect.meta_types.meta import Meta
+from pangeo_forge_prefect.meta_types.versions import Versions
 
 
 @pytest.fixture
@@ -108,3 +111,15 @@ def test_configure_run_config(aws_bakery, meta):
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
         configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+
+
+def test_check_versions(aws_bakery, meta):
+    versions = Versions(
+        pangeo_notebook_version="2021.05.04",
+        pangeo_forge_version="0.3.3",
+        prefect_version="0.14.7",
+    )
+    assert check_versions(meta, aws_bakery.cluster, versions)
+    versions.pangeo_notebook_version = "none"
+    with pytest.raises(UnsupportedPangeoVersion):
+        check_versions(meta, aws_bakery.cluster, versions)

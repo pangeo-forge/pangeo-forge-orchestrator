@@ -48,6 +48,7 @@ class Meta:
     title: str
     description: str
     pangeo_forge_version: str
+    pangeo_notebook_version: str
     recipes: List[Recipe]
     bakery: RecipeBakery
     provenance: Optional[Provenance]
