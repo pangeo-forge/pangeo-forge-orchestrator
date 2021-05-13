@@ -50,6 +50,9 @@ class Target:
 @dataclass
 class Cluster:
     type: Literal[FARGATE_CLUSTER]
+    pangeo_forge_version: str
+    pangeo_notebook_version: str
+    prefect_version: str
     worker_image: str
     vpc: str
     cluster_arn: str

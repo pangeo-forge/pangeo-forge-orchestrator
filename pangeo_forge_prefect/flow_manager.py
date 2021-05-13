@@ -21,6 +21,7 @@ from pangeo_forge_prefect.meta_types.bakery import (
     Cluster,
 )
 from pangeo_forge_prefect.meta_types.meta import Meta, RecipeBakery
+from pangeo_forge_prefect.meta_types.versions import Versions
 
 
 @dataclass
@@ -38,6 +39,18 @@ class UnsupportedClusterType(Exception):
 
 
 class UnsupportedFlowStorage(Exception):
+    pass
+
+
+class UnsupportedPangeoVersion(Exception):
+    pass
+
+
+class UnsupportedPangeoForgeRecipeVersion(Exception):
+    pass
+
+
+class UnsupportedPrefectVersion(Exception):
     pass
 
 
@@ -145,7 +158,22 @@ def configure_flow_storage(cluster: Cluster, secrets):
         raise UnsupportedFlowStorage
 
 
-def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
+def check_versions(meta: Meta, cluster: Cluster, versions: Versions):
+    if meta.pangeo_notebook_version != versions.pangeo_notebook_version:
+        raise UnsupportedPangeoVersion
+    elif meta.pangeo_notebook_version != cluster.pangeo_notebook_version:
+        raise UnsupportedPangeoVersion
+    elif meta.pangeo_forge_version != versions.pangeo_forge_version:
+        raise UnsupportedPangeoForgeRecipeVersion
+    elif meta.pangeo_forge_version != cluster.pangeo_forge_version:
+        raise UnsupportedPangeoForgeRecipeVersion
+    elif versions.prefect_version != cluster.prefect_version:
+        raise UnsupportedPrefectVersion
+    else:
+        return True
+
+
+def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: Versions):
     """
     Convert a pangeo-forge to a Prefect recipe and register with Prefect Cloud.
 
@@ -168,6 +196,8 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict):
 
         bakeries_dict = yaml.load(bakeries_yaml, Loader=yaml.FullLoader)
         bakery = from_dict(data_class=Bakery, data=bakeries_dict[meta.bakery.id])
+
+        check_versions(meta, bakery.cluster, Versions)
 
         for recipe_meta in meta.recipes:
             # Load module from meta.yaml
