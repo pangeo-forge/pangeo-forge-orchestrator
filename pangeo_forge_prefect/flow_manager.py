@@ -240,7 +240,6 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
         for recipe_meta in meta.recipes:
             targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
             if recipe_meta.dict_object:
-                print("wat")
                 recipes_dict = get_module_attribute(meta_path, recipe_meta.dict_object)
                 for key, value in recipes_dict.items():
                     recipe_to_flow(bakery, meta, key, value, targets, secrets)
