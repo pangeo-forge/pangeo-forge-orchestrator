@@ -4,9 +4,13 @@ from typing import List, Literal, Optional
 
 @dataclass
 class Recipe:
-    id: str
-    module: str
-    name: str
+    id: Optional[str] = None
+    object: Optional[str] = None
+    dict_object: Optional[str] = None
+
+    def __post_init__(self):
+        if self.id is None and self.dict_object is None:
+            raise TypeError("Value needed for either id or dict_object")
 
 
 @dataclass
