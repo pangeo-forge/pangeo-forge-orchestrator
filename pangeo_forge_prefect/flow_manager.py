@@ -7,6 +7,7 @@ from typing import Dict
 
 import yaml
 from dacite import from_dict
+from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
@@ -173,6 +174,43 @@ def check_versions(meta: Meta, cluster: Cluster, versions: Versions):
         return True
 
 
+def get_module_attribute(meta_path: str, attribute_path: str):
+    module_components = attribute_path.split(":")
+    module = f"{module_components[0]}.py"
+    name = module_components[1]
+
+    meta_dir = os.path.dirname(os.path.abspath(meta_path))
+    module_path = os.path.join(meta_dir, module)
+    spec = importlib.util.spec_from_file_location(name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return getattr(module, name)
+
+
+def recipe_to_flow(
+    bakery: Bakery, meta: Meta, recipe_id: str, recipe: BaseRecipe, targets: Targets, secrets: Dict
+):
+    recipe.target = targets.target
+    recipe.input_cache = targets.cache
+    recipe.metadata_cache = targets.target
+
+    dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id)
+    executor = PrefectPipelineExecutor()
+    pipeline = recipe.to_pipelines()
+    flow = executor.pipelines_to_plan(pipeline)
+    flow.storage = configure_flow_storage(bakery.cluster, secrets)
+    run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id)
+    flow.run_config = run_config
+    flow.executor = dask_executor
+
+    for flow_task in flow.tasks:
+        flow_task.run = set_log_level(flow_task.run)
+
+    flow.name = recipe_id
+    project_name = os.environ["PREFECT_PROJECT_NAME"]
+    flow.register(project_name=project_name)
+
+
 def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: Versions):
     """
     Convert a pangeo-forge to a Prefect recipe and register with Prefect Cloud.
@@ -200,31 +238,11 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
         check_versions(meta, bakery.cluster, versions)
 
         for recipe_meta in meta.recipes:
-            # Load module from meta.yaml
-            meta_dir = os.path.dirname(os.path.abspath(meta_path))
-            module_path = os.path.join(meta_dir, recipe_meta.module)
-            spec = importlib.util.spec_from_file_location(recipe_meta.name, module_path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            recipe = module.recipe
-
             targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
-            recipe.target = targets.target
-            recipe.input_cache = targets.cache
-            recipe.metadata_cache = targets.target
-
-            dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_meta.id)
-            executor = PrefectPipelineExecutor()
-            pipeline = recipe.to_pipelines()
-            flow = executor.pipelines_to_plan(pipeline)
-            flow.storage = configure_flow_storage(bakery.cluster, secrets)
-            run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_meta.id)
-            flow.run_config = run_config
-            flow.executor = dask_executor
-
-            for flow_task in flow.tasks:
-                flow_task.run = set_log_level(flow_task.run)
-
-            flow.name = recipe_meta.id
-            project_name = os.environ["PREFECT_PROJECT_NAME"]
-            flow.register(project_name=project_name)
+            if recipe_meta.dict_object:
+                recipes_dict = get_module_attribute(meta_path, recipe_meta.dict_object)
+                for key, value in recipes_dict.items():
+                    recipe_to_flow(bakery, meta, key, value, targets, secrets)
+            else:
+                recipe = get_module_attribute(meta_path, recipe_meta.object)
+                recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)

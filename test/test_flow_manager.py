@@ -1,10 +1,12 @@
 import os
+import pathlib
 from unittest.mock import patch
 
 import pytest
 import yaml
 from dacite import from_dict
 from dask_cloudprovider.aws.ecs import FargateCluster
+from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from prefect.run_configs import ECSRun
 
 from pangeo_forge_prefect.flow_manager import (
@@ -17,6 +19,7 @@ from pangeo_forge_prefect.flow_manager import (
     configure_flow_storage,
     configure_run_config,
     configure_targets,
+    get_module_attribute,
 )
 from pangeo_forge_prefect.meta_types.bakery import Bakery
 from pangeo_forge_prefect.meta_types.meta import Meta
@@ -123,3 +126,13 @@ def test_check_versions(aws_bakery, meta):
     versions.pangeo_notebook_version = "none"
     with pytest.raises(UnsupportedPangeoVersion):
         check_versions(meta, aws_bakery.cluster, versions)
+
+
+def test_get_module_attribute(meta):
+    meta_path = pathlib.Path(__file__).parent.absolute().joinpath("./data/meta.yaml")
+
+    recipe = get_module_attribute(meta_path, meta.recipes[-1].object)
+    assert isinstance(recipe, XarrayZarrRecipe)
+
+    recipes_dict = get_module_attribute(meta_path, "recipe_dict:recipes")
+    assert isinstance(recipes_dict, dict)
