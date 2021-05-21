@@ -59,7 +59,7 @@ def set_log_level(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         logging.basicConfig()
-        logging.getLogger("pangeo_forge.recipes.xarray_zarr").setLevel(level=logging.DEBUG)
+        logging.getLogger("pangeo_forge_recipes").setLevel(level=logging.DEBUG)
         result = func(*args, **kwargs)
         return result
 
@@ -238,11 +238,12 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
         check_versions(meta, bakery.cluster, versions)
 
         for recipe_meta in meta.recipes:
-            targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
             if recipe_meta.dict_object:
                 recipes_dict = get_module_attribute(meta_path, recipe_meta.dict_object)
                 for key, value in recipes_dict.items():
+                    targets = configure_targets(bakery, meta.bakery, key, secrets)
                     recipe_to_flow(bakery, meta, key, value, targets, secrets)
             else:
+                targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
                 recipe = get_module_attribute(meta_path, recipe_meta.object)
                 recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)
