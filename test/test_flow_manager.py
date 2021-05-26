@@ -13,6 +13,7 @@ from pangeo_forge_prefect.flow_manager import (
     UnsupportedClusterType,
     UnsupportedFlowStorage,
     UnsupportedPangeoVersion,
+    UnsupportedRecipeType,
     UnsupportedTarget,
     check_versions,
     configure_dask_executor,
@@ -20,10 +21,13 @@ from pangeo_forge_prefect.flow_manager import (
     configure_run_config,
     configure_targets,
     get_module_attribute,
+    get_target_extension,
 )
 from pangeo_forge_prefect.meta_types.bakery import Bakery
 from pangeo_forge_prefect.meta_types.meta import Meta
 from pangeo_forge_prefect.meta_types.versions import Versions
+
+from .data.recipe import recipe as recipe_class
 
 
 @pytest.fixture
@@ -50,11 +54,13 @@ def test_configure_targets(S3FileSystem, aws_bakery, meta):
     recipe_name = "test"
     key = "key"
     secret = "secret"
+    extension = "zarr"
     secrets = {
         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
+        "GITHUB_REPOSITORY": "staged-recipes",
     }
-    targets = configure_targets(aws_bakery, meta.bakery, recipe_name, secrets)
+    targets = configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
     S3FileSystem.assert_called_once_with(
         anon=False,
         default_cache_type="none",
@@ -62,12 +68,14 @@ def test_configure_targets(S3FileSystem, aws_bakery, meta):
         key=key,
         secret=secret,
     )
-    assert targets.target.root_path == f"s3://{meta.bakery.target}/{recipe_name}/target"
+    assert targets.target.root_path == (
+        f"s3://{meta.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
+    )
     aws_bakery.targets[
         "pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl"
     ].private.protocol = "GCS"
     with pytest.raises(UnsupportedTarget):
-        configure_targets(aws_bakery, meta.bakery, recipe_name, secrets)
+        configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
 
 
 @patch("pangeo_forge_prefect.flow_manager.storage")
@@ -136,3 +144,11 @@ def test_get_module_attribute(meta):
 
     recipes_dict = get_module_attribute(meta_path, "recipe_dict:recipes")
     assert isinstance(recipes_dict, dict)
+
+
+def test_get_target_extension():
+    extension = get_target_extension(recipe_class)
+    assert extension == "zarr"
+
+    with pytest.raises(UnsupportedRecipeType):
+        get_target_extension({})
