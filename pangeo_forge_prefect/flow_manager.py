@@ -7,6 +7,7 @@ from typing import Dict
 
 import yaml
 from dacite import from_dict
+from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
@@ -55,6 +56,10 @@ class UnsupportedPrefectVersion(Exception):
     pass
 
 
+class UnsupportedRecipeType(Exception):
+    pass
+
+
 def set_log_level(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
@@ -66,8 +71,11 @@ def set_log_level(func):
     return wrapper
 
 
-def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict):
+def configure_targets(
+    bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict, extension: str
+):
     target = bakery.targets[recipe_bakery.target]
+    repository = secrets["GITHUB_REPOSITORY"]
     if target.private.protocol == S3_PROTOCOL:
         if target.private.storage_options:
             key = secrets[target.private.storage_options.key]
@@ -79,7 +87,9 @@ def configure_targets(bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: 
                 key=key,
                 secret=secret,
             )
-            target_path = f"s3://{recipe_bakery.target}/{recipe_name}/target"
+            target_path = (
+                f"s3://{recipe_bakery.target}/pangeo-forge/{repository}/{recipe_name}.{extension}"
+            )
             target = FSSpecTarget(fs, target_path)
             cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
@@ -106,9 +116,7 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                 "worker_cpu": worker_cpu,
                 "worker_mem": worker_mem,
                 "scheduler_timeout": "15 minutes",
-                "environment": {
-                    "PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge.recipes.xarray_zarr']"
-                },
+                "environment": {"PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge_recipes']"},
                 "tags": {
                     "Project": "pangeo-forge",
                     "Recipe": recipe_name,
@@ -187,6 +195,13 @@ def get_module_attribute(meta_path: str, attribute_path: str):
     return getattr(module, name)
 
 
+def get_target_extension(recipe: BaseRecipe) -> str:
+    if isinstance(recipe, XarrayZarrRecipe):
+        return "zarr"
+    else:
+        raise UnsupportedRecipeType
+
+
 def recipe_to_flow(
     bakery: Bakery, meta: Meta, recipe_id: str, recipe: BaseRecipe, targets: Targets, secrets: Dict
 ):
@@ -241,9 +256,11 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
             if recipe_meta.dict_object:
                 recipes_dict = get_module_attribute(meta_path, recipe_meta.dict_object)
                 for key, value in recipes_dict.items():
-                    targets = configure_targets(bakery, meta.bakery, key, secrets)
+                    extension = get_target_extension(value)
+                    targets = configure_targets(bakery, meta.bakery, key, secrets, extension)
                     recipe_to_flow(bakery, meta, key, value, targets, secrets)
             else:
-                targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets)
                 recipe = get_module_attribute(meta_path, recipe_meta.object)
+                extension = get_target_extension(recipe)
+                targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets, extension)
                 recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)
