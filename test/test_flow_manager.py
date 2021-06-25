@@ -6,6 +6,7 @@ import pytest
 import yaml
 from dacite import from_dict
 from dask_cloudprovider.aws.ecs import FargateCluster
+from dask_kubernetes import KubeCluster
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from prefect.run_configs import ECSRun, KubernetesRun
 
@@ -173,20 +174,49 @@ def test_configure_flow_storage_azure(storage, azure_bakery):
 
 def test_configure_dask_executor_aws(aws_bakery, meta_aws):
     recipe_name = "test"
-    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
+    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name, {})
     assert dask_executor.cluster_class == FargateCluster
     assert dask_executor.cluster_kwargs["worker_cpu"] == meta_aws.bakery.resources.cpu
     assert dask_executor.cluster_kwargs["worker_mem"] == meta_aws.bakery.resources.memory
     assert dask_executor.adapt_kwargs["maximum"] == aws_bakery.cluster.max_workers
 
     meta_aws.bakery.resources = None
-    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
+    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name, {})
     # Uses default resource definitions
     assert dask_executor.cluster_kwargs["worker_cpu"] == 1024
     assert dask_executor.cluster_kwargs["worker_mem"] == 4096
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
+        dask_executor = configure_dask_executor(
+            aws_bakery.cluster, meta_aws.bakery, recipe_name, {}
+        )
+
+
+@patch("pangeo_forge_prefect.flow_manager.make_pod_spec")
+def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure):
+    recipe_name = "test"
+    secret = "A_CONNECTION_STRING"
+    secrets = {
+        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
+    }
+    dask_executor = configure_dask_executor(
+        azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets
+    )
+    assert dask_executor.cluster_class == KubeCluster
+    assert dask_executor.adapt_kwargs["maximum"] == azure_bakery.cluster.max_workers
+    make_pod_spec.assert_called_once_with(
+        image=azure_bakery.cluster.worker_image,
+        labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+        memory_request=meta_azure.bakery.resources.memory,
+        cpu_request=meta_azure.bakery.resources.cpu,
+        env={"AZURE_STORAGE_CONNECTION_STRING": secret},
+    )
+
+    azure_bakery.cluster.type = "New"
+    with pytest.raises(UnsupportedClusterType):
+        dask_executor = configure_dask_executor(
+            azure_bakery.cluster, meta_azure.bakery, recipe_name, {}
+        )
 
 
 def test_configure_run_config_aws(aws_bakery, meta_aws):
@@ -196,7 +226,7 @@ def test_configure_run_config_aws(aws_bakery, meta_aws):
     assert meta_aws.bakery.id in run_config.labels
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
+        configure_run_config(aws_bakery.cluster, meta_aws.bakery, recipe_name, {})
 
 
 def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template):
@@ -215,7 +245,7 @@ def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template):
     assert {"AZURE_STORAGE_CONNECTION_STRING": secret} == run_config.env
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        configure_dask_executor(azure_bakery.cluster, meta_azure.bakery, recipe_name)
+        configure_run_config(azure_bakery.cluster, meta_azure.bakery, recipe_name, {})
 
 
 def test_check_versions(aws_bakery, meta_aws):

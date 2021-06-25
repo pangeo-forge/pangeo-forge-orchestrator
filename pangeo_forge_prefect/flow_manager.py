@@ -8,6 +8,7 @@ from typing import Dict
 import yaml
 from adlfs import AzureBlobFileSystem
 from dacite import from_dict
+from dask_kubernetes.objects import make_pod_spec
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
@@ -112,7 +113,9 @@ def configure_targets(
         raise UnsupportedTarget
 
 
-def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
+def configure_dask_executor(
+    cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict
+):
     worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
     worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
     if cluster.type == FARGATE_CLUSTER:
@@ -135,6 +138,25 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
                     "Project": "pangeo-forge",
                     "Recipe": recipe_name,
                 },
+            },
+            adapt_kwargs={"maximum": cluster.max_workers},
+        )
+        return dask_executor
+    elif cluster.type == AKS_CLUSTER:
+        dask_executor = DaskExecutor(
+            cluster_class="dask_kubernetes.KubeCluster",
+            cluster_kwargs={
+                "pod_template": make_pod_spec(
+                    image=cluster.worker_image,
+                    labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+                    memory_request=worker_mem,
+                    cpu_request=worker_cpu,
+                    env={
+                        "AZURE_STORAGE_CONNECTION_STRING": secrets[
+                            cluster.flow_storage_options.secret
+                        ]
+                    },
+                )
             },
             adapt_kwargs={"maximum": cluster.max_workers},
         )
