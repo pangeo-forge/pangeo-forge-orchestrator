@@ -6,6 +6,7 @@ from functools import wraps
 from typing import Dict
 
 import yaml
+from adlfs import AzureBlobFileSystem
 from dacite import from_dict
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
@@ -94,6 +95,17 @@ def configure_targets(
             )
             target = FSSpecTarget(fs, target_path)
             cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
+            cache_target = CacheFSSpecTarget(fs, cache_path)
+            return Targets(target=target, cache=cache_target)
+    elif target.private.protocol == ABFS_PROTOCOL:
+        if target.private.storage_options:
+            secret = secrets[target.private.storage_options.secret]
+            fs = AzureBlobFileSystem(connection_string=secret)
+            target_path = (
+                f"abfs://{recipe_bakery.target}/pangeo-forge/{repository}/{recipe_name}.{extension}"
+            )
+            target = FSSpecTarget(fs, target_path)
+            cache_path = f"abfs://{recipe_bakery.target}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
             return Targets(target=target, cache=cache_target)
     else:

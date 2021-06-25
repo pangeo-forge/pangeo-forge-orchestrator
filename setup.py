@@ -10,6 +10,7 @@ setup(
         "dacite==1.6.0",
         "dask-cloudprovider[aws]>=2021.3.0",
         "s3fs>=0.6.0",
+        "adlfs>=0.7.5",
     ],
     extras_require={
         "dev": ["flake8", "black", "pre-commit", "pre-commit-hooks", "isort", "pytest"],

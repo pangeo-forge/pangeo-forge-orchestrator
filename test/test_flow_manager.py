@@ -53,8 +53,16 @@ def azure_bakery():
 
 
 @pytest.fixture
-def meta():
-    with open(f"{os.path.dirname(__file__)}/data/meta.yaml") as meta_yaml:
+def meta_aws():
+    with open(f"{os.path.dirname(__file__)}/data/meta_aws.yaml") as meta_yaml:
+        meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
+        meta_class = from_dict(data_class=Meta, data=meta_dict)
+        return meta_class
+
+
+@pytest.fixture
+def meta_azure():
+    with open(f"{os.path.dirname(__file__)}/data/meta_azure.yaml") as meta_yaml:
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
         meta_class = from_dict(data_class=Meta, data=meta_dict)
         return meta_class
@@ -80,7 +88,7 @@ def k8s_job_template():
 
 
 @patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
-def test_configure_targets_aws(S3FileSystem, aws_bakery, meta):
+def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws):
     recipe_name = "test"
     key = "key"
     secret = "secret"
@@ -90,7 +98,7 @@ def test_configure_targets_aws(S3FileSystem, aws_bakery, meta):
         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
         "GITHUB_REPOSITORY": "staged-recipes",
     }
-    targets = configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
+    targets = configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
     S3FileSystem.assert_called_once_with(
         anon=False,
         default_cache_type="none",
@@ -99,42 +107,34 @@ def test_configure_targets_aws(S3FileSystem, aws_bakery, meta):
         secret=secret,
     )
     assert targets.target.root_path == (
-        f"s3://{meta.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
+        f"s3://{meta_aws.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
     )
     aws_bakery.targets[
         "pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl"
     ].private.protocol = "GCS"
     with pytest.raises(UnsupportedTarget):
-        configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
+        configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
 
 
-# @patch("pangeo_forge_prefect.flow_manager.AzureBlobStorageFileSystem")
-# def test_configure_targets_azure(AzureBlobStorageSystem, azure_bakery, meta):
-#     recipe_name = "test"
-#     key = "key"
-#     secret = "secret"
-#     extension = "zarr"
-#     secrets = {
-#         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
-#         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
-#         "GITHUB_REPOSITORY": "staged-recipes",
-#     }
-#     targets = configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
-#     AzureBlobStorageSystem.assert_called_once_with(
-#         anon=False,
-#         default_cache_type="none",
-#         default_fill_cache=False,
-#         key=key,
-#         secret=secret,
-#     )
-#     assert targets.target.root_path == (
-#         f"abfs://{meta.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
-#     )
-#     aws_bakery.targets[
-#         "pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl"
-#     ].private.protocol = "GCS"
-#     with pytest.raises(UnsupportedTarget):
-#         configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
+@patch("pangeo_forge_prefect.flow_manager.AzureBlobFileSystem")
+def test_configure_targets_azure(AzureBlobFileSystem, azure_bakery, meta_azure):
+    recipe_name = "test"
+    secret = "secret"
+    extension = "zarr"
+    secrets = {
+        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
+        "GITHUB_REPOSITORY": "staged-recipes",
+    }
+    targets = configure_targets(azure_bakery, meta_azure.bakery, recipe_name, secrets, extension)
+    AzureBlobFileSystem.assert_called_once_with(
+        connection_string=secret,
+    )
+    assert targets.target.root_path == (
+        f"abfs://{meta_azure.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
+    )
+    azure_bakery.targets["test-bakery-flow-cache-container"].private.protocol = "GCS"
+    with pytest.raises(UnsupportedTarget):
+        configure_targets(azure_bakery, meta_azure.bakery, recipe_name, secrets, extension)
 
 
 @patch("pangeo_forge_prefect.flow_manager.storage")
@@ -171,43 +171,43 @@ def test_configure_flow_storage_azure(storage, azure_bakery):
         configure_flow_storage(azure_bakery.cluster, secrets)
 
 
-def test_configure_dask_executor(aws_bakery, meta):
+def test_configure_dask_executor_aws(aws_bakery, meta_aws):
     recipe_name = "test"
-    dask_executor = configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
     assert dask_executor.cluster_class == FargateCluster
-    assert dask_executor.cluster_kwargs["worker_cpu"] == meta.bakery.resources.cpu
-    assert dask_executor.cluster_kwargs["worker_mem"] == meta.bakery.resources.memory
+    assert dask_executor.cluster_kwargs["worker_cpu"] == meta_aws.bakery.resources.cpu
+    assert dask_executor.cluster_kwargs["worker_mem"] == meta_aws.bakery.resources.memory
     assert dask_executor.adapt_kwargs["maximum"] == aws_bakery.cluster.max_workers
 
-    meta.bakery.resources = None
-    dask_executor = configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+    meta_aws.bakery.resources = None
+    dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
     # Uses default resource definitions
     assert dask_executor.cluster_kwargs["worker_cpu"] == 1024
     assert dask_executor.cluster_kwargs["worker_mem"] == 4096
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        dask_executor = configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+        dask_executor = configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
 
 
-def test_configure_run_config_aws(aws_bakery, meta):
+def test_configure_run_config_aws(aws_bakery, meta_aws):
     recipe_name = "test"
-    run_config = configure_run_config(aws_bakery.cluster, meta.bakery, recipe_name, {})
+    run_config = configure_run_config(aws_bakery.cluster, meta_aws.bakery, recipe_name, {})
     assert type(run_config) == ECSRun
-    assert meta.bakery.id in run_config.labels
+    assert meta_aws.bakery.id in run_config.labels
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+        configure_dask_executor(aws_bakery.cluster, meta_aws.bakery, recipe_name)
 
 
-def test_configure_run_config_azure(azure_bakery, meta, k8s_job_template):
+def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template):
     recipe_name = "test"
     secret = "A_CONNECTION_STRING"
     secrets = {
         "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
     }
-    run_config = configure_run_config(azure_bakery.cluster, meta.bakery, recipe_name, secrets)
+    run_config = configure_run_config(azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets)
     assert type(run_config) == KubernetesRun
-    assert meta.bakery.id in run_config.labels
+    assert meta_azure.bakery.id in run_config.labels
     assert k8s_job_template == run_config.job_template
     assert azure_bakery.cluster.worker_image == run_config.image
     assert "1000m" == run_config.cpu_request
@@ -215,25 +215,25 @@ def test_configure_run_config_azure(azure_bakery, meta, k8s_job_template):
     assert {"AZURE_STORAGE_CONNECTION_STRING": secret} == run_config.env
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
-        configure_dask_executor(azure_bakery.cluster, meta.bakery, recipe_name)
+        configure_dask_executor(azure_bakery.cluster, meta_azure.bakery, recipe_name)
 
 
-def test_check_versions(aws_bakery, meta):
+def test_check_versions(aws_bakery, meta_aws):
     versions = Versions(
         pangeo_notebook_version="2021.05.04",
         pangeo_forge_version="0.3.3",
         prefect_version="0.14.7",
     )
-    assert check_versions(meta, aws_bakery.cluster, versions)
+    assert check_versions(meta_aws, aws_bakery.cluster, versions)
     versions.pangeo_notebook_version = "none"
     with pytest.raises(UnsupportedPangeoVersion):
-        check_versions(meta, aws_bakery.cluster, versions)
+        check_versions(meta_aws, aws_bakery.cluster, versions)
 
 
-def test_get_module_attribute(meta):
+def test_get_module_attribute(meta_aws):
     meta_path = pathlib.Path(__file__).parent.absolute().joinpath("./data/meta.yaml")
 
-    recipe = get_module_attribute(meta_path, meta.recipes[-1].object)
+    recipe = get_module_attribute(meta_path, meta_aws.recipes[-1].object)
     assert isinstance(recipe, XarrayZarrRecipe)
 
     recipes_dict = get_module_attribute(meta_path, "recipe_dict:recipes")
