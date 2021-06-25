@@ -12,11 +12,13 @@ from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
-from prefect.run_configs import ECSRun
+from prefect.run_configs import ECSRun, KubernetesRun
 from rechunker.executors import PrefectPipelineExecutor
 from s3fs import S3FileSystem
 
 from pangeo_forge_prefect.meta_types.bakery import (
+    ABFS_PROTOCOL,
+    AKS_CLUSTER,
     FARGATE_CLUSTER,
     S3_PROTOCOL,
     Bakery,
@@ -129,7 +131,9 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
         raise UnsupportedClusterType
 
 
-def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
+def configure_run_config(
+    cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict
+):
     if cluster.type == FARGATE_CLUSTER:
         definition = {
             "networkMode": "awsvpc",
@@ -150,18 +154,46 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
             },
         )
         return run_config
+    elif cluster.type == AKS_CLUSTER:
+        job_template = yaml.safe_load(
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              annotations:
+                "cluster-autoscaler.kubernetes.io/safe-to-evict": "false"
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: flow
+            """
+        )
+        run_config = KubernetesRun(
+            job_template=job_template,
+            image=cluster.worker_image,
+            labels=[recipe_bakery.id],
+            cpu_request="1000m",
+            memory_request="3Gi",
+            env={"AZURE_STORAGE_CONNECTION_STRING": secrets[cluster.flow_storage_options.secret]},
+        )
+        return run_config
     else:
         raise UnsupportedClusterType
 
 
 def configure_flow_storage(cluster: Cluster, secrets):
-    key = secrets[cluster.flow_storage_options.key]
-    secret = secrets[cluster.flow_storage_options.secret]
     if cluster.flow_storage_protocol == S3_PROTOCOL:
+        key = secrets[cluster.flow_storage_options.key]
+        secret = secrets[cluster.flow_storage_options.secret]
         flow_storage = storage.S3(
             bucket=cluster.flow_storage,
             client_options={"aws_access_key_id": key, "aws_secret_access_key": secret},
         )
+        return flow_storage
+    elif cluster.flow_storage_protocol == ABFS_PROTOCOL:
+        secret = secrets[cluster.flow_storage_options.secret]
+        flow_storage = storage.Azure(container=cluster.flow_storage, connection_string=secret)
         return flow_storage
     else:
         raise UnsupportedFlowStorage
@@ -214,7 +246,7 @@ def recipe_to_flow(
     pipeline = recipe.to_pipelines()
     flow = executor.pipelines_to_plan(pipeline)
     flow.storage = configure_flow_storage(bakery.cluster, secrets)
-    run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id)
+    run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id, secrets)
     flow.run_config = run_config
     flow.executor = dask_executor
 

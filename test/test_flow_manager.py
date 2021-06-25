@@ -7,7 +7,7 @@ import yaml
 from dacite import from_dict
 from dask_cloudprovider.aws.ecs import FargateCluster
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
-from prefect.run_configs import ECSRun
+from prefect.run_configs import ECSRun, KubernetesRun
 
 from pangeo_forge_prefect.flow_manager import (
     UnsupportedClusterType,
@@ -58,6 +58,25 @@ def meta():
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
         meta_class = from_dict(data_class=Meta, data=meta_dict)
         return meta_class
+
+
+@pytest.fixture
+def k8s_job_template():
+    job_template = yaml.safe_load(
+        """
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          annotations:
+            "cluster-autoscaler.kubernetes.io/safe-to-evict": "false"
+        spec:
+          template:
+            spec:
+              containers:
+                - name: flow
+        """
+    )
+    return job_template
 
 
 @patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
@@ -170,14 +189,33 @@ def test_configure_dask_executor(aws_bakery, meta):
         dask_executor = configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
 
 
-def test_configure_run_config(aws_bakery, meta):
+def test_configure_run_config_aws(aws_bakery, meta):
     recipe_name = "test"
-    run_config = configure_run_config(aws_bakery.cluster, meta.bakery, recipe_name)
+    run_config = configure_run_config(aws_bakery.cluster, meta.bakery, recipe_name, {})
     assert type(run_config) == ECSRun
     assert meta.bakery.id in run_config.labels
     aws_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
         configure_dask_executor(aws_bakery.cluster, meta.bakery, recipe_name)
+
+
+def test_configure_run_config_azure(azure_bakery, meta, k8s_job_template):
+    recipe_name = "test"
+    secret = "A_CONNECTION_STRING"
+    secrets = {
+        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
+    }
+    run_config = configure_run_config(azure_bakery.cluster, meta.bakery, recipe_name, secrets)
+    assert type(run_config) == KubernetesRun
+    assert meta.bakery.id in run_config.labels
+    assert k8s_job_template == run_config.job_template
+    assert azure_bakery.cluster.worker_image == run_config.image
+    assert "1000m" == run_config.cpu_request
+    assert "3Gi" == run_config.memory_request
+    assert {"AZURE_STORAGE_CONNECTION_STRING": secret} == run_config.env
+    azure_bakery.cluster.type = "New"
+    with pytest.raises(UnsupportedClusterType):
+        configure_dask_executor(azure_bakery.cluster, meta.bakery, recipe_name)
 
 
 def test_check_versions(aws_bakery, meta):
