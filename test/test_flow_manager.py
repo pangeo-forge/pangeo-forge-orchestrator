@@ -42,6 +42,17 @@ def aws_bakery():
 
 
 @pytest.fixture
+def azure_bakery():
+    with open(f"{os.path.dirname(__file__)}/data/bakeries.yaml") as bakeries_yaml:
+        bakeries_dict = yaml.load(bakeries_yaml, Loader=yaml.FullLoader)
+        test_azure_bakery = from_dict(
+            data_class=Bakery,
+            data=bakeries_dict["devseed.bakery.development.azure.ukwest"],
+        )
+        return test_azure_bakery
+
+
+@pytest.fixture
 def meta():
     with open(f"{os.path.dirname(__file__)}/data/meta.yaml") as meta_yaml:
         meta_dict = yaml.load(meta_yaml, Loader=yaml.FullLoader)
@@ -50,7 +61,7 @@ def meta():
 
 
 @patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
-def test_configure_targets(S3FileSystem, aws_bakery, meta):
+def test_configure_targets_aws(S3FileSystem, aws_bakery, meta):
     recipe_name = "test"
     key = "key"
     secret = "secret"
@@ -78,8 +89,37 @@ def test_configure_targets(S3FileSystem, aws_bakery, meta):
         configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
 
 
+# @patch("pangeo_forge_prefect.flow_manager.AzureBlobStorageFileSystem")
+# def test_configure_targets_azure(AzureBlobStorageSystem, azure_bakery, meta):
+#     recipe_name = "test"
+#     key = "key"
+#     secret = "secret"
+#     extension = "zarr"
+#     secrets = {
+#         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
+#         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
+#         "GITHUB_REPOSITORY": "staged-recipes",
+#     }
+#     targets = configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
+#     AzureBlobStorageSystem.assert_called_once_with(
+#         anon=False,
+#         default_cache_type="none",
+#         default_fill_cache=False,
+#         key=key,
+#         secret=secret,
+#     )
+#     assert targets.target.root_path == (
+#         f"abfs://{meta.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
+#     )
+#     aws_bakery.targets[
+#         "pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl"
+#     ].private.protocol = "GCS"
+#     with pytest.raises(UnsupportedTarget):
+#         configure_targets(aws_bakery, meta.bakery, recipe_name, secrets, extension)
+
+
 @patch("pangeo_forge_prefect.flow_manager.storage")
-def test_configure_flow_storage(storage, aws_bakery):
+def test_configure_flow_storage_aws(storage, aws_bakery):
     key = "key"
     secret = "secret"
     secrets = {
@@ -94,6 +134,22 @@ def test_configure_flow_storage(storage, aws_bakery):
     aws_bakery.cluster.flow_storage_protocol = "GCS"
     with pytest.raises(UnsupportedFlowStorage):
         configure_flow_storage(aws_bakery.cluster, secrets)
+
+
+@patch("pangeo_forge_prefect.flow_manager.storage")
+def test_configure_flow_storage_azure(storage, azure_bakery):
+    secret = "A_CONNECTION_STRING"
+    secrets = {
+        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
+    }
+    configure_flow_storage(azure_bakery.cluster, secrets)
+    storage.Azure.assert_called_once_with(
+        container=azure_bakery.cluster.flow_storage,
+        connection_string=secret,
+    )
+    azure_bakery.cluster.flow_storage_protocol = "GCS"
+    with pytest.raises(UnsupportedFlowStorage):
+        configure_flow_storage(azure_bakery.cluster, secrets)
 
 
 def test_configure_dask_executor(aws_bakery, meta):

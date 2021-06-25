@@ -106,11 +106,11 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
             cluster_class="dask_cloudprovider.aws.FargateCluster",
             cluster_kwargs={
                 "image": cluster.worker_image,
-                "vpc": cluster.vpc,
-                "cluster_arn": cluster.cluster_arn,
-                "task_role_arn": cluster.task_role_arn,
-                "execution_role_arn": cluster.execution_role_arn,
-                "security_groups": cluster.security_groups,
+                "vpc": cluster.cluster_options.vpc,
+                "cluster_arn": cluster.cluster_options.cluster_arn,
+                "task_role_arn": cluster.cluster_options.task_role_arn,
+                "execution_role_arn": cluster.cluster_options.execution_role_arn,
+                "security_groups": cluster.cluster_options.security_groups,
                 "scheduler_cpu": 1024,
                 "scheduler_mem": 2048,
                 "worker_cpu": worker_cpu,
@@ -136,7 +136,7 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
             "cpu": 1024,
             "memory": 2048,
             "containerDefinitions": [{"name": "flow"}],
-            "executionRoleArn": cluster.execution_role_arn,
+            "executionRoleArn": cluster.cluster_options.execution_role_arn,
         }
         run_config = ECSRun(
             image=cluster.worker_image,
