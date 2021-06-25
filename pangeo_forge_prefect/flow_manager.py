@@ -275,7 +275,7 @@ def recipe_to_flow(
     recipe.input_cache = targets.cache
     recipe.metadata_cache = targets.target
 
-    dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id)
+    dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id, secrets)
     executor = PrefectPipelineExecutor()
     pipeline = recipe.to_pipelines()
     flow = executor.pipelines_to_plan(pipeline)
