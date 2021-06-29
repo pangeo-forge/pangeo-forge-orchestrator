@@ -149,8 +149,8 @@ def configure_dask_executor(
                 "pod_template": make_pod_spec(
                     image=cluster.worker_image,
                     labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
-                    memory_request=worker_mem,
-                    cpu_request=worker_cpu,
+                    memory_request=f"{worker_mem}Mi",
+                    cpu_request=f"{worker_cpu}m",
                     env={
                         "AZURE_STORAGE_CONNECTION_STRING": secrets[
                             cluster.flow_storage_options.secret
@@ -208,7 +208,7 @@ def configure_run_config(
             image=cluster.worker_image,
             labels=[recipe_bakery.id],
             cpu_request="1000m",
-            memory_request="3Gi",
+            memory_request="2048Mi",
             env={"AZURE_STORAGE_CONNECTION_STRING": secrets[cluster.flow_storage_options.secret]},
         )
         return run_config

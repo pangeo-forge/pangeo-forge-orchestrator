@@ -22,5 +22,5 @@ bakery:
   id: "devseed.bakery.development.azure.ukwest"  # must come from a valid list of bakeries
   target: test-bakery-flow-cache-container
   resources:
-    memory: 4096
-    cpu: 1024
+    memory: 2048
+    cpu: 500
