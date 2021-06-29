@@ -211,6 +211,19 @@ def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure):
         cpu_request=f"{meta_azure.bakery.resources.cpu}m",
         env={"AZURE_STORAGE_CONNECTION_STRING": secret},
     )
+    make_pod_spec.reset_mock()
+
+    meta_azure.bakery.resources = None
+    dask_executor = configure_dask_executor(
+        azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets
+    )
+    make_pod_spec.assert_called_once_with(
+        image=azure_bakery.cluster.worker_image,
+        labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+        memory_request="512Mi",
+        cpu_request="250m",
+        env={"AZURE_STORAGE_CONNECTION_STRING": secret},
+    )
 
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):

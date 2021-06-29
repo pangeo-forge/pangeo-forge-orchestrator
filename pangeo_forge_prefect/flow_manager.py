@@ -116,9 +116,9 @@ def configure_targets(
 def configure_dask_executor(
     cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict
 ):
-    worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
-    worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
     if cluster.type == FARGATE_CLUSTER:
+        worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
+        worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
         dask_executor = DaskExecutor(
             cluster_class="dask_cloudprovider.aws.FargateCluster",
             cluster_kwargs={
@@ -143,6 +143,8 @@ def configure_dask_executor(
         )
         return dask_executor
     elif cluster.type == AKS_CLUSTER:
+        worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 250
+        worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 512
         dask_executor = DaskExecutor(
             cluster_class="dask_kubernetes.KubeCluster",
             cluster_kwargs={
