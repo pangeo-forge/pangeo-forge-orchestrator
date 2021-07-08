@@ -128,8 +128,8 @@ def configure_dask_executor(
                 "task_role_arn": cluster.cluster_options.task_role_arn,
                 "execution_role_arn": cluster.cluster_options.execution_role_arn,
                 "security_groups": cluster.cluster_options.security_groups,
-                "scheduler_cpu": 1024,
-                "scheduler_mem": 2048,
+                "scheduler_cpu": 2048,
+                "scheduler_mem": 16384,
                 "worker_cpu": worker_cpu,
                 "worker_mem": worker_mem,
                 "scheduler_timeout": "15 minutes",
@@ -139,7 +139,7 @@ def configure_dask_executor(
                     "Recipe": recipe_name,
                 },
             },
-            adapt_kwargs={"maximum": cluster.max_workers},
+            adapt_kwargs={"minimum": 5, "maximum": cluster.max_workers},
         )
         return dask_executor
     elif cluster.type == AKS_CLUSTER:
@@ -173,8 +173,8 @@ def configure_run_config(
     if cluster.type == FARGATE_CLUSTER:
         definition = {
             "networkMode": "awsvpc",
-            "cpu": 1024,
-            "memory": 2048,
+            "cpu": 2048,
+            "memory": 16384,
             "containerDefinitions": [{"name": "flow"}],
             "executionRoleArn": cluster.cluster_options.execution_role_arn,
         }
