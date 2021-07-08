@@ -20,10 +20,83 @@ regions = Literal[
     "aws.sa-east-1",
     "aws.us-gov-west-1",
     "aws.us-gov-east-1",
+    "azure.eastus",
+    "azure.eastus2",
+    "azure.southcentralus",
+    "azure.westus2",
+    "azure.westus3",
+    "azure.australiaeast",
+    "azure.southeastasia",
+    "azure.northeurope",
+    "azure.swedencentral",
+    "azure.uksouth",
+    "azure.westeurope",
+    "azure.centralus",
+    "azure.northcentralus",
+    "azure.westus",
+    "azure.southafricanorth",
+    "azure.centralindia",
+    "azure.eastasia",
+    "azure.japaneast",
+    "azure.jioindiawest",
+    "azure.koreacentral",
+    "azure.canadacentral",
+    "azure.francecentral",
+    "azure.germanywestcentral",
+    "azure.norwayeast",
+    "azure.switzerlandnorth",
+    "azure.uaenorth",
+    "azure.brazilsouth",
+    "azure.centralusstage",
+    "azure.eastusstage",
+    "azure.eastus2stage",
+    "azure.northcentralusstage",
+    "azure.southcentralusstage",
+    "azure.westusstage",
+    "azure.westus2stage",
+    "azure.asia",
+    "azure.asiapacific",
+    "azure.australia",
+    "azure.brazil",
+    "azure.canada",
+    "azure.europe",
+    "azure.global",
+    "azure.india",
+    "azure.japan",
+    "azure.uk",
+    "azure.unitedstates",
+    "azure.eastasiastage",
+    "azure.southeastasiastage",
+    "azure.centraluseuap",
+    "azure.eastus2euap",
+    "azure.westcentralus",
+    "azure.southafricawest",
+    "azure.australiacentral",
+    "azure.australiacentral2",
+    "azure.australiasoutheast",
+    "azure.japanwest",
+    "azure.jioindiacentral",
+    "azure.koreasouth",
+    "azure.southindia",
+    "azure.westindia",
+    "azure.canadaeast",
+    "azure.francesouth",
+    "azure.germanynorth",
+    "azure.norwaywest",
+    "azure.swedensouth",
+    "azure.switzerlandwest",
+    "azure.ukwest",
+    "azure.uaecentral",
+    "azure.brazilsoutheast",
 ]
 
 S3_PROTOCOL = "s3"
+ABFS_PROTOCOL = "abfs"
+protocols = Literal[ABFS_PROTOCOL, S3_PROTOCOL]
+
 FARGATE_CLUSTER = "aws.fargate"
+AKS_CLUSTER = "azure.aks"
+clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
 
 
 @dataclass
@@ -34,7 +107,7 @@ class StorageOptions:
 
 @dataclass
 class Endpoint:
-    protocol: Literal[S3_PROTOCOL]
+    protocol: protocols
     storage_options: Optional[StorageOptions] = None
     prefix: Optional[str] = None
 
@@ -48,21 +121,26 @@ class Target:
 
 
 @dataclass
-class Cluster:
-    type: Literal[FARGATE_CLUSTER]
-    pangeo_forge_version: str
-    pangeo_notebook_version: str
-    prefect_version: str
-    worker_image: str
+class FargateClusterOptions:
     vpc: str
     cluster_arn: str
     task_role_arn: str
     execution_role_arn: str
     security_groups: List[str]
+
+
+@dataclass
+class Cluster:
+    type: clusters
+    pangeo_forge_version: str
+    pangeo_notebook_version: str
+    prefect_version: str
+    worker_image: str
     flow_storage: str
-    flow_storage_protocol: Literal[S3_PROTOCOL]
+    flow_storage_protocol: protocols
     flow_storage_options: StorageOptions
     max_workers: int
+    cluster_options: Optional[FargateClusterOptions] = None
 
 
 @dataclass

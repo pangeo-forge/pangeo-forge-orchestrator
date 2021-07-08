@@ -16,15 +16,37 @@ devseed.bakery.development.aws.us-west-2:
     pangeo_notebook_version: "2021.05.04"
     prefect_version: "0.14.7"
     worker_image: 552819999234.dkr.ecr.us-west-2.amazonaws.com/pangeo-forge-aws-bakery-worker
-    vpc: vpc-0e519fd83fa521d72
-    cluster_arn: arn:aws:ecs:us-west-2:552819999234:cluster/pangeo-forge-aws-bakery-pangeo-forge-dask-bakeryclusterpangeoforgedask71B831F8-BTL3Vmp8cuso
-    task_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskrolepangeo-3R73K3Z1XU70
-    execution_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskexecutionr-5ZGMH0A8LVXF
-    security_groups:
-      - sg-0c4d6e997637c801d
+    cluster_options:
+      vpc: vpc-0e519fd83fa521d72
+      cluster_arn: arn:aws:ecs:us-west-2:552819999234:cluster/pangeo-forge-aws-bakery-pangeo-forge-dask-bakeryclusterpangeoforgedask71B831F8-BTL3Vmp8cuso
+      task_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskrolepangeo-3R73K3Z1XU70
+      execution_role_arn: arn:aws:iam::552819999234:role/pangeo-forge-aws-bakery-p-prefectecstaskexecutionr-5ZGMH0A8LVXF
+      security_groups:
+        - sg-0c4d6e997637c801d
     flow_storage: pangeo-forge-aws-bakery-flowstoragebucketpangeof-71w6gsnambj9
     flow_storage_protocol: s3
     flow_storage_options:
       key: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY
       secret: DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET
+    max_workers: 10
+devseed.bakery.development.azure.ukwest:
+  region: azure.ukwest
+  targets:
+    test-bakery-flow-cache-container:
+      region: azure.ukwest
+      description: "Internal Storage Container for Flow outputs"
+      private:
+        protocol: abfs
+        storage_options:
+          secret: DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING
+  cluster:
+    type: azure.aks
+    pangeo_forge_version: "0.3.4"
+    pangeo_notebook_version: "2021.05.15"
+    prefect_version: "0.14.19"
+    worker_image: pangeo/pangeo-forge-bakery-images:pangeonotebook-2021.05.15_prefect-0.14.19_pangeoforgerecipes-0.3.4
+    flow_storage: test-bakery-flow-storage-container
+    flow_storage_protocol: abfs
+    flow_storage_options:
+      secret: DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING
     max_workers: 10

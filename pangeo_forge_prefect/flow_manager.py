@@ -6,17 +6,21 @@ from functools import wraps
 from typing import Dict
 
 import yaml
+from adlfs import AzureBlobFileSystem
 from dacite import from_dict
+from dask_kubernetes.objects import make_pod_spec
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
-from prefect.run_configs import ECSRun
+from prefect.run_configs import ECSRun, KubernetesRun
 from rechunker.executors import PrefectPipelineExecutor
 from s3fs import S3FileSystem
 
 from pangeo_forge_prefect.meta_types.bakery import (
+    ABFS_PROTOCOL,
+    AKS_CLUSTER,
     FARGATE_CLUSTER,
     S3_PROTOCOL,
     Bakery,
@@ -94,23 +98,36 @@ def configure_targets(
             cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
             return Targets(target=target, cache=cache_target)
+    elif target.private.protocol == ABFS_PROTOCOL:
+        if target.private.storage_options:
+            secret = secrets[target.private.storage_options.secret]
+            fs = AzureBlobFileSystem(connection_string=secret)
+            target_path = (
+                f"abfs://{recipe_bakery.target}/pangeo-forge/{repository}/{recipe_name}.{extension}"
+            )
+            target = FSSpecTarget(fs, target_path)
+            cache_path = f"abfs://{recipe_bakery.target}/{recipe_name}/cache"
+            cache_target = CacheFSSpecTarget(fs, cache_path)
+            return Targets(target=target, cache=cache_target)
     else:
         raise UnsupportedTarget
 
 
-def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
-    worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
-    worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
+def configure_dask_executor(
+    cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict
+):
     if cluster.type == FARGATE_CLUSTER:
+        worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 1024
+        worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 4096
         dask_executor = DaskExecutor(
             cluster_class="dask_cloudprovider.aws.FargateCluster",
             cluster_kwargs={
                 "image": cluster.worker_image,
-                "vpc": cluster.vpc,
-                "cluster_arn": cluster.cluster_arn,
-                "task_role_arn": cluster.task_role_arn,
-                "execution_role_arn": cluster.execution_role_arn,
-                "security_groups": cluster.security_groups,
+                "vpc": cluster.cluster_options.vpc,
+                "cluster_arn": cluster.cluster_options.cluster_arn,
+                "task_role_arn": cluster.cluster_options.task_role_arn,
+                "execution_role_arn": cluster.cluster_options.execution_role_arn,
+                "security_groups": cluster.cluster_options.security_groups,
                 "scheduler_cpu": 1024,
                 "scheduler_mem": 2048,
                 "worker_cpu": worker_cpu,
@@ -125,18 +142,41 @@ def configure_dask_executor(cluster: Cluster, recipe_bakery: RecipeBakery, recip
             adapt_kwargs={"maximum": cluster.max_workers},
         )
         return dask_executor
+    elif cluster.type == AKS_CLUSTER:
+        worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 250
+        worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 512
+        dask_executor = DaskExecutor(
+            cluster_class="dask_kubernetes.KubeCluster",
+            cluster_kwargs={
+                "pod_template": make_pod_spec(
+                    image=cluster.worker_image,
+                    labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+                    memory_request=f"{worker_mem}Mi",
+                    cpu_request=f"{worker_cpu}m",
+                    env={
+                        "AZURE_STORAGE_CONNECTION_STRING": secrets[
+                            cluster.flow_storage_options.secret
+                        ]
+                    },
+                )
+            },
+            adapt_kwargs={"maximum": cluster.max_workers},
+        )
+        return dask_executor
     else:
         raise UnsupportedClusterType
 
 
-def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str):
+def configure_run_config(
+    cluster: Cluster, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict
+):
     if cluster.type == FARGATE_CLUSTER:
         definition = {
             "networkMode": "awsvpc",
             "cpu": 1024,
             "memory": 2048,
             "containerDefinitions": [{"name": "flow"}],
-            "executionRoleArn": cluster.execution_role_arn,
+            "executionRoleArn": cluster.cluster_options.execution_role_arn,
         }
         run_config = ECSRun(
             image=cluster.worker_image,
@@ -150,18 +190,46 @@ def configure_run_config(cluster: Cluster, recipe_bakery: RecipeBakery, recipe_n
             },
         )
         return run_config
+    elif cluster.type == AKS_CLUSTER:
+        job_template = yaml.safe_load(
+            """
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              annotations:
+                "cluster-autoscaler.kubernetes.io/safe-to-evict": "false"
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: flow
+            """
+        )
+        run_config = KubernetesRun(
+            job_template=job_template,
+            image=cluster.worker_image,
+            labels=[recipe_bakery.id],
+            cpu_request="1000m",
+            memory_request="2048Mi",
+            env={"AZURE_STORAGE_CONNECTION_STRING": secrets[cluster.flow_storage_options.secret]},
+        )
+        return run_config
     else:
         raise UnsupportedClusterType
 
 
 def configure_flow_storage(cluster: Cluster, secrets):
-    key = secrets[cluster.flow_storage_options.key]
-    secret = secrets[cluster.flow_storage_options.secret]
     if cluster.flow_storage_protocol == S3_PROTOCOL:
+        key = secrets[cluster.flow_storage_options.key]
+        secret = secrets[cluster.flow_storage_options.secret]
         flow_storage = storage.S3(
             bucket=cluster.flow_storage,
             client_options={"aws_access_key_id": key, "aws_secret_access_key": secret},
         )
+        return flow_storage
+    elif cluster.flow_storage_protocol == ABFS_PROTOCOL:
+        secret = secrets[cluster.flow_storage_options.secret]
+        flow_storage = storage.Azure(container=cluster.flow_storage, connection_string=secret)
         return flow_storage
     else:
         raise UnsupportedFlowStorage
@@ -209,12 +277,12 @@ def recipe_to_flow(
     recipe.input_cache = targets.cache
     recipe.metadata_cache = targets.target
 
-    dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id)
+    dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id, secrets)
     executor = PrefectPipelineExecutor()
     pipeline = recipe.to_pipelines()
     flow = executor.pipelines_to_plan(pipeline)
     flow.storage = configure_flow_storage(bakery.cluster, secrets)
-    run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id)
+    run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id, secrets)
     flow.run_config = run_config
     flow.executor = dask_executor
 
