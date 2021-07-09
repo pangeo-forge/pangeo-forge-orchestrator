@@ -88,17 +88,25 @@ def k8s_job_template():
     return job_template
 
 
-@patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
-def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws):
-    recipe_name = "test"
-    key = "key"
-    secret = "secret"
-    extension = "zarr"
-    secrets = {
+recipe_name = "test"
+key = "key"
+secret = "secret"
+extension = "zarr"
+
+
+@pytest.fixture
+def secrets():
+    secret_values = {
         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
         "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
+        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
         "GITHUB_REPOSITORY": "staged-recipes",
     }
+    return secret_values
+
+
+@patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
+def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws, secrets):
     targets = configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
     S3FileSystem.assert_called_once_with(
         anon=False,
@@ -118,14 +126,7 @@ def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws):
 
 
 @patch("pangeo_forge_prefect.flow_manager.AzureBlobFileSystem")
-def test_configure_targets_azure(AzureBlobFileSystem, azure_bakery, meta_azure):
-    recipe_name = "test"
-    secret = "secret"
-    extension = "zarr"
-    secrets = {
-        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
-        "GITHUB_REPOSITORY": "staged-recipes",
-    }
+def test_configure_targets_azure(AzureBlobFileSystem, azure_bakery, meta_azure, secrets):
     targets = configure_targets(azure_bakery, meta_azure.bakery, recipe_name, secrets, extension)
     AzureBlobFileSystem.assert_called_once_with(
         connection_string=secret,
@@ -139,13 +140,7 @@ def test_configure_targets_azure(AzureBlobFileSystem, azure_bakery, meta_azure):
 
 
 @patch("pangeo_forge_prefect.flow_manager.storage")
-def test_configure_flow_storage_aws(storage, aws_bakery):
-    key = "key"
-    secret = "secret"
-    secrets = {
-        "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_KEY": key,
-        "DEVSEED_BAKERY_DEVELOPMENT_AWS_US_WEST_2_SECRET": secret,
-    }
+def test_configure_flow_storage_aws(storage, aws_bakery, secrets):
     configure_flow_storage(aws_bakery.cluster, secrets)
     storage.S3.assert_called_once_with(
         bucket=aws_bakery.cluster.flow_storage,
@@ -157,11 +152,7 @@ def test_configure_flow_storage_aws(storage, aws_bakery):
 
 
 @patch("pangeo_forge_prefect.flow_manager.storage")
-def test_configure_flow_storage_azure(storage, azure_bakery):
-    secret = "A_CONNECTION_STRING"
-    secrets = {
-        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
-    }
+def test_configure_flow_storage_azure(storage, azure_bakery, secrets):
     configure_flow_storage(azure_bakery.cluster, secrets)
     storage.Azure.assert_called_once_with(
         container=azure_bakery.cluster.flow_storage,
@@ -193,12 +184,7 @@ def test_configure_dask_executor_aws(aws_bakery, meta_aws):
 
 
 @patch("pangeo_forge_prefect.flow_manager.make_pod_spec")
-def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure):
-    recipe_name = "test"
-    secret = "A_CONNECTION_STRING"
-    secrets = {
-        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
-    }
+def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure, secrets):
     dask_executor = configure_dask_executor(
         azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets
     )
@@ -242,12 +228,7 @@ def test_configure_run_config_aws(aws_bakery, meta_aws):
         configure_run_config(aws_bakery.cluster, meta_aws.bakery, recipe_name, {})
 
 
-def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template):
-    recipe_name = "test"
-    secret = "A_CONNECTION_STRING"
-    secrets = {
-        "DEVSEED_BAKERY_DEVELOPMENT_AZURE_UKWEST_CONNECTION_STRING": secret,
-    }
+def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template, secrets):
     run_config = configure_run_config(azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets)
     assert type(run_config) == KubernetesRun
     assert meta_azure.bakery.id in run_config.labels
@@ -289,3 +270,6 @@ def test_get_target_extension():
 
     with pytest.raises(UnsupportedRecipeType):
         get_target_extension({})
+
+
+#  def test_recipe_to_flow(aws_bakery, meta_aws)
