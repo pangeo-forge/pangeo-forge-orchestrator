@@ -4,7 +4,7 @@ setup(
     name="pangeo_forge_prefect",
     packages=find_packages(),
     install_requires=[
-        "pangeo-forge-recipes>=0.3.3",
+        "pangeo-forge-recipes>=0.4.0",
         "pyyaml==5.4.1",
         "prefect[aws]>=0.14.13",
         "dacite==1.6.0",

@@ -2,15 +2,19 @@ import os
 import pathlib
 from unittest.mock import patch
 
+import fsspec
 import pytest
 import yaml
 from dacite import from_dict
 from dask_cloudprovider.aws.ecs import FargateCluster
 from dask_kubernetes import KubeCluster
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
+from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
+from prefect.core import Flow
 from prefect.run_configs import ECSRun, KubernetesRun
 
 from pangeo_forge_prefect.flow_manager import (
+    Targets,
     UnsupportedClusterType,
     UnsupportedFlowStorage,
     UnsupportedPangeoVersion,
@@ -23,6 +27,7 @@ from pangeo_forge_prefect.flow_manager import (
     configure_targets,
     get_module_attribute,
     get_target_extension,
+    recipe_to_flow,
 )
 from pangeo_forge_prefect.meta_types.bakery import Bakery
 from pangeo_forge_prefect.meta_types.meta import Meta
@@ -103,6 +108,21 @@ def secrets():
         "GITHUB_REPOSITORY": "staged-recipes",
     }
     return secret_values
+
+
+@pytest.fixture()
+def tmp_target(tmpdir_factory):
+    fs = fsspec.get_filesystem_class("file")()
+    path = str(tmpdir_factory.mktemp("target"))
+    return FSSpecTarget(fs, path)
+
+
+@pytest.fixture()
+def tmp_cache(tmpdir_factory):
+    path = str(tmpdir_factory.mktemp("cache"))
+    fs = fsspec.get_filesystem_class("file")()
+    cache = CacheFSSpecTarget(fs, path)
+    return cache
 
 
 @patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
@@ -272,4 +292,12 @@ def test_get_target_extension():
         get_target_extension({})
 
 
-#  def test_recipe_to_flow(aws_bakery, meta_aws)
+@patch.dict(os.environ, {"PREFECT_PROJECT_NAME": "project"})
+def test_recipe_to_flow(aws_bakery, meta_aws, secrets, tmp_target, tmp_cache):
+    meta_path = pathlib.Path(__file__).parent.absolute().joinpath("./data/meta.yaml")
+    recipe = get_module_attribute(meta_path, meta_aws.recipes[-1].object)
+
+    targets = Targets(target=tmp_target, cache=tmp_cache)
+
+    flow = recipe_to_flow(aws_bakery, meta_aws, "recipe_id", recipe, targets, secrets)
+    assert isinstance(flow, Flow)
