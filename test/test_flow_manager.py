@@ -139,7 +139,7 @@ def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws, secrets):
         f"s3://{meta_aws.bakery.target}/pangeo-forge/staged-recipes/{recipe_name}.zarr"
     )
     aws_bakery.targets[
-        "pangeo-forge-aws-bakery-flowcachebucketpangeofor-196cpck7y0pbl"
+        "pangeo-forge-aws-bakery-flowcachebucketdasktest4-10neo67y7a924"
     ].private.protocol = "GCS"
     with pytest.raises(UnsupportedTarget):
         configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
@@ -264,9 +264,9 @@ def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template, 
 
 def test_check_versions(aws_bakery, meta_aws):
     versions = Versions(
-        pangeo_notebook_version="2021.05.04",
-        pangeo_forge_version="0.3.3",
-        prefect_version="0.14.7",
+        pangeo_notebook_version="2021.06.05",
+        pangeo_forge_version="0.4.0",
+        prefect_version="0.14.22",
     )
     assert check_versions(meta_aws, aws_bakery.cluster, versions)
     versions.pangeo_notebook_version = "none"
