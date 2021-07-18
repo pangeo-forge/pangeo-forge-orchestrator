@@ -15,7 +15,6 @@ from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
 from prefect import storage
 from prefect.executors import DaskExecutor
 from prefect.run_configs import ECSRun, KubernetesRun
-from rechunker.executors import PrefectPipelineExecutor
 from s3fs import S3FileSystem
 
 from pangeo_forge_prefect.meta_types.bakery import (
@@ -278,9 +277,7 @@ def recipe_to_flow(
     recipe.metadata_cache = targets.target
 
     dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id, secrets)
-    executor = PrefectPipelineExecutor()
-    pipeline = recipe.to_pipelines()
-    flow = executor.pipelines_to_plan(pipeline)
+    flow = recipe.to_prefect()
     flow.storage = configure_flow_storage(bakery.cluster, secrets)
     run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id, secrets)
     flow.run_config = run_config
@@ -290,8 +287,7 @@ def recipe_to_flow(
         flow_task.run = set_log_level(flow_task.run)
 
     flow.name = recipe_id
-    project_name = os.environ["PREFECT_PROJECT_NAME"]
-    flow.register(project_name=project_name)
+    return flow
 
 
 def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: Versions):
@@ -319,6 +315,7 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
         bakery = from_dict(data_class=Bakery, data=bakeries_dict[meta.bakery.id])
 
         check_versions(meta, bakery.cluster, versions)
+        project_name = os.environ["PREFECT_PROJECT_NAME"]
 
         for recipe_meta in meta.recipes:
             if recipe_meta.dict_object:
@@ -326,9 +323,11 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
                 for key, value in recipes_dict.items():
                     extension = get_target_extension(value)
                     targets = configure_targets(bakery, meta.bakery, key, secrets, extension)
-                    recipe_to_flow(bakery, meta, key, value, targets, secrets)
+                    flow = recipe_to_flow(bakery, meta, key, value, targets, secrets)
+                    flow.register(project_name=project_name)
             else:
                 recipe = get_module_attribute(meta_path, recipe_meta.object)
                 extension = get_target_extension(recipe)
                 targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets, extension)
-                recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)
+                flow = recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)
+                flow.register(project_name=project_name)
