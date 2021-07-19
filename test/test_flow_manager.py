@@ -1,6 +1,6 @@
 import os
 import pathlib
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import fsspec
 import pytest
@@ -301,3 +301,9 @@ def test_recipe_to_flow(aws_bakery, meta_aws, secrets, tmp_target, tmp_cache):
 
     flow = recipe_to_flow(aws_bakery, meta_aws, "recipe_id", recipe, targets, secrets)
     assert isinstance(flow, Flow)
+
+    recipe = Mock()
+    flow_stub = Mock(tasks=[])
+    recipe.copy_pruned().to_prefect.return_value = flow_stub
+    recipe_to_flow(aws_bakery, meta_aws, "recipe_id", recipe, targets, secrets, prune=True)
+    recipe.copy_pruned.assert_called_once
