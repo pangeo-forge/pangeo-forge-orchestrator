@@ -270,13 +270,21 @@ def get_target_extension(recipe: BaseRecipe) -> str:
 
 
 def recipe_to_flow(
-    bakery: Bakery, meta: Meta, recipe_id: str, recipe: BaseRecipe, targets: Targets, secrets: Dict
+    bakery: Bakery,
+    meta: Meta,
+    recipe_id: str,
+    recipe: BaseRecipe,
+    targets: Targets,
+    secrets: Dict,
+    prune: bool = False,
 ):
     recipe.target = targets.target
     recipe.input_cache = targets.cache
     recipe.metadata_cache = targets.target
 
     dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id, secrets)
+    if prune:
+        recipe = recipe.copy_pruned()
     flow = recipe.to_prefect()
     flow.storage = configure_flow_storage(bakery.cluster, secrets)
     run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id, secrets)
@@ -290,7 +298,9 @@ def recipe_to_flow(
     return flow
 
 
-def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: Versions):
+def register_flow(
+    meta_path: str, bakeries_path: str, secrets: Dict, versions: Versions, prune: bool = False
+):
     """
     Convert a pangeo-forge to a Prefect recipe and register with Prefect Cloud.
 
@@ -323,11 +333,11 @@ def register_flow(meta_path: str, bakeries_path: str, secrets: Dict, versions: V
                 for key, value in recipes_dict.items():
                     extension = get_target_extension(value)
                     targets = configure_targets(bakery, meta.bakery, key, secrets, extension)
-                    flow = recipe_to_flow(bakery, meta, key, value, targets, secrets)
+                    flow = recipe_to_flow(bakery, meta, key, value, targets, secrets, prune)
                     flow.register(project_name=project_name)
             else:
                 recipe = get_module_attribute(meta_path, recipe_meta.object)
                 extension = get_target_extension(recipe)
                 targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets, extension)
-                flow = recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets)
+                flow = recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets, prune)
                 flow.register(project_name=project_name)
