@@ -125,6 +125,7 @@ def tmp_cache(tmpdir_factory):
     return cache
 
 
+@patch.dict(os.environ, {"GITHUB_REPOSITORY": "pangeo-forge/staged-recipes"})
 @patch("pangeo_forge_prefect.flow_manager.S3FileSystem")
 def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws, secrets):
     targets = configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
@@ -145,6 +146,7 @@ def test_configure_targets_aws(S3FileSystem, aws_bakery, meta_aws, secrets):
         configure_targets(aws_bakery, meta_aws.bakery, recipe_name, secrets, extension)
 
 
+@patch.dict(os.environ, {"GITHUB_REPOSITORY": "pangeo-forge/staged-recipes"})
 @patch("pangeo_forge_prefect.flow_manager.AzureBlobFileSystem")
 def test_configure_targets_azure(AzureBlobFileSystem, azure_bakery, meta_azure, secrets):
     targets = configure_targets(azure_bakery, meta_azure.bakery, recipe_name, secrets, extension)

@@ -78,7 +78,7 @@ def configure_targets(
     bakery: Bakery, recipe_bakery: RecipeBakery, recipe_name: str, secrets: Dict, extension: str
 ):
     target = bakery.targets[recipe_bakery.target]
-    repository = secrets["GITHUB_REPOSITORY"]
+    repository = os.environ["GITHUB_REPOSITORY"]
     if target.private.protocol == S3_PROTOCOL:
         if target.private.storage_options:
             key = secrets[target.private.storage_options.key]
@@ -90,22 +90,18 @@ def configure_targets(
                 key=key,
                 secret=secret,
             )
-            target_path = (
-                f"s3://{recipe_bakery.target}/pangeo-forge/{repository}/{recipe_name}.{extension}"
-            )
+            target_path = f"s3://{recipe_bakery.target}/{repository}/{recipe_name}.{extension}"
             target = FSSpecTarget(fs, target_path)
-            cache_path = f"s3://{recipe_bakery.target}/{recipe_name}/cache"
+            cache_path = f"s3://{recipe_bakery.target}/{repository}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
             return Targets(target=target, cache=cache_target)
     elif target.private.protocol == ABFS_PROTOCOL:
         if target.private.storage_options:
             secret = secrets[target.private.storage_options.secret]
             fs = AzureBlobFileSystem(connection_string=secret)
-            target_path = (
-                f"abfs://{recipe_bakery.target}/pangeo-forge/{repository}/{recipe_name}.{extension}"
-            )
+            target_path = f"abfs://{recipe_bakery.target}/{repository}/{recipe_name}.{extension}"
             target = FSSpecTarget(fs, target_path)
-            cache_path = f"abfs://{recipe_bakery.target}/{recipe_name}/cache"
+            cache_path = f"abfs://{recipe_bakery.target}/{repository}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
             return Targets(target=target, cache=cache_target)
     else:
