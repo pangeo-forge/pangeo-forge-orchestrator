@@ -12,11 +12,12 @@ from dask_kubernetes.objects import make_pod_spec
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
-from prefect import storage
+from prefect import client, storage
 from prefect.executors import DaskExecutor
 from prefect.run_configs import ECSRun, KubernetesRun
 from s3fs import S3FileSystem
 
+from pangeo_forge_prefect.automation_hook_manager import create_automation
 from pangeo_forge_prefect.meta_types.bakery import (
     ABFS_PROTOCOL,
     AKS_CLUSTER,
@@ -322,6 +323,8 @@ def register_flow(
 
         check_versions(meta, bakery.cluster, versions)
         project_name = os.environ["PREFECT_PROJECT_NAME"]
+        comment_id = os.getenv("COMMENT_ID")
+        prefect_client = client.Client()
 
         for recipe_meta in meta.recipes:
             if recipe_meta.dict_object:
@@ -330,10 +333,18 @@ def register_flow(
                     extension = get_target_extension(value)
                     targets = configure_targets(bakery, meta.bakery, key, secrets, extension)
                     flow = recipe_to_flow(bakery, meta, key, value, targets, secrets, prune)
-                    flow.register(project_name=project_name)
+                    flow_id = flow.register(project_name=project_name)
+                    if comment_id:
+                        prefect_client.create_flow_run(flow_id=flow_id, run_name=comment_id)
+                        pat_token = secrets["ACTIONS_BOT_TOKEN"]
+                        create_automation(flow_id, pat_token)
             else:
                 recipe = get_module_attribute(meta_path, recipe_meta.object)
                 extension = get_target_extension(recipe)
                 targets = configure_targets(bakery, meta.bakery, recipe_meta.id, secrets, extension)
                 flow = recipe_to_flow(bakery, meta, recipe_meta.id, recipe, targets, secrets, prune)
-                flow.register(project_name=project_name)
+                flow_id = flow.register(project_name=project_name)
+                if comment_id:
+                    prefect_client.create_flow_run(flow_id=flow_id, run_name=comment_id)
+                    pat_token = secrets["ACTIONS_BOT_TOKEN"]
+                    create_automation(flow_id, pat_token)

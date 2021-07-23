@@ -18,6 +18,18 @@ PREFECT_PROJECT_NAME
 ```
 To be set to the Pangeo Forge Prefect Cloud [project](https://docs.prefect.io/orchestration/concepts/projects.html#projects) name.
 
+The environment variable
+```
+GITHUB_REPOSITORY
+```
+Should be the repository which triggers the Flow registration.
+
+If the environment variable
+```
+COMMENT_ID
+```
+is present a notification hook will be registered for the Flow completion status.
+
 
 ## Install
 From source
