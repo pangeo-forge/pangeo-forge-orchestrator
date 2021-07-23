@@ -12,7 +12,7 @@ def new_automation(flow_group_id, pat_token):
         "event_type": "prefect_webhook",
         "client_payload": {
             "state": "{state}",
-            "flow_run_id": "{flow_run_id}",
+            "flow_run_id": "{flow_run_name}",
         },
     }
     headers = {"Authorization": f"token {pat_token}", "Accept": "application/vnd.github.v3+json"}
