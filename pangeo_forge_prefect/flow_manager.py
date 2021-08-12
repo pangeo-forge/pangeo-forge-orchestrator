@@ -11,7 +11,7 @@ from dacite import from_dict
 from dask_kubernetes.objects import make_pod_spec
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
-from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
+from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget, MetadataTarget
 from prefect import client, storage
 from prefect.executors import DaskExecutor
 from prefect.run_configs import ECSRun, KubernetesRun
@@ -34,6 +34,7 @@ from pangeo_forge_prefect.meta_types.versions import Versions
 class Targets:
     target: FSSpecTarget
     cache: CacheFSSpecTarget
+    metadata: MetadataTarget
 
 
 class UnsupportedTarget(Exception):
@@ -95,7 +96,9 @@ def configure_targets(
             target = FSSpecTarget(fs, target_path)
             cache_path = f"s3://{recipe_bakery.target}/{repository}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
-            return Targets(target=target, cache=cache_target)
+            metadata_path = f"s3://{recipe_bakery.target}/{repository}/{recipe_name}/cache/metadata"
+            metadata_target = MetadataTarget(fs, metadata_path)
+            return Targets(target=target, cache=cache_target, metadata=metadata_target)
     elif target.private.protocol == ABFS_PROTOCOL:
         if target.private.storage_options:
             secret = secrets[target.private.storage_options.secret]
@@ -104,7 +107,11 @@ def configure_targets(
             target = FSSpecTarget(fs, target_path)
             cache_path = f"abfs://{recipe_bakery.target}/{repository}/{recipe_name}/cache"
             cache_target = CacheFSSpecTarget(fs, cache_path)
-            return Targets(target=target, cache=cache_target)
+            metadata_path = (
+                f"abfs://{recipe_bakery.target}/{repository}/{recipe_name}" "/cache/metadata"
+            )
+            metadata_target = MetadataTarget(fs, metadata_path)
+            return Targets(target=target, cache=cache_target, metadata=metadata_target)
     else:
         raise UnsupportedTarget
 
@@ -277,7 +284,7 @@ def recipe_to_flow(
 ):
     recipe.target = targets.target
     recipe.input_cache = targets.cache
-    recipe.metadata_cache = targets.target
+    recipe.metadata_cache = targets.metadata
 
     dask_executor = configure_dask_executor(bakery.cluster, meta.bakery, recipe_id, secrets)
     if prune:
