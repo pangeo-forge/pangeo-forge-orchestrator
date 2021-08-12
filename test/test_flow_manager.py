@@ -9,7 +9,7 @@ from dacite import from_dict
 from dask_cloudprovider.aws.ecs import FargateCluster
 from dask_kubernetes import KubeCluster
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
-from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget
+from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget, MetadataTarget
 from prefect.core import Flow
 from prefect.run_configs import ECSRun, KubernetesRun
 
@@ -123,6 +123,14 @@ def tmp_cache(tmpdir_factory):
     fs = fsspec.get_filesystem_class("file")()
     cache = CacheFSSpecTarget(fs, path)
     return cache
+
+
+@pytest.fixture()
+def tmp_metadata(tmpdir_factory):
+    path = str(tmpdir_factory.mktemp("metadata"))
+    fs = fsspec.get_filesystem_class("file")()
+    metadata = MetadataTarget(fs, path)
+    return metadata
 
 
 @patch.dict(os.environ, {"GITHUB_REPOSITORY": "pangeo-forge/staged-recipes"})
@@ -295,11 +303,11 @@ def test_get_target_extension():
 
 
 @patch.dict(os.environ, {"PREFECT_PROJECT_NAME": "project"})
-def test_recipe_to_flow(aws_bakery, meta_aws, secrets, tmp_target, tmp_cache):
+def test_recipe_to_flow(aws_bakery, meta_aws, secrets, tmp_target, tmp_cache, tmp_metadata):
     meta_path = pathlib.Path(__file__).parent.absolute().joinpath("./data/meta.yaml")
     recipe = get_module_attribute(meta_path, meta_aws.recipes[-1].object)
 
-    targets = Targets(target=tmp_target, cache=tmp_cache)
+    targets = Targets(target=tmp_target, cache=tmp_cache, metadata=tmp_metadata)
 
     flow = recipe_to_flow(aws_bakery, meta_aws, "recipe_id", recipe, targets, secrets)
     assert isinstance(flow, Flow)
