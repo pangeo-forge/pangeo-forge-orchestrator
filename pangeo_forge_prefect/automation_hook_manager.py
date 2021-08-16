@@ -95,6 +95,18 @@ def create_automation(flow_id, pat_token):
         }
     }
     hook_query_response = client.graphql(hook_query)
+    print(hook_query_response)
     hook_exists = len(hook_query_response["data"]["hook"]) > 0
-    if not hook_exists:
-        new_automation(flow_group_id, pat_token)
+    if hook_exists:
+        delete_hook = {
+            "mutation": {
+                with_args(
+                    "delete_hook",
+                    {"input": {"hook_id": hook_query_response["data"]["hook"][0]["id"]}},
+                ): {"success"}
+            }
+        }
+        delete_hook_response = client.graphql(delete_hook)
+        print(delete_hook_response)
+
+    new_automation(flow_group_id, pat_token)
