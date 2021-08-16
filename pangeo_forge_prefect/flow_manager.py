@@ -136,7 +136,10 @@ def configure_dask_executor(
                 "worker_cpu": worker_cpu,
                 "worker_mem": worker_mem,
                 "scheduler_timeout": "15 minutes",
-                "environment": {"PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge_recipes']"},
+                "environment": {
+                    "PREFECT__LOGGING__EXTRA_LOGGERS": "['pangeo_forge_recipes']",
+                    "MALLOC_TRIM_THRESHOLD_": "0",
+                },
                 "tags": {
                     "Project": "pangeo-forge",
                     "Recipe": recipe_name,
