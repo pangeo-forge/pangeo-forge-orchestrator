@@ -233,7 +233,7 @@ def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure, 
         memory_request="10000Mi",
         cpu_request="2048m",
     )
-    make_pod_spec.assert_has_calls([worker_call, scheduler_call])
+    make_pod_spec.assert_has_calls([scheduler_call, worker_call], any_order=True)
     make_pod_spec.reset_mock()
 
     meta_azure.bakery.resources = None
@@ -247,7 +247,7 @@ def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure, 
         cpu_request="250m",
         env={"AZURE_STORAGE_CONNECTION_STRING": secret},
     )
-    make_pod_spec.assert_has_calls([worker_call, scheduler_call])
+    make_pod_spec.assert_has_calls([worker_call, scheduler_call], any_order=True)
 
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):

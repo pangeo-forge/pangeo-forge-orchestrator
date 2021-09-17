@@ -8,7 +8,7 @@ from typing import Dict
 import yaml
 from adlfs import AzureBlobFileSystem
 from dacite import from_dict
-from dask_kubernetes.objects import make_pod_spec
+from dask_kubernetes.objects import clean_pod_template, make_pod_spec
 from pangeo_forge_recipes.recipes import XarrayZarrRecipe
 from pangeo_forge_recipes.recipes.base import BaseRecipe
 from pangeo_forge_recipes.storage import CacheFSSpecTarget, FSSpecTarget, MetadataTarget
@@ -151,6 +151,14 @@ def configure_dask_executor(
     elif cluster.type == AKS_CLUSTER:
         worker_cpu = recipe_bakery.resources.cpu if recipe_bakery.resources is not None else 250
         worker_mem = recipe_bakery.resources.memory if recipe_bakery.resources is not None else 512
+        scheduler_spec = make_pod_spec(
+            image=cluster.worker_image,
+            labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+            memory_request="10000Mi",
+            cpu_request="2048m",
+        )
+        scheduler_spec.spec.containers[0].args = ["dask-scheduler"]
+        scheduler_spec = clean_pod_template(scheduler_spec, pod_type="scheduler")
         dask_executor = DaskExecutor(
             cluster_class="dask_kubernetes.KubeCluster",
             cluster_kwargs={
@@ -165,12 +173,7 @@ def configure_dask_executor(
                         ]
                     },
                 ),
-                "scheduler_pod_template": make_pod_spec(
-                    image=cluster.worker_image,
-                    labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
-                    memory_request="10000Mi",
-                    cpu_request="2048m",
-                ),
+                "scheduler_pod_template": scheduler_spec,
             },
             adapt_kwargs={"minimum": 5, "maximum": cluster.max_workers},
         )
