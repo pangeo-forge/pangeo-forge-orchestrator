@@ -164,9 +164,15 @@ def configure_dask_executor(
                             cluster.flow_storage_options.secret
                         ]
                     },
-                )
+                ),
+                "scheduler_pod_template": make_pod_spec(
+                    image=cluster.worker_image,
+                    labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+                    memory_request="10000Mi",
+                    cpu_request="2048m",
+                ),
             },
-            adapt_kwargs={"maximum": cluster.max_workers},
+            adapt_kwargs={"minimum": 5, "maximum": cluster.max_workers},
         )
         return dask_executor
     else:
@@ -300,6 +306,7 @@ def recipe_to_flow(
 
     for flow_task in flow.tasks:
         flow_task.run = set_log_level(flow_task.run)
+        flow_task.timeout = 1800
 
     flow.name = recipe_id
     return flow
