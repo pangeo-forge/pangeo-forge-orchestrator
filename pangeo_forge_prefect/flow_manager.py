@@ -308,6 +308,7 @@ def recipe_to_flow(
     flow.executor = dask_executor
 
     for flow_task in flow.tasks:
+        flow_task.max_retries = 3
         flow_task.run = set_log_level(flow_task.run)
 
     flow.name = recipe_id
