@@ -224,8 +224,8 @@ def configure_run_config(
             job_template=job_template,
             image=cluster.worker_image,
             labels=[recipe_bakery.id],
-            cpu_request="1000m",
-            memory_request="2048Mi",
+            memory_request="10000Mi",
+            cpu_request="2048m",
             env={"AZURE_STORAGE_CONNECTION_STRING": secrets[cluster.flow_storage_options.secret]},
         )
         return run_config

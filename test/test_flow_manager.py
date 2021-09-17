@@ -272,8 +272,8 @@ def test_configure_run_config_azure(azure_bakery, meta_azure, k8s_job_template, 
     assert meta_azure.bakery.id in run_config.labels
     assert k8s_job_template == run_config.job_template
     assert azure_bakery.cluster.worker_image == run_config.image
-    assert "1000m" == run_config.cpu_request
-    assert "2048Mi" == run_config.memory_request
+    assert "2048m" == run_config.cpu_request
+    assert "10000Mi" == run_config.memory_request
     assert {"AZURE_STORAGE_CONNECTION_STRING": secret} == run_config.env
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
