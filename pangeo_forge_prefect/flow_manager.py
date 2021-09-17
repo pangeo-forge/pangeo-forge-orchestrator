@@ -2,6 +2,7 @@ import importlib
 import logging
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from functools import wraps
 from typing import Dict
 
@@ -306,9 +307,11 @@ def recipe_to_flow(
     run_config = configure_run_config(bakery.cluster, meta.bakery, recipe_id, secrets)
     flow.run_config = run_config
     flow.executor = dask_executor
+    delta = timedelta(minutes=3)
 
     for flow_task in flow.tasks:
         flow_task.max_retries = 3
+        flow_task.retry_delay = delta
         flow_task.run = set_log_level(flow_task.run)
 
     flow.name = recipe_id
