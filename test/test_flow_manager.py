@@ -1,6 +1,6 @@
 import os
 import pathlib
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import fsspec
 import pytest
@@ -220,26 +220,34 @@ def test_configure_dask_executor_azure(make_pod_spec, azure_bakery, meta_azure, 
     )
     assert dask_executor.cluster_class == KubeCluster
     assert dask_executor.adapt_kwargs["maximum"] == azure_bakery.cluster.max_workers
-    make_pod_spec.assert_called_once_with(
+    worker_call = call(
         image=azure_bakery.cluster.worker_image,
         labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
         memory_request=f"{meta_azure.bakery.resources.memory}Mi",
         cpu_request=f"{meta_azure.bakery.resources.cpu}m",
         env={"AZURE_STORAGE_CONNECTION_STRING": secret},
     )
+    scheduler_call = call(
+        image=azure_bakery.cluster.worker_image,
+        labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
+        memory_request="10000Mi",
+        cpu_request="2048m",
+    )
+    make_pod_spec.assert_has_calls([scheduler_call, worker_call], any_order=True)
     make_pod_spec.reset_mock()
 
     meta_azure.bakery.resources = None
     dask_executor = configure_dask_executor(
         azure_bakery.cluster, meta_azure.bakery, recipe_name, secrets
     )
-    make_pod_spec.assert_called_once_with(
+    worker_call = call(
         image=azure_bakery.cluster.worker_image,
         labels={"Recipe": recipe_name, "Project": "pangeo-forge"},
         memory_request="512Mi",
         cpu_request="250m",
         env={"AZURE_STORAGE_CONNECTION_STRING": secret},
     )
+    make_pod_spec.assert_has_calls([worker_call, scheduler_call], any_order=True)
 
     azure_bakery.cluster.type = "New"
     with pytest.raises(UnsupportedClusterType):
