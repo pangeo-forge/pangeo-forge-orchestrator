@@ -1,7 +1,6 @@
 import typer
 
-from . import bakery
-from .catalog import catalog
+from . import bakery, catalog
 
 app = typer.Typer()
 
