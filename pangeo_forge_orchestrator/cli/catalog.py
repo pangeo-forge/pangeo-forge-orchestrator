@@ -1,10 +1,13 @@
 import typer
+from rich import print
+
+from ..catalog.generate import generate
 
 app = typer.Typer()
 
 @app.command()
-def make_stac_item(path: str):
+def make_stac_item(bakery_id: str, run_id: str):
     """
-    Generate a STAC Item for the specified path.
+    Generate a STAC Item for a `bakery_id` + `run_id` pair.
     """
-    typer.echo(f"Making a STAC Item for {path}")
+    generate(bakery_id=bakery_id, run_id=run_id)
