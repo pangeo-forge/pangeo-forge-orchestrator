@@ -15,6 +15,9 @@ class BakeryMetadata:
     bakery_dict: dict = field(init=False)
     bakery_id: Optional[str] = None
     build_logs: dict = field(default_factory=dict)
+    target: str = field(init=False)
+    root_path: str = field(init=False)
+    kwargs: dict = field(init=False)
 
     def __post_init__(self):
         with fsspec.open(self.bakery_database) as f:
@@ -31,15 +34,21 @@ class BakeryMetadata:
 
         if self.bakery_id:
             k = list(self.bakery_dict[self.bakery_id]["targets"].keys())[0]
-            target = self.bakery_dict[self.bakery_id]["targets"][k]
-            kwargs = {k: v for k, v in target.items() if k != "root_path"}
+            self.target = self.bakery_dict[self.bakery_id]["targets"][k]
+            self.root_path = self.target['root_path']
+            self.kwargs = {k: v for k, v in self.target.items() if k != "root_path"}
 
-            with fsspec.open(f"{target['root_path']}/build-logs.json", **kwargs) as f2:
+            with fsspec.open(f"{self.root_path}/build-logs.json", **self.kwargs) as f2:
                 read_json = f2.read()
                 self.build_logs = json.loads(read_json)
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
+
+    def get_mapper(self, run_id):
+        ds_path = self.build_logs[run_id]["path"]
+        full_path = f"{self.root_path}/{ds_path}"
+        return fsspec.get_mapper(full_path, **self.kwargs)
 
 
 @dataclass
