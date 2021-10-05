@@ -13,7 +13,7 @@ app = typer.Typer()
 def ls(
     bakery_id: Optional[str] = None,
     view: str = "general-info",
-    feedstock_name: Optional[str] = None,
+    feedstock_id: Optional[str] = None,
 ):
     """
     List available bakeries and associated build-logs.
@@ -26,32 +26,39 @@ def ls(
     elif view == "general-info":
         print(bakery_meta.bakery_dict[bakery_id])
     elif view == "build-logs":
-
-        table = Table()
-        table.add_column("Run ID", style="magenta")
-        table.add_column("Timestamp", style="blue")
-        table.add_column("Feedstock", style="green")
-        table.add_column("Recipe", style="red")
-        table.add_column("Path", style="cyan")
-
-        logs = bakery_meta.build_logs
-        ids = list(logs.keys())
-        rows = [
-            [
-                k,
-                logs[k]["timestamp"],
-                logs[k]["feedstock"],
-                logs[k]["recipe"],
-                logs[k]["path"],
-            ]
-            for k in reversed(logs.keys())
-        ]
-        if not feedstock_name:
-            for r in rows:
-                table.add_row(*r)
+        if not feedstock_id:
+            logs = bakery_meta.build_logs
+            table = _table_from_bakery_logs(logs)
             print(table)
         else:
-            rows = [r for r in rows if feedstock_name in r[2]]
-            for r in rows:
-                table.add_row(*r)
+            logs = bakery_meta.filter_logs(feedstock_id)
+            table = _table_from_bakery_logs(logs)
             print(table)
+
+
+def _table_from_bakery_logs(logs: dict):
+    """
+    """
+    table = Table()
+    columns = {
+        "Run ID": "magenta",
+        "Timestamp": "blue",
+        "Feedstock": "green",
+        "Recipe": "red",
+        "Path": "cyan",
+    }
+    for k, v in columns.items():
+        table.add_column(k, style=v)
+    rows = [
+        [
+            k,
+            logs[k]["timestamp"],
+            logs[k]["feedstock"],
+            logs[k]["recipe"],
+            logs[k]["path"],
+        ]
+        for k in reversed(logs.keys())
+    ]
+    for r in rows:
+        table.add_row(*r)
+    return table
