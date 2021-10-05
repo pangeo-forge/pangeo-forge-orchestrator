@@ -7,10 +7,13 @@ license = "Apache 2.0"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-typer = "^0.4.0"
+typer = {extras = ["all"], version = "^0.4.0"}
 pangeo-forge-recipes = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+pangeo-forge = "pangeo_forge_orchestrator.cli.main:app"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
