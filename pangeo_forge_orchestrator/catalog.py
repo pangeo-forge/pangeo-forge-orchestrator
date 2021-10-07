@@ -6,7 +6,7 @@ import xarray as xr
 import xstac
 
 from .metadata import BakeryMetadata, FeedstockMetadata
-from .notebook import ExecuteNotebook
+# from .notebook import ExecuteNotebook
 
 with open("templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
@@ -37,12 +37,7 @@ def generate(bakery_id, run_id):
     # ~~~~~~~~~~~~~~~~~~~~ Data Assets ~~~~~~~~~~~~~~~~~~~~~~~~~~~
     for endpoint in ["zarr-s3", "zarr-https"]:
         longname = "S3 File System" if endpoint == "zarr-s3" else "HTTPS"
-        path = 
-        path = (
-            path
-            if endpoint == "zarr-s3"
-            else 
-        )
+        path = bakery.get_path(run_id, endpoint=endpoint.split("-")[1])
         assets[endpoint]["href"] = path
         assets[endpoint]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
         desc = fstock.metadata_dict['description']
@@ -56,7 +51,7 @@ def generate(bakery_id, run_id):
     assets[pff]["title"] = f"Pangeo Forge Feedstock (GitHub repository) for {feedstock_id}"
 
     # ~~~~~~~~~~~~~~~~~~~~ Notebook Asset ~~~~~~~~~~~~~~~~~~~~~~~~
-    assets["jupyter-notebook-example"]["href"] = "URL" # CHANGE THIS
+    assets["jupyter-notebook-example"]["href"] = "URL"  # CHANGE THIS
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
     # how are we going to create thumbnails? link them from `meta.yaml`?
@@ -65,7 +60,9 @@ def generate(bakery_id, run_id):
 
     # ---------------------- XSTAC -------------------------------
     # to generalize this, contributors may need to specify dimensions + ref system in `meta.yaml`?
-    kw = dict(temporal_dimension="time", x_dimension="lon", y_dimension="lat", reference_system=False)
+    kw = dict(
+        temporal_dimension="time", x_dimension="lon", y_dimension="lat", reference_system=False
+    )
     item = xstac.xarray_to_stac(ds, item_template, **kw)
     item_result = item.to_dict(include_self_link=False)
 
@@ -76,7 +73,7 @@ def _make_bounding_box(ds):
     """
     Create a STAC-compliant bounding box from an xarray dataset.
     """
-    # dim names generalizable if cf convention linting is implemented in recipe contribution workflow?
+    # generalizable if cf convention linting is implemented in recipe contribution workflow?
     # https://cfconventions.org/Data/cf-conventions/cf-conventions-1.9/cf-conventions.html#latitude-coordinate
     lats = [ds["lat"].values[0], ds["lat"].values[-1]]
     lons = [ds["lon"].values[0], ds["lon"].values[-1]]

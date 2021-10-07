@@ -18,8 +18,6 @@ class BakeryMetadata:
     target: str = field(init=False)
     bakery_root: str = field(init=False)
     fsspec_open_kwargs: dict = field(init=False)
-    cloud_zarr_root: str = field(init=False)
-    http_zarr_root: str = field(init=False)
 
     def __post_init__(self):
         with fsspec.open(self.bakery_database) as f:
@@ -31,30 +29,38 @@ class BakeryMetadata:
                 fsspec_open_kwargs=dict(
                     anon=True,
                     client_kwargs={'endpoint_url': 'https://ncsa.osn.xsede.org'},
-                )
-                root_path="s3://Pangeo/pangeo-forge",
-                http_prefix="https://ncsa.osn.xsede.org"
+                ),
+                protocol="s3",
+                bakery_root="Pangeo/pangeo-forge",
             )
             self.bakery_dict.update({"great_bakery": {"targets": {"osn": osn}}})
 
         if self.bakery_id:
             k = list(self.bakery_dict[self.bakery_id]["targets"].keys())[0]
             self.target = self.bakery_dict[self.bakery_id]["targets"][k]
-            self.root_path = self.target['root_path']
-            self.fsspec_open_kwargs = self.target.fsspec_open_kwargs
-            
-            with fsspec.open(f"{self.root_path}/build-logs.json", **self.fsspec_open_kwargs) as f2:
-                read_json = f2.read()
-                self.build_logs = json.loads(read_json)
+            self.bakery_root = self.target["bakery_root"]
+            self.fsspec_open_kwargs = self.target["fsspec_open_kwargs"]
 
+            with fsspec.open(
+                f"{self.target['protocol']}://{self.bakery_root}/build-logs.json",
+                **self.fsspec_open_kwargs,
+            ) as f2:
+                self.build_logs = json.loads(f2.read())
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
-    def get_mapper(self, run_id):
+    def get_path(self, run_id, endpoint="s3"):
         ds_path = self.build_logs[run_id]["path"]
-        full_path = f"{self.root_path}/{ds_path}"
-        return fsspec.get_mapper(full_path, **self.fsspec_open_kwargs)
+        prefixes = {  # not generalizable beyond OSN
+            "s3": "s3://",
+            "https": self.fsspec_open_kwargs["client_kwargs"]["endpoint_url"]
+        }
+        return f"{prefixes[endpoint]}{self.bakery_root}/{ds_path}"
+
+    def get_mapper(self, run_id):
+        path = self.get_path(run_id)
+        return fsspec.get_mapper(path, **self.fsspec_open_kwargs)
 
 
 @dataclass
