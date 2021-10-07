@@ -1,0 +1,44 @@
+{
+    "id": "",
+    "type": "Feature",
+    "links": [],
+    "bbox": "",
+    "geometry": "",
+    "stac_version": "1.0.0",
+    "properties": {
+        "datetime": null,
+        "start_datetime": null,
+        "end_datetime": null
+    },
+    "assets": {
+        "zarr-https": {
+            "href": "",
+            "type": "application/vnd+zarr",
+            "title": "",
+            "description": "",
+            "roles": ["data", "zarr", "https"]
+        },
+        "zarr-s3": {
+            "href": "",
+            "type": "application/vnd+zarr",
+            "title": "",
+            "description": "",
+            "roles": ["data", "zarr", "s3"]
+        },
+        "thumbnail": {
+            "href": "",
+            "type": "image/png",
+            "title": "Daymet {frequency} {FULL_REGIONS[region]} map thumbnail"
+        },
+        "pangeo-forge-feedstock": {
+            "href": "",
+            "type": "",
+            "title": ""
+        },
+        "jupyter-notebook-example": {
+            "href": "",
+            "type": "",
+            "title": ""
+        }
+    }
+}

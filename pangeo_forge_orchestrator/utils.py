@@ -55,23 +55,19 @@ class BakeryMetadata:
 class FeedstockMetadata:
 
     feedstock_id: str
-    feedstock_url_format: str = (
-        "https://raw.githubusercontent.com/pangeo-forge/"
-        "{feedstock_name}/v{major_version}.{minor_version}/feedstock/meta.yaml"
+    url_format: str = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"
+    metadata_url_format: str = (
+        "https://raw.githubusercontent.com/pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
     )
-    feedstock_metadata_dict: dict = field(init=False)
+    metadata_dict: dict = field(init=False)
 
     def __post_init__(self):
         ids = self.feedstock_id.split("@")
-        feedstock_name, version = ids[0], ids[1]
+        name, version = ids[0], ids[1]
         version_split = version.split(".")
-        major_version, minor_version = version_split[0], version_split[1]
-
-        self.feedstock_metadata_url = self.feedstock_url_format.format(
-            feedstock_name=feedstock_name,
-            major_version=major_version,
-            minor_version=minor_version,
-        )
-        with fsspec.open(self.feedstock_metadata_url) as f:
+        majv, minv = version_split[0], version_split[1]
+        self.url = self.url_format.format(name=name, majv=majv, minv=minv)
+        self.metadata_url = self.metadata_url_format.format(name=name, majv=majv, minv=minv)
+        with fsspec.open(self.metadata_url) as f:
             read_yaml = f.read()
-            self.feedstock_metadata_dict = yaml.safe_load(read_yaml)
+            self.metadata_dict = yaml.safe_load(read_yaml)
