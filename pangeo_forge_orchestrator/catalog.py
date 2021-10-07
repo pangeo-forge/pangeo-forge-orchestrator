@@ -5,9 +5,9 @@ import shapely.geometry
 import xarray as xr
 import xstac
 
-from ..utils import BakeryMetadata, FeedstockMetadata
+from .metadata import BakeryMetadata, FeedstockMetadata
 
-with open("item_template.json") as f:
+with open("templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
 
 def generate(bakery_id, run_id):

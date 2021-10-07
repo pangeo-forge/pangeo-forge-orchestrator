@@ -4,7 +4,7 @@ import typer
 from rich import print
 from rich.table import Table
 
-from ..utils import BakeryMetadata
+from ..metadata import BakeryMetadata
 
 app = typer.Typer()
 

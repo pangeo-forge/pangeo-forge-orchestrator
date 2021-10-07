@@ -1,7 +1,7 @@
 import typer
 from rich import print
 
-from ..catalog.generate import generate
+from ..catalog import generate
 
 app = typer.Typer()
 
