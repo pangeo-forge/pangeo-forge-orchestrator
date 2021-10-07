@@ -6,9 +6,11 @@ import xarray as xr
 import xstac
 
 from .metadata import BakeryMetadata, FeedstockMetadata
+from .notebook import ExecuteNotebook
 
 with open("templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
+
 
 def generate(bakery_id, run_id):
     """
@@ -35,12 +37,11 @@ def generate(bakery_id, run_id):
     # ~~~~~~~~~~~~~~~~~~~~ Data Assets ~~~~~~~~~~~~~~~~~~~~~~~~~~~
     for endpoint in ["zarr-s3", "zarr-https"]:
         longname = "S3 File System" if endpoint == "zarr-s3" else "HTTPS"
-        path = f"{bakery.root_path}/{bakery.build_logs[run_id]['path']}"
-        # probably want to move http endpoint info into the BakeryMetadata dataclass eventually
+        path = 
         path = (
             path
             if endpoint == "zarr-s3"
-            else path.replace("s3://", "https://ncsa.osn.xsede.org/")
+            else 
         )
         assets[endpoint]["href"] = path
         assets[endpoint]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"

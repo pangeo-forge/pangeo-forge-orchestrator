@@ -16,8 +16,10 @@ class BakeryMetadata:
     bakery_id: Optional[str] = None
     build_logs: dict = field(default_factory=dict)
     target: str = field(init=False)
-    root_path: str = field(init=False)
-    kwargs: dict = field(init=False)
+    bakery_root: str = field(init=False)
+    fsspec_open_kwargs: dict = field(init=False)
+    cloud_zarr_root: str = field(init=False)
+    http_zarr_root: str = field(init=False)
 
     def __post_init__(self):
         with fsspec.open(self.bakery_database) as f:
@@ -26,9 +28,12 @@ class BakeryMetadata:
 
             # add an additional mock bakery for testing purposes
             osn = dict(
-                anon=True,
-                client_kwargs={'endpoint_url': 'https://ncsa.osn.xsede.org'},
+                fsspec_open_kwargs=dict(
+                    anon=True,
+                    client_kwargs={'endpoint_url': 'https://ncsa.osn.xsede.org'},
+                )
                 root_path="s3://Pangeo/pangeo-forge",
+                http_prefix="https://ncsa.osn.xsede.org"
             )
             self.bakery_dict.update({"great_bakery": {"targets": {"osn": osn}}})
 
@@ -36,11 +41,12 @@ class BakeryMetadata:
             k = list(self.bakery_dict[self.bakery_id]["targets"].keys())[0]
             self.target = self.bakery_dict[self.bakery_id]["targets"][k]
             self.root_path = self.target['root_path']
-            self.kwargs = {k: v for k, v in self.target.items() if k != "root_path"}
-
-            with fsspec.open(f"{self.root_path}/build-logs.json", **self.kwargs) as f2:
+            self.fsspec_open_kwargs = self.target.fsspec_open_kwargs
+            
+            with fsspec.open(f"{self.root_path}/build-logs.json", **self.fsspec_open_kwargs) as f2:
                 read_json = f2.read()
                 self.build_logs = json.loads(read_json)
+
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
@@ -48,7 +54,7 @@ class BakeryMetadata:
     def get_mapper(self, run_id):
         ds_path = self.build_logs[run_id]["path"]
         full_path = f"{self.root_path}/{ds_path}"
-        return fsspec.get_mapper(full_path, **self.kwargs)
+        return fsspec.get_mapper(full_path, **self.fsspec_open_kwargs)
 
 
 @dataclass
@@ -59,6 +65,7 @@ class FeedstockMetadata:
     metadata_url_format: str = (
         "https://raw.githubusercontent.com/pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
     )
+    metadata_dict: dict = field(init=False)
     metadata_dict: dict = field(init=False)
 
     def __post_init__(self):

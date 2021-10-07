@@ -2,6 +2,7 @@ import typer
 
 app = typer.Typer()
 
+
 @app.command()
 def lint(path: str):
     """
