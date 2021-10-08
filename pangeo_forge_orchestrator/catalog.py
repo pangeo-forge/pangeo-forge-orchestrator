@@ -7,14 +7,14 @@ import xarray as xr
 import xstac
 
 from .metadata import BakeryMetadata, FeedstockMetadata
-from .notebook import execute  # ExecuteNotebook
+from .notebook import ExecuteNotebook
 
 parent = Path(__file__).absolute().parent
 with open(f"{parent}/templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
 
 
-def generate(bakery_id, run_id):
+def generate(bakery_id, run_id, output="stdout", endpoints=["s3", "https"]):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
     """
@@ -37,29 +37,31 @@ def generate(bakery_id, run_id):
     # ---------------------- ASSETS ------------------------------
     assets = item_template["assets"]
     # ~~~~~~~~~~~~~~~~~~~~ Data Assets ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    for endpoint in ["zarr-s3", "zarr-https"]:
-        longname = "S3 File System" if endpoint == "zarr-s3" else "HTTPS"
-        path = bakery.get_path(run_id, endpoint=endpoint.split("-")[1])
-        assets[endpoint]["href"] = path
-        assets[endpoint]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
+    for ep in endpoints:
+        key = f"zarr-{ep}"
+        longname = "S3 File System" if ep == "s3" else "HTTPS"
+        path = bakery.get_path(run_id, endpoint=ep)
+        assets[key]["href"] = path
+        assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
         desc = fstock.metadata_dict['description']
         desc = f"{desc[0].lower()}{desc[1:]}"
         # all descriptions may not work with this format string; generalize more, perhaps.
-        assets[endpoint]["description"] = f"{longname} Zarr root for {desc}"
+        assets[key]["description"] = f"{longname} Zarr root for {desc}"
+        # add `xarray assets` extension details
+        assets[key]["xarray:open_kwargs"] = dict(consolidated=True)
+        if ep == "s3":
+            assets[key]["xarray:storage_options"] = bakery.fsspec_open_kwargs
 
     # ~~~~~~~~~~~~~~~~~~~~ Feedstock Asset ~~~~~~~~~~~~~~~~~~~~~~~
     pff = "pangeo-forge-feedstock"
     assets[pff]["href"] = fstock.url
     assets[pff]["title"] = f"Pangeo Forge Feedstock (GitHub repository) for {feedstock_id}"
 
-    # ~~~~~~~~~~~~~~~~~~~~ Notebook Asset ~~~~~~~~~~~~~~~~~~~~~~~~
-    # check for nb at specified location here, optionall skip build
-    #nb_path = execute(
-    #    template_path=f"{parent}/templates/jupyter/http_loading_template.ipynb",
-    #    parameters=dict(path=bakery.get_path(run_id, endpoint="https")),
-    #)
-    # POST nb_path to desired location here
-    assets["jupyter-notebook-example"]["href"] = "href" #nb_path
+    # ~~~~~~~~~~~~~~~~~~~~ Notebook Assets ~~~~~~~~~~~~~~~~~~~~~~~
+    exnb = ExecuteNotebook()
+    for endpoint in endpoints:
+        outpath = exnb.make_outpath(endpoint, feedstock_id)
+        assets[f"jupyter-notebook-example-{endpoint}"]["href"] = outpath
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
     # how are we going to create thumbnails? link them from `meta.yaml`?
@@ -74,7 +76,15 @@ def generate(bakery_id, run_id):
     item = xstac.xarray_to_stac(ds, item_template, **kw)
     item_result = item.to_dict(include_self_link=False)
 
-    print(item_result)
+    if output == "stdout":
+        print(item_result)
+    elif output == "file":
+        with open(f"{feedstock_id}.json", mode="w") as outfile:
+            json.dump(item_result, outfile)
+
+    for endpoint in endpoints:
+        # has to happen after item is dumped to file
+        exnb.execute(endpoint, feedstock_id)
 
 
 def _make_bounding_box(ds):
