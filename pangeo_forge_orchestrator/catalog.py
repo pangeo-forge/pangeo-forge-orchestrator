@@ -14,7 +14,31 @@ with open(f"{parent}/templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
 
 
-def generate(bakery_id, run_id, output="stdout", endpoints=["s3", "https"]):
+def generate(
+    bakery_id,
+    run_id,
+    output="stdout",
+    execute_notebooks=False,
+    endpoints=["s3", "https"],
+):
+    item_result, feedstock_id, exnb = _generate(
+        bakery_id=bakery_id,
+        run_id=run_id,
+        endpoints=endpoints,
+    )
+    if output == "stdout":
+        print(item_result)
+    elif output == "file":
+        with open(f"{feedstock_id}.json", mode="w") as outfile:
+            json.dump(item_result, outfile)
+
+    if execute_notebooks:
+        for endpoint in endpoints:
+            # has to happen after item is dumped to file
+            exnb.execute(endpoint)
+
+
+def _generate(bakery_id, run_id, endpoints):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
     """
@@ -58,9 +82,9 @@ def generate(bakery_id, run_id, output="stdout", endpoints=["s3", "https"]):
     assets[pff]["title"] = f"Pangeo Forge Feedstock (GitHub repository) for {feedstock_id}"
 
     # ~~~~~~~~~~~~~~~~~~~~ Notebook Assets ~~~~~~~~~~~~~~~~~~~~~~~
-    exnb = ExecuteNotebook()
+    exnb = ExecuteNotebook(feedstock_id)
     for endpoint in endpoints:
-        outpath = exnb.make_outpath(endpoint, feedstock_id)
+        outpath = exnb.make_outpath(endpoint)
         assets[f"jupyter-notebook-example-{endpoint}"]["href"] = outpath
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
@@ -75,16 +99,7 @@ def generate(bakery_id, run_id, output="stdout", endpoints=["s3", "https"]):
     )
     item = xstac.xarray_to_stac(ds, item_template, **kw)
     item_result = item.to_dict(include_self_link=False)
-
-    if output == "stdout":
-        print(item_result)
-    elif output == "file":
-        with open(f"{feedstock_id}.json", mode="w") as outfile:
-            json.dump(item_result, outfile)
-
-    for endpoint in endpoints:
-        # has to happen after item is dumped to file
-        exnb.execute(endpoint, feedstock_id)
+    return item_result, feedstock_id, exnb
 
 
 def _make_bounding_box(ds):
