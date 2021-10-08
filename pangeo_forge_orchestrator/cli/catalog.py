@@ -9,10 +9,10 @@ app = typer.Typer()
 def make_stac_item(
     bakery_id: str,
     run_id: str,
-    output: str = "stdout",
-    execute_notebooks: bool = False
+    to_file: str = None,
+    execute_notebooks: bool = False,
 ):
     """
     Generate a STAC Item for a `bakery_id` + `run_id` pair.
     """
-    generate(bakery_id, run_id, output, execute_notebooks)
+    generate(bakery_id, run_id, to_file, execute_notebooks)

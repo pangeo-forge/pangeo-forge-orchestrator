@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from rich import print
@@ -17,20 +18,28 @@ with open(f"{parent}/templates/stac/item_template.json") as f:
 def generate(
     bakery_id,
     run_id,
-    output="stdout",
+    to_file=None,
     execute_notebooks=False,
     endpoints=["s3", "https"],
 ):
-    item_result, feedstock_id, exnb = _generate(
+    write_access = True if to_file == "bakery" else False
+    item_result, feedstock_id, bakery, exnb = _generate(
         bakery_id=bakery_id,
         run_id=run_id,
         endpoints=endpoints,
+        write_access=write_access,
     )
-    if output == "stdout":
+    if not to_file:
         print(item_result)
-    elif output == "file":
-        with open(f"{feedstock_id}.json", mode="w") as outfile:
+    elif to_file:
+        fn = f"{feedstock_id}.json"
+        with open(fn, mode="w") as outfile:
             json.dump(item_result, outfile)
+        if to_file == "bakery":
+            # change this to `put` from tempfile?
+            bucket = f"{bakery.target['protocol']}://{bakery.bakery_root}"
+            bakery.credentialed_fs.put(fn, f"{bucket}/stac/{fn}")
+            os.remove(fn)
 
     if execute_notebooks:
         for endpoint in endpoints:
@@ -38,11 +47,11 @@ def generate(
             exnb.execute(endpoint)
 
 
-def _generate(bakery_id, run_id, endpoints):
+def _generate(bakery_id, run_id, endpoints, write_access):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
     """
-    bakery = BakeryMetadata(bakery_id=bakery_id)
+    bakery = BakeryMetadata(bakery_id=bakery_id, write_access=write_access)
     feedstock_id = bakery.build_logs[run_id]["feedstock"]
     fstock = FeedstockMetadata(feedstock_id=feedstock_id)
 
@@ -99,7 +108,7 @@ def _generate(bakery_id, run_id, endpoints):
     )
     item = xstac.xarray_to_stac(ds, item_template, **kw)
     item_result = item.to_dict(include_self_link=False)
-    return item_result, feedstock_id, exnb
+    return item_result, feedstock_id, bakery, exnb
 
 
 def _make_bounding_box(ds):
