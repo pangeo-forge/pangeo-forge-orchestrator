@@ -54,7 +54,7 @@ class BakeryMetadata:
         ds_path = self.build_logs[run_id]["path"]
         prefixes = {  # not generalizable beyond OSN
             "s3": "s3://",
-            "https": self.fsspec_open_kwargs["client_kwargs"]["endpoint_url"]
+            "https": f"{self.fsspec_open_kwargs['client_kwargs']['endpoint_url']}/"
         }
         return f"{prefixes[endpoint]}{self.bakery_root}/{ds_path}"
 
