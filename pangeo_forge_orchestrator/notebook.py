@@ -1,3 +1,7 @@
+import json
+import os
+import requests
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +15,7 @@ class ExecuteNotebook:
 
     feedstock_id: str
     template_dir: str = f"{parent}/templates/jupyter"
+    nbviewer_url_base: str = "https://nbviewer.org/gist/cisaacstern"  # change to Pangeo Forge Bot
 
     def make_template_path(self, endpoint):
         return f"{endpoint}_loading_template.ipynb"
@@ -23,3 +28,33 @@ class ExecuteNotebook:
         outpath = self.make_outpath(endpoint)
         parameters = dict(path=f"{self.feedstock_id}.json")
         pm.execute_notebook(template_path, outpath, parameters=parameters)
+        return outpath
+
+    def post_gist(self, local_path):
+        if "GITHUB_API_TOKEN" not in os.environ.keys():
+            raise ValueError(
+                "Environment variable 'GITHUB_API_TOKEN' required for Gist API authentication."
+            )
+        with open(local_path) as f:
+            content = json.loads(f.read())
+
+        path_split = local_path.split("_via_")
+        feedstock_id, protocol = path_split[0], path_split[1].split(".")[0]
+        payload = {
+            "description": f"An example notebook for loading {feedstock_id} via {protocol}.",
+            "public": True,
+            "files": {local_path: {"content": json.dumps(content)}}
+        }
+        r = requests.post(
+            url="https://api.github.com/gists",
+            headers={"Authorization": f"token {os.environ['GITHUB_API_TOKEN']}"},
+            params={"scope": "gist"},
+            data=json.dumps(payload)
+        )
+        # uncomment for debugging (move to logger.DEBUG later)
+        # print("Gist POST returned status code", r.status_code)
+        # print("url", r.url)
+        # print("text", r.text)
+        gist_id = json.loads(r.text)['id']
+        print(f"{local_path} POSTed as Gist with ID {gist_id}")
+        return f"{self.nbviewer_url_base}/{gist_id}"

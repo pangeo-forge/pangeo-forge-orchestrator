@@ -82,6 +82,10 @@ class BakeryMetadata:
         path = self.get_path(run_id)
         return fsspec.get_mapper(path, **self.fsspec_open_kwargs)
 
+    def upload_stac_item(self, stac_item_filename):
+        bucket = f"{self.target['protocol']}://{self.bakery_root}"
+        self.credentialed_fs.put(stac_item_filename, f"{bucket}/stac/{stac_item_filename}")
+
 
 @dataclass
 class FeedstockMetadata:

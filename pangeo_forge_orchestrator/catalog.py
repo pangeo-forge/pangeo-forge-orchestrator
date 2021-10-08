@@ -10,10 +10,6 @@ import xstac
 from .metadata import BakeryMetadata, FeedstockMetadata
 from .notebook import ExecuteNotebook
 
-parent = Path(__file__).absolute().parent
-with open(f"{parent}/templates/stac/item_template.json") as f:
-    item_template = json.loads(f.read())
-
 
 def generate(
     bakery_id,
@@ -23,7 +19,7 @@ def generate(
     endpoints=["s3", "https"],
 ):
     write_access = True if to_file == "bakery" else False
-    item_result, feedstock_id, bakery, exnb = _generate(
+    item_result, feedstock_id, bakery = _generate(
         bakery_id=bakery_id,
         run_id=run_id,
         endpoints=endpoints,
@@ -32,25 +28,42 @@ def generate(
     if not to_file:
         print(item_result)
     elif to_file:
-        fn = f"{feedstock_id}.json"
-        with open(fn, mode="w") as outfile:
+        stac_item_filename = f"{feedstock_id}.json"
+        # first dump; second required in "bakery" block below, if `execute_notebooks == True`
+        with open(stac_item_filename, mode="w") as outfile:
             json.dump(item_result, outfile)
         if to_file == "bakery":
-            # change this to `put` from tempfile?
-            bucket = f"{bakery.target['protocol']}://{bakery.bakery_root}"
-            bakery.credentialed_fs.put(fn, f"{bucket}/stac/{fn}")
-            os.remove(fn)
+            if execute_notebooks:
+                # TODO: ~~~ first upload ~~~
+                # bakery.upload_stac_item(stac_item_filename)
+                # upload provisional STAC Item to Bakery so notebook executes from correct source,
+                # where "correct source" is Pangeo Forge root catalog *link* to STAC Item.
+                exnb = ExecuteNotebook(feedstock_id)
+                nb_local_paths = []
+                for endpoint in endpoints:
+                    # next line has to happen after item is dumped to local file
+                    local_path = exnb.execute(endpoint)
+                    nb_local_paths.append(local_path)
+                    nb_url = exnb.post_gist(local_path)
+                    # add the `nb_url`s before STAC Item is re-written and (re-)uploaded to Bakery
+                    item_result["assets"][f"jupyter-notebook-example-{endpoint}"]["href"] = nb_url
 
-    if execute_notebooks:
-        for endpoint in endpoints:
-            # has to happen after item is dumped to file
-            exnb.execute(endpoint)
+                with open(stac_item_filename, mode="w") as outfile:
+                    json.dump(item_result, outfile)
+
+            bakery.upload_stac_item(stac_item_filename)
+            # following loop not needed if we use `tempfile` instead of local files
+            for f in [stac_item_filename, *nb_local_paths]:
+                os.remove(f)
 
 
 def _generate(bakery_id, run_id, endpoints, write_access):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
     """
+    parent = Path(__file__).absolute().parent
+    with open(f"{parent}/templates/stac/item_template.json") as f:
+        item_template = json.loads(f.read())
     bakery = BakeryMetadata(bakery_id=bakery_id, write_access=write_access)
     feedstock_id = bakery.build_logs[run_id]["feedstock"]
     fstock = FeedstockMetadata(feedstock_id=feedstock_id)
@@ -91,10 +104,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     assets[pff]["title"] = f"Pangeo Forge Feedstock (GitHub repository) for {feedstock_id}"
 
     # ~~~~~~~~~~~~~~~~~~~~ Notebook Assets ~~~~~~~~~~~~~~~~~~~~~~~
-    exnb = ExecuteNotebook(feedstock_id)
-    for endpoint in endpoints:
-        outpath = exnb.make_outpath(endpoint)
-        assets[f"jupyter-notebook-example-{endpoint}"]["href"] = outpath
+    # Added in `generate` function. Requires `item_result` dict as input.
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
     # how are we going to create thumbnails? link them from `meta.yaml`?
@@ -108,7 +118,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     )
     item = xstac.xarray_to_stac(ds, item_template, **kw)
     item_result = item.to_dict(include_self_link=False)
-    return item_result, feedstock_id, bakery, exnb
+    return item_result, feedstock_id, bakery
 
 
 def _make_bounding_box(ds):
