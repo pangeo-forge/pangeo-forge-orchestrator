@@ -1,8 +1,10 @@
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
 import fsspec
+import s3fs
 import yaml
 
 
@@ -18,6 +20,8 @@ class BakeryMetadata:
     target: str = field(init=False)
     bakery_root: str = field(init=False)
     fsspec_open_kwargs: dict = field(init=False)
+    write_access: bool = False
+    credentialed_fs: Optional[s3fs.S3FileSystem] = None
 
     def __post_init__(self):
         with fsspec.open(self.bakery_database) as f:
@@ -46,6 +50,22 @@ class BakeryMetadata:
                 **self.fsspec_open_kwargs,
             ) as f2:
                 self.build_logs = json.loads(f2.read())
+
+            if self.write_access:
+                # this, of course, is S3/OSN specific
+                for k in ["OSN_KEY", "OSN_SECRET"]:
+                    if k not in os.environ.keys():
+                        raise ValueError(
+                            f"Environment variable {k} required to authenticate write access."
+                        )
+                self.credentialed_fs = s3fs.S3FileSystem(
+                    key=os.environ["OSN_KEY"],
+                    secret=os.environ["OSN_SECRET"],
+                    client_kwargs=self.fsspec_open_kwargs["client_kwargs"],
+                    default_cache_type='none',
+                    default_fill_cache=False,
+                    use_listings_cache=False
+                )
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
