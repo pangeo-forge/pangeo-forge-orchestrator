@@ -16,14 +16,17 @@
             "type": "application/vnd+zarr",
             "title": "",
             "description": "",
-            "roles": ["data", "zarr", "https"]
+            "roles": ["data", "zarr", "https"],
+            "xarray:open_kwargs": null
         },
         "zarr-s3": {
             "href": "",
             "type": "application/vnd+zarr",
             "title": "",
             "description": "",
-            "roles": ["data", "zarr", "s3"]
+            "roles": ["data", "zarr", "s3"],
+            "xarray:storage_options": null,
+            "xarray:open_kwargs": null
         },
         "thumbnail": {
             "href": "",
@@ -35,7 +38,12 @@
             "type": "",
             "title": ""
         },
-        "jupyter-notebook-example": {
+        "jupyter-notebook-example-https": {
+            "href": "",
+            "type": "",
+            "title": ""
+        },
+        "jupyter-notebook-example-s3": {
             "href": "",
             "type": "",
             "title": ""
