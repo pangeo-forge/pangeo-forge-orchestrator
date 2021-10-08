@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from rich import print
 import shapely.geometry
@@ -6,9 +7,10 @@ import xarray as xr
 import xstac
 
 from .metadata import BakeryMetadata, FeedstockMetadata
-# from .notebook import ExecuteNotebook
+from .notebook import execute  # ExecuteNotebook
 
-with open("templates/stac/item_template.json") as f:
+parent = Path(__file__).absolute().parent
+with open(f"{parent}/templates/stac/item_template.json") as f:
     item_template = json.loads(f.read())
 
 
@@ -51,7 +53,13 @@ def generate(bakery_id, run_id):
     assets[pff]["title"] = f"Pangeo Forge Feedstock (GitHub repository) for {feedstock_id}"
 
     # ~~~~~~~~~~~~~~~~~~~~ Notebook Asset ~~~~~~~~~~~~~~~~~~~~~~~~
-    assets["jupyter-notebook-example"]["href"] = "URL"  # CHANGE THIS
+    # check for nb at specified location here, optionall skip build
+    #nb_path = execute(
+    #    template_path=f"{parent}/templates/jupyter/http_loading_template.ipynb",
+    #    parameters=dict(path=bakery.get_path(run_id, endpoint="https")),
+    #)
+    # POST nb_path to desired location here
+    assets["jupyter-notebook-example"]["href"] = "href" #nb_path
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
     # how are we going to create thumbnails? link them from `meta.yaml`?
@@ -93,7 +101,7 @@ def _make_time_bounds(ds):
     # datetime handling will require edge-casing for model output data, etc.
     def format_datetime(n, ds=ds):
         return f"{str(ds['time'].values[n])[:19]}Z"
-    
+
     time_bounds = (
         {b: format_datetime(n) for n, b in zip([0, -1], ["start_datetime", "end_datetime"])} 
         if len(ds['time']) > 1
