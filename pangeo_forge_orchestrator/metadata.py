@@ -70,21 +70,27 @@ class BakeryMetadata:
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
-    def get_path(self, run_id, endpoint="s3"):
-        ds_path = self.build_logs[run_id]["path"]
+    def get_base_path(self, endpoint):
         prefixes = {  # not generalizable beyond OSN
             "s3": "s3://",
             "https": f"{self.fsspec_open_kwargs['client_kwargs']['endpoint_url']}/"
         }
-        return f"{prefixes[endpoint]}{self.bakery_root}/{ds_path}"
+        return f"{prefixes[endpoint]}{self.bakery_root}"
 
-    def get_mapper(self, run_id):
-        path = self.get_path(run_id)
+    def get_dataset_path(self, run_id, endpoint="s3"):
+        ds_path = self.build_logs[run_id]["path"]
+        return f"{self.get_base_path(endpoint)}/{ds_path}"
+
+    def get_dataset_mapper(self, run_id):
+        path = self.get_dataset_path(run_id)
         return fsspec.get_mapper(path, **self.fsspec_open_kwargs)
 
     def upload_stac_item(self, stac_item_filename):
-        bucket = f"{self.target['protocol']}://{self.bakery_root}"
-        self.credentialed_fs.put(stac_item_filename, f"{bucket}/stac/{stac_item_filename}")
+        bucket = self.get_base_path("s3")
+        item_bakery_path = f"{bucket}/stac/{stac_item_filename}"
+        self.credentialed_fs.put(stac_item_filename, item_bakery_path)
+        item_bakery_http_path = item_bakery_path.replace(bucket, self.get_base_path("https"))
+        return item_bakery_http_path
 
 
 @dataclass

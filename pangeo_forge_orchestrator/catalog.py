@@ -34,24 +34,21 @@ def generate(
             json.dump(item_result, outfile)
         if to_file == "bakery":
             if execute_notebooks:
-                # TODO: ~~~ first upload ~~~
-                # bakery.upload_stac_item(stac_item_filename)
-                # upload provisional STAC Item to Bakery so notebook executes from correct source,
-                # where "correct source" is Pangeo Forge root catalog *link* to STAC Item.
                 exnb = ExecuteNotebook(feedstock_id)
+                # upload provisional STAC Item to Bakery for notebook execution from correct source
+                item_bakery_http_path = bakery.upload_stac_item(stac_item_filename)
                 nb_local_paths = []
                 for endpoint in endpoints:
                     # next line has to happen after item is dumped to local file
-                    local_path = exnb.execute(endpoint)
-                    nb_local_paths.append(local_path)
-                    nb_url = exnb.post_gist(local_path)
-                    # add the `nb_url`s before STAC Item is re-written and (re-)uploaded to Bakery
+                    nb_local_path = exnb.execute(endpoint, item_bakery_http_path)
+                    nb_local_paths.append(nb_local_path)
+                    nb_url = exnb.post_gist(nb_local_path)
                     item_result["assets"][f"jupyter-notebook-example-{endpoint}"]["href"] = nb_url
-
+                # clobber local Item with updated Item before re-uploadeding to Bakery
                 with open(stac_item_filename, mode="w") as outfile:
                     json.dump(item_result, outfile)
-
-            bakery.upload_stac_item(stac_item_filename)
+            # clobber provisional Bakery Item with Item that's been updated with `nb_urls`
+            _ = bakery.upload_stac_item(stac_item_filename)
             # following loop not needed if we use `tempfile` instead of local files
             for f in [stac_item_filename, *nb_local_paths]:
                 os.remove(f)
@@ -68,7 +65,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     feedstock_id = bakery.build_logs[run_id]["feedstock"]
     fstock = FeedstockMetadata(feedstock_id=feedstock_id)
 
-    mapper = bakery.get_mapper(run_id)
+    mapper = bakery.get_dataset_mapper(run_id)
     ds = xr.open_zarr(mapper, consolidated=True)
     bbox = _make_bounding_box(ds)
     time_bounds = _make_time_bounds(ds)
@@ -86,7 +83,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     for ep in endpoints:
         key = f"zarr-{ep}"
         longname = "S3 File System" if ep == "s3" else "HTTPS"
-        path = bakery.get_path(run_id, endpoint=ep)
+        path = bakery.get_dataset_path(run_id, endpoint=ep)
         assets[key]["href"] = path
         assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
         desc = fstock.metadata_dict['description']

@@ -20,15 +20,15 @@ class ExecuteNotebook:
     def make_template_path(self, endpoint):
         return f"{endpoint}_loading_template.ipynb"
 
-    def make_outpath(self, endpoint):
+    def make_filename(self, endpoint):
         return f"{self.feedstock_id}_via_{endpoint}.ipynb"
 
-    def execute(self, endpoint):
+    def execute(self, endpoint, stac_item_path):
         template_path = f"{self.template_dir}/{self.make_template_path(endpoint)}"
-        outpath = self.make_outpath(endpoint)
-        parameters = dict(path=f"{self.feedstock_id}.json")
-        pm.execute_notebook(template_path, outpath, parameters=parameters)
-        return outpath
+        filename = self.make_filename(endpoint)
+        parameters = dict(path=stac_item_path)
+        pm.execute_notebook(template_path, filename, parameters=parameters)
+        return filename
 
     def post_gist(self, local_path):
         if "GITHUB_API_TOKEN" not in os.environ.keys():
