@@ -1,7 +1,6 @@
-import os
-
 import pytest
-import subprocess
+
+from .cli_test_funcs import check_output
 
 subcommands = {
     "ls": (
@@ -26,12 +25,4 @@ subcommands = [(cmd, output) for cmd, output in subcommands.items()]
 
 @pytest.mark.parametrize("subcmd", subcommands)
 def test_bakery_ls(subcmd):
-    cmd = ["pangeo-forge", "bakery"]
-    for arg in subcmd[0].split(" "):
-        cmd.append(arg)
-    env = dict(os.environ, COLUMNS="200")
-    out = subprocess.check_output(cmd, env=env)
-    out = out.decode("utf-8")
-    for char in ("\n", " "):
-        out = out.replace(char, "")
-    assert out == subcmd[1]
+    check_output(subcmd, module="bakery", drop_chars=("\n", " "))
