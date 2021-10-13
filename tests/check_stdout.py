@@ -19,4 +19,5 @@ def check_stdout(subcmd, module, drop_chars):
     out = out.decode("utf-8")
     for char in drop_chars:
         out = out.replace(char, "")
+    print(out)
     assert out == subcmd[1]

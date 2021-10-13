@@ -106,9 +106,9 @@ def make_test_bakery_yaml(url, tempdir):
 
 def make_build_logs(zarr_fname, tempdir):
     logs = {
-        00000: {
+        "00000": {
             "timestamp": "2021-09-25 00:00:00",
-            "feedstock": "orchestrator-mock-feedstock",
+            "feedstock": "mock-feedstock",
             "recipe": "recipe",
             "path": zarr_fname,
         }

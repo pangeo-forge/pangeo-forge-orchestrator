@@ -11,14 +11,13 @@ subcommands = {
         "{'targets':{'local_server':{'bakery_root':'{url}/test-bakery0','fsspec_open_kwargs':{},"
         "'protocol':'http'}}}"
     ),
-    #"ls --bakery-id great_bakery --view build-logs --feedstock-id noaa-oisst": (
-    #    "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━"
-    #    "━━━━━━━━━━━━━━━━━━┓┃RunID┃Timestamp┃Feedstock┃Recipe┃Path┃┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━"
-    #    "╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩│00000│2021-"
-    #    "09-2500:00:00│noaa-oisst-avhrr-only-feedstock@1.0│recipe│noaa_oisst/v2.1-avhrr.zarr│└────"
-    #    "────┴─────────────────────┴─────────────────────────────────────┴────────┴───────────────"
-    #    "─────────────┘"
-    #),
+    "ls --bakery-id test_bakery --view build-logs --feedstock-id mock-feedstock": (
+        "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓"
+        "┃RunID┃Timestamp┃Feedstock┃Recipe┃Path┃"
+        "┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩"
+        "│00000│2021-09-2500:00:00│mock-feedstock│recipe│test-dataset.zarr│"
+        "└────────┴─────────────────────┴────────────────┴────────┴───────────────────┘"
+    ),
 }
 subcommands = [[cmd, output] for cmd, output in subcommands.items()]
 
