@@ -105,7 +105,7 @@ def make_test_bakery_yaml(url, tempdir):
 
 
 @pytest.fixture(scope="session", params=[dict()])
-def bakery_http_path(tmpdir_factory, request):
+def bakery_http_server(tmpdir_factory, request):
     tempdir = tmpdir_factory.mktemp("test-bakery")
     zarr_local_path, ds, zarr_fname = make_zarr_local_path(tempdir)
     url = start_http_server(tempdir, request=request)

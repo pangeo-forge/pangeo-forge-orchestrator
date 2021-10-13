@@ -2,7 +2,7 @@ import os
 import subprocess
 
 
-def check_output(subcmd, module, drop_chars):
+def check_stdout(subcmd, module, drop_chars):
     """
     subcmd: 2-tuple
         Pair of subcommand + expected output.

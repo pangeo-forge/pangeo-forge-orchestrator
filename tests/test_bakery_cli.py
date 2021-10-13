@@ -1,11 +1,11 @@
 import pytest
 
-from .cli_test_funcs import check_output
+from .check_stdout import check_stdout
 
 subcommands = {
     "ls": (
         "['devseed.bakery.development.aws.us-west-2',"
-        "'devseed.bakery.development.azure.westeurope']"
+        "'devseed.bakery.development.azure.westeurope','test_bakery']"
     ),
     #"ls --bakery-id great_bakery": (
     #     "{'targets':{'osn':{'fsspec_open_kwargs':{'anon':True,'client_kwargs':{'endpoint_url':"
@@ -20,9 +20,17 @@ subcommands = {
     #    "─────────────┘"
     #),
 }
-subcommands = [(cmd, output) for cmd, output in subcommands.items()]
+subcommands = [[cmd, output] for cmd, output in subcommands.items()]
 
 
-@pytest.mark.parametrize("subcmd", subcommands)
-def test_bakery_ls(subcmd):
-    check_output(subcmd, module="bakery", drop_chars=("\n", " "))
+@pytest.fixture(scope="session", params=[*subcommands])
+def bakery_subcommand(request, bakery_http_server):
+    bakery_meta_http_path = bakery_http_server[-1]
+    request.param[0] = request.param[0].replace(
+        "ls", f"ls --extra-bakery-yaml {bakery_meta_http_path}"
+    )
+    return request.param
+
+
+def test_bakery_ls(bakery_subcommand):
+    check_stdout(bakery_subcommand, module="bakery", drop_chars=("\n", " "))
