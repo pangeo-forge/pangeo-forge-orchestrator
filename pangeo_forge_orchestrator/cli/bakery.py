@@ -11,6 +11,7 @@ app = typer.Typer()
 
 @app.command()
 def ls(
+    extra_bakery_yaml: Optional[str] = None,
     bakery_id: Optional[str] = None,
     view: str = "general-info",
     feedstock_id: Optional[str] = None,
@@ -19,7 +20,7 @@ def ls(
     List available bakeries and associated build-logs.
     """
 
-    bakery_meta = BakeryMetadata(bakery_id=bakery_id)
+    bakery_meta = BakeryMetadata(bakery_id=bakery_id, extra_bakery_yaml=extra_bakery_yaml)
 
     if not bakery_id:
         print(list(bakery_meta.bakery_dict))

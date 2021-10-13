@@ -22,22 +22,16 @@ class BakeryMetadata:
     fsspec_open_kwargs: dict = field(init=False)
     write_access: bool = False
     credentialed_fs: Optional[s3fs.S3FileSystem] = None
+    extra_bakery_yaml: Optional[str] = None
 
     def __post_init__(self):
         with fsspec.open(self.bakery_database) as f:
-            read_yaml = f.read()
-            self.bakery_dict = yaml.safe_load(read_yaml)
+            self.bakery_dict = yaml.safe_load(f.read())
 
-            # add an additional mock bakery for testing purposes
-            osn = dict(
-                fsspec_open_kwargs=dict(
-                    anon=True,
-                    client_kwargs={'endpoint_url': 'https://ncsa.osn.xsede.org'},
-                ),
-                protocol="s3",
-                bakery_root="Pangeo/pangeo-forge",
-            )
-            self.bakery_dict.update({"great_bakery": {"targets": {"osn": osn}}})
+        if self.extra_bakery_yaml:
+            with fsspec.open(self.extra_bakery_yaml) as f:
+                extra_bakery_dict = yaml.safe_load(f.read())
+                self.bakery_dict.update(extra_bakery_dict)
 
         if self.bakery_id:
             k = list(self.bakery_dict[self.bakery_id]["targets"].keys())[0]
