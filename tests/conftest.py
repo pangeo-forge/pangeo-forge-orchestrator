@@ -1,4 +1,5 @@
 import os
+import json
 import socket
 import subprocess
 import time
@@ -85,13 +86,14 @@ def make_zarr_local_path(tempdir):
 
 
 def make_test_bakery_yaml(url, tempdir):
+    url = url.split("://")[1]
     bakery_meta = {
         "test_bakery": {
             "targets": {
                 "local_server": {
-                    "fsspec_open_kwargs": None,
+                    "fsspec_open_kwargs": {},
                     "protocol": "http",
-                    "bakery_root": f"{url}/test-bakery0/",
+                    "bakery_root": f"{url}/test-bakery0",
                 }
             }
         }
@@ -101,6 +103,19 @@ def make_test_bakery_yaml(url, tempdir):
 
     return bakery_meta
 
+
+def make_build_logs(zarr_fname, tempdir):
+    logs = {
+        00000: {
+            "timestamp": "2021-09-25 00:00:00",
+            "feedstock": "orchestrator-mock-feedstock",
+            "recipe": "recipe",
+            "path": zarr_fname,
+        }
+    }
+    with open(f"{tempdir}/build-logs.json", mode="w") as f:
+        f.write(json.dumps(logs))
+
 # Fixtures -------------------------------------------------------------------
 
 
@@ -108,9 +123,13 @@ def make_test_bakery_yaml(url, tempdir):
 def bakery_http_server(tmpdir_factory, request):
     tempdir = tmpdir_factory.mktemp("test-bakery")
     zarr_local_path, ds, zarr_fname = make_zarr_local_path(tempdir)
+    make_build_logs(zarr_fname, tempdir)
+
     url = start_http_server(tempdir, request=request)
     http_base = f"{url}/test-bakery0"
     zarr_http_path = f"{http_base}/{zarr_fname}"
+
     bakery_meta = make_test_bakery_yaml(url, tempdir)
     bakery_meta_http_path = f"{http_base}/test-bakery.yaml"
+
     return url, zarr_local_path, zarr_http_path, ds, bakery_meta, bakery_meta_http_path

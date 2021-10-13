@@ -7,10 +7,10 @@ subcommands = {
         "['devseed.bakery.development.aws.us-west-2',"
         "'devseed.bakery.development.azure.westeurope','test_bakery']"
     ),
-    #"ls --bakery-id great_bakery": (
-    #     "{'targets':{'osn':{'fsspec_open_kwargs':{'anon':True,'client_kwargs':{'endpoint_url':"
-    #     "'https://ncsa.osn.xsede.org'}},'protocol':'s3','bakery_root':'Pangeo/pangeo-forge'}}}"
-    #),
+    "ls --bakery-id test_bakery": (
+        "{'targets':{'local_server':{'bakery_root':'{url}/test-bakery0','fsspec_open_kwargs':{},"
+        "'protocol':'http'}}}"
+    ),
     #"ls --bakery-id great_bakery --view build-logs --feedstock-id noaa-oisst": (
     #    "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━"
     #    "━━━━━━━━━━━━━━━━━━┓┃RunID┃Timestamp┃Feedstock┃Recipe┃Path┃┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━"
@@ -25,10 +25,14 @@ subcommands = [[cmd, output] for cmd, output in subcommands.items()]
 
 @pytest.fixture(scope="session", params=[*subcommands])
 def bakery_subcommand(request, bakery_http_server):
+    url = bakery_http_server[0].split("://")[1]
     bakery_meta_http_path = bakery_http_server[-1]
+
     request.param[0] = request.param[0].replace(
         "ls", f"ls --extra-bakery-yaml {bakery_meta_http_path}"
     )
+    if "{url}" in request.param[1]:
+        request.param[1] = request.param[1].replace("{url}", url)
     return request.param
 
 
