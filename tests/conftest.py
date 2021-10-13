@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+import yaml
 
 
 # Helper functions -----------------------------------------------------------
@@ -80,8 +81,25 @@ def make_zarr_local_path(tempdir):
     fname = "test-dataset.zarr"
     zarr_path = tempdir.join(fname)
     ds.to_zarr(zarr_path, consolidated=True)
-    return zarr_path, ds
+    return zarr_path, ds, fname
 
+
+def make_test_bakery_yaml(url, tempdir):
+    bakery_meta = {
+        "test_bakery": {
+            "targets": {
+                "local_server": {
+                    "fsspec_open_kwargs": None,
+                    "protocol": "http",
+                    "bakery_root": f"{url}/test-bakery0/",
+                }
+            }
+        }
+    }
+    with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
+        f.write(yaml.dump(bakery_meta))
+
+    return bakery_meta
 
 # Fixtures -------------------------------------------------------------------
 
@@ -89,6 +107,10 @@ def make_zarr_local_path(tempdir):
 @pytest.fixture(scope="session", params=[dict()])
 def bakery_http_path(tmpdir_factory, request):
     tempdir = tmpdir_factory.mktemp("test-bakery")
-    zarr_path, ds = make_zarr_local_path(tempdir)
+    zarr_local_path, ds, zarr_fname = make_zarr_local_path(tempdir)
     url = start_http_server(tempdir, request=request)
-    return url, zarr_path, ds
+    http_base = f"{url}/test-bakery0"
+    zarr_http_path = f"{http_base}/{zarr_fname}"
+    bakery_meta = make_test_bakery_yaml(url, tempdir)
+    bakery_meta_http_path = f"{http_base}/test-bakery.yaml"
+    return url, zarr_local_path, zarr_http_path, ds, bakery_meta, bakery_meta_http_path
