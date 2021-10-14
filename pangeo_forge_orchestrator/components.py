@@ -10,6 +10,8 @@ import yaml
 from pydantic import AnyUrl, BaseModel, FilePath
 from fsspec.registry import get_filesystem_class, known_implementations
 
+from .meta_types.bakery import Bakery
+
 PANGEO_FORGE_BAKERY_DATABASE = (
     "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
 )
@@ -18,11 +20,10 @@ KnownImplementations = Enum("KnownImplementations", [(p, p) for p in list(known_
 
 
 class BakeryDatabase(BaseModel):
-    """The place
-    """
+    """A database of Pangeo Forge Bakeries"""
 
     path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
-    bakeries: Optional[dict] = None  # TODO: Custom type for `bakeries`
+    bakeries: Optional[Bakery] = None
 
     class Config:
         validate_assignment = True  # validate `__init__` assignments
