@@ -1,65 +1,80 @@
+import ast
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Optional
+from enum import Enum
+from typing import Optional, Union
 
 import fsspec
-import s3fs
 import yaml
+from pydantic import AnyUrl, BaseModel, FilePath
+from fsspec.registry import get_filesystem_class, known_implementations
+
+PANGEO_FORGE_BAKERY_DATABASE = (
+    "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
+)
+# turn fsspec's list of known_implementations into object which pydantic can validate against
+KnownImplementations = Enum("KnownImplementations", [(p, p) for p in list(known_implementations)])
 
 
-@dataclass
-class BakeryMetadata:
+class BakeryDatabase(BaseModel):
+    """The place
+    """
 
-    bakery_database: str = (
-        "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
-    )
-    bakery_dict: dict = field(init=False)
-    bakery_id: Optional[str] = None
-    build_logs: dict = field(default_factory=dict)
-    target: str = field(init=False)
-    bakery_root: str = field(init=False)
-    fsspec_open_kwargs: dict = field(init=False)
+    path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
+    bakeries: Optional[dict] = None  # TODO: Custom type for `bakeries`
+
+    class Config:
+        validate_assignment = True  # validate `__init__` assignments
+        arbitrary_types_allowed = True
+
+    def __init__(self, path=PANGEO_FORGE_BAKERY_DATABASE):
+        super().__init__()
+        self.path = path
+        with fsspec.open(self.path) as f:
+            self.bakeries = yaml.safe_load(f.read())
+
+
+class BakeryMetadata(BakeryDatabase):
+
+    id: Optional[str] = None  # Not optional, but assigned in __init__
+    build_logs: Optional[dict] = None
+    target: Optional[dict] = None
+    root: Optional[str] = None
+    protocol: Optional[KnownImplementations] = None
+    fsspec_open_kwargs: Optional[dict] = None
     write_access: bool = False
-    credentialed_fs: Optional[s3fs.S3FileSystem] = None
-    extra_bakery_yaml: Optional[str] = None
+    credentialed_fs: Optional[fsspec.AbstractFileSystem] = None
 
-    def __post_init__(self):
-        with fsspec.open(self.bakery_database) as f:
-            self.bakery_dict = yaml.safe_load(f.read())
+    def __init__(self, id, write_access=False, **kwargs):
+        super().__init__(**kwargs)
+        self.id = id
+        self.write_access = write_access
+        targets = list(self.bakeries[self.id]["targets"].keys())
+        if len(targets) > 1:
+            raise NotImplementedError("This object doesn't support multiple Bakery targets.")
+        self.target = self.bakeries[self.id]["targets"][targets[0]]
+        self.protocol = self.target["private"]["protocol"]
+        self.read_only_kwargs = self.target["private"]["storage_options"]
 
-        if self.extra_bakery_yaml:
-            with fsspec.open(self.extra_bakery_yaml) as f:
-                extra_bakery_dict = yaml.safe_load(f.read())
-                self.bakery_dict.update(extra_bakery_dict)
+        with fsspec.open(
+            f"{self.protocol.name}://{self.root}/build-logs.json", **self.read_only_kwargs,
+        ) as f:
+            self.build_logs = json.loads(f.read())
 
-        if self.bakery_id:
-            k = list(self.bakery_dict[self.bakery_id]["targets"].keys())[0]
-            self.target = self.bakery_dict[self.bakery_id]["targets"][k]
-            self.bakery_root = self.target["bakery_root"]
-            self.fsspec_open_kwargs = self.target["fsspec_open_kwargs"]
-
-            with fsspec.open(
-                f"{self.target['protocol']}://{self.bakery_root}/build-logs.json",
-                **self.fsspec_open_kwargs,
-            ) as f2:
-                self.build_logs = json.loads(f2.read())
-
-            if self.write_access:
-                # this, of course, is S3/OSN specific
-                for k in ["OSN_KEY", "OSN_SECRET"]:
-                    if k not in os.environ.keys():
-                        raise ValueError(
-                            f"Environment variable {k} required to authenticate write access."
-                        )
-                self.credentialed_fs = s3fs.S3FileSystem(
-                    key=os.environ["OSN_KEY"],
-                    secret=os.environ["OSN_SECRET"],
-                    client_kwargs=self.fsspec_open_kwargs["client_kwargs"],
-                    default_cache_type='none',
-                    default_fill_cache=False,
-                    use_listings_cache=False
+        if self.write_access:
+            fs_cls = get_filesystem_class(self.protocol.name)
+            if "PANGEO_FORGE_BAKERY_WRITE_KWARGS" not in os.environ.keys():
+                raise ValueError(
+                    "Environment variable 'PANGEO_FORGE_BAKERY_WRITE_KWARGS' is not set. This "
+                    "variable is the string representation of the kwarg dictionary required to "
+                    "instantiate a credentialed fsspec filesystem for this Bakery. To set this "
+                    "variable, define your kwargs as a Python `dict` named `kwargs` and then call "
+                    "`os.environ['PANGEO_FORGE_BAKERY_WRITE_KWARGS'] = str(kwargs)`. These kwargs "
+                    "will contain secrets; **do not** commit them to version control."
                 )
+            kw = ast.literal_eval(os.environ["PANGEO_FORGE_BAKERY_WRITE_KWARGS"])
+            self.credentialed_fs = fs_cls(**kw)
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
@@ -69,7 +84,7 @@ class BakeryMetadata:
             "s3": "s3://",
             "https": f"{self.fsspec_open_kwargs['client_kwargs']['endpoint_url']}/"
         }
-        return f"{prefixes[endpoint]}{self.bakery_root}"
+        return f"{prefixes[endpoint]}{self.root}"
 
     def get_dataset_path(self, run_id, endpoint="s3"):
         ds_path = self.build_logs[run_id]["path"]
