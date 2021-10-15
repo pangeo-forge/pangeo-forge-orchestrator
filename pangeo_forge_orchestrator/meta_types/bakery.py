@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
+from typing_extensions import TypedDict
 
 regions = Literal[
     "aws.us-east-1",
@@ -99,10 +100,17 @@ AKS_CLUSTER = "azure.aks"
 clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
 
 
-@dataclass
-class StorageOptions:
-    key: Optional[str] = None
-    secret: Optional[str] = None
+class StorageOptions(TypedDict, total=False):
+    # Experimenting with this as a TypedDict, rather than a dataclass, because we don't want
+    # arbitrary fields passed into fsspec instances as kwargs (in `components.Bakery`, e.g.)
+    # Pydantic requires `typing_extensions.TypedDict`; `total=False` allows subsets of keys.
+    key: str
+    secret: str
+    anon: bool
+    client_kwargs: dict
+    default_cache_type: str
+    default_fill_cache: bool
+    use_listings_cache: bool
 
 
 @dataclass
@@ -116,6 +124,7 @@ class Endpoint:
 class Target:
     region: regions
     private: Optional[Endpoint] = None
+    public: Optional[Endpoint] = None
     description: Optional[str] = None
     prefix: Optional[str] = None
 
@@ -144,9 +153,9 @@ class Cluster:
 
 
 @dataclass
-class Bakery:
+class BakeryMeta:
     region: regions
     targets: Dict[str, Target]
-    cluster: Cluster
+    cluster: Union[Cluster, None]
     description: Optional[str] = None
     org_website: Optional[str] = None
