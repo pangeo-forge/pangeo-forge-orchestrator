@@ -1,10 +1,10 @@
 # import pytest
 
-from pangeo_forge_orchestrator.metadata import BakeryMetadata, FeedstockMetadata
+from pangeo_forge_orchestrator.components import BakeryDatabase, FeedstockMetadata
 
 
 def test_bakery_metadata():
-    b = BakeryMetadata()
+    b = BakeryDatabase()
     assert b is not None
 
 

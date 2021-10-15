@@ -88,14 +88,39 @@ def make_zarr_local_path(tempdir):
 def make_test_bakery_yaml(url, tempdir):
     url = url.split("://")[1]
     bakery_meta = {
-        "test_bakery": {
-            "targets": {
-                "local_server": {
-                    "fsspec_open_kwargs": {},
-                    "protocol": "http",
-                    "bakery_root": f"{url}/test-bakery0",
+        'great_bakery': {
+            'region': 'aws.us-west-2',
+            'targets': {
+                'osn': {
+                    'region': 'aws.us-west-2',
+                    'description': 'Open Storage Network (OSN) bucket',
+                    'public': {
+                        'prefix': 'Pangeo/pangeo-forge',
+                        'protocol': 's3',
+                        'storage_options': {
+                            'anon': True,
+                            'client_kwargs': {
+                                'endpoint_url':
+                                'https://ncsa.osn.xsede.org'
+                                }
+                            }
+                        },
+                    'private': {
+                        'prefix': 'Pangeo/pangeo-forge',
+                        'protocol': 's3',
+                        'storage_options': {
+                            'key': '{OSN_KEY}',
+                            'secret': '{OSN_SECRET}',
+                            'client_kwargs': {
+                                'endpoint_url': 'https://ncsa.osn.xsede.org'
+                            },
+                            'default_cache_type': 'none',
+                            'default_fill_cache': False,
+                            'use_listings_cache': False}
+                    }
                 }
-            }
+            },
+            'cluster': None,
         }
     }
     with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
@@ -129,7 +154,17 @@ def bakery_http_server(tmpdir_factory, request):
     http_base = f"{url}/test-bakery0"
     zarr_http_path = f"{http_base}/{zarr_fname}"
 
+    return url, zarr_local_path, zarr_http_path, ds
+
+
+@pytest.fixture(scope="session", params=[dict()])
+def mock_github_http_server(tmpdir_factory, request):
+    tempdir = tmpdir_factory.mktemp("mock-github")
+
+    url = start_http_server(tempdir, request=request)
+    http_base = f"{url}/mock-github0"
+
     bakery_meta = make_test_bakery_yaml(url, tempdir)
     bakery_meta_http_path = f"{http_base}/test-bakery.yaml"
 
-    return url, zarr_local_path, zarr_http_path, ds, bakery_meta, bakery_meta_http_path
+    return url, bakery_meta, bakery_meta_http_path

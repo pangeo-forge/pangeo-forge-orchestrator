@@ -1,6 +1,7 @@
-from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Union
 from typing_extensions import TypedDict
+
+from pydantic.dataclasses import dataclass
 
 regions = Literal[
     "aws.us-east-1",
