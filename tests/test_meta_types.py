@@ -1,9 +1,9 @@
 import pytest
 import fsspec
 import yaml
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta
+from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, Endpoint, StorageOptions, Target
 
 
 @pytest.fixture(scope="session")
@@ -42,11 +42,10 @@ def test_bakery_meta(bakery_meta_dict, invalidate):
 def test_cluster(bakery_meta_dict):
     d = bakery_meta_dict["cluster"]
     if type(d) is None:
-        # This might not be allowable in production, but allowing it for now to make it easier to
-        # draft the first round of these tests.
+        # Maybe not be allowable in prod, but allowing it for now to make first draft simpler.
         return
     elif type(d) == dict:
-        # Our fixtures don't support his at the moment; but this will be the default in production.
+        # Our fixtures don't support his at the moment; but this will be the default in prod.
         pass
 
 
@@ -55,8 +54,52 @@ def test_fargate_cluster_options():
     pass
 
 
-# @pytest.mark.parametrize("invalidate", [None, "keys", "vals"])
-def test_target(bakery_meta_dict):
+@pytest.mark.parametrize("invalidate", [None, "region"])
+def test_target(bakery_meta_dict, invalidate):
+    # TODO: add key invalidation raises TypeError, as in `test_bakery_meta`.
     k = list(bakery_meta_dict["targets"])[0]
     d = bakery_meta_dict["targets"][k]
-    assert d is not None
+    if not invalidate:
+        Target(**d)
+    elif invalidate == "region":
+        d["region"] = d["region"][1:]
+        with pytest.raises(ValidationError):
+            Target(**d)
+
+
+@pytest.mark.parametrize("invalidate", [None, "protocol"])
+def test_endpoint(bakery_meta_dict, invalidate):
+    # Redundant w/ `test_target` & `test_storage_options` but not 1:1 given loop and `d` assignment.
+    # TODO: add key invalidation raises TypeError, as in `test_bakery_meta`.
+    for endpoint in ["public", "private"]:
+        k = list(bakery_meta_dict["targets"])[0]
+        d = bakery_meta_dict["targets"][k][endpoint]
+        if not invalidate:
+            Endpoint(**d)
+        elif invalidate == "protocol":
+            d["protocol"] = d["protocol"][1:]
+            with pytest.raises(ValidationError):
+                Endpoint(**d)
+
+
+@pytest.mark.parametrize("invalidate", [None, "keys"])
+def test_storage_options(bakery_meta_dict, invalidate):
+    for endpoint in ["public", "private"]:
+        k = list(bakery_meta_dict["targets"])[0]
+        d = bakery_meta_dict["targets"][k][endpoint]["storage_options"]
+        if not invalidate:
+            StorageOptions(**d)
+        elif invalidate == "keys":
+
+            # Can't test errors w/out Wrapper b/c StorageOptions is a typing_extensions.TypedDict
+            class Wrapper(BaseModel):
+                so: StorageOptions
+
+            for i in range(len(list(d))):
+                key = list(d)[i]
+                d_copy = d.copy()
+                invalid_key = key[1:]
+                d_copy[invalid_key] = d_copy[key]
+                del d_copy[key]
+                with pytest.raises(TypeError):
+                    Wrapper(so=StorageOptions(**d_copy))
