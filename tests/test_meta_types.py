@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 import fsspec
 import yaml
@@ -67,39 +69,53 @@ def test_target(bakery_meta_dict, invalidate):
             Target(**d)
 
 
+@pytest.mark.parametrize("endpoint", ["public", "private"])
 @pytest.mark.parametrize("invalidate", [None, "protocol"])
-def test_endpoint(bakery_meta_dict, invalidate):
+def test_endpoint(bakery_meta_dict, endpoint, invalidate):
     # Redundant w/ `test_target` & `test_storage_options` but not 1:1 given loop and `d` assignment.
     # TODO: add key invalidation raises TypeError, as in `test_bakery_meta`.
-    for endpoint in ["public", "private"]:
-        k = list(bakery_meta_dict["targets"])[0]
-        d = bakery_meta_dict["targets"][k][endpoint]
-        if not invalidate:
+    k = list(bakery_meta_dict["targets"])[0]
+    d = bakery_meta_dict["targets"][k][endpoint]
+    if not invalidate:
+        Endpoint(**d)
+    elif invalidate == "protocol":
+        d["protocol"] = d["protocol"][1:]
+        with pytest.raises(ValidationError):
             Endpoint(**d)
-        elif invalidate == "protocol":
-            d["protocol"] = d["protocol"][1:]
-            with pytest.raises(ValidationError):
-                Endpoint(**d)
 
 
+@pytest.mark.parametrize("endpoint", ["public", "private"])
 @pytest.mark.parametrize("invalidate", [None, "keys"])
-def test_storage_options(bakery_meta_dict, invalidate):
-    for endpoint in ["public", "private"]:
-        k = list(bakery_meta_dict["targets"])[0]
-        d = bakery_meta_dict["targets"][k][endpoint]["storage_options"]
-        if not invalidate:
-            StorageOptions(**d)
-        elif invalidate == "keys":
+def test_storage_options(bakery_meta_dict, endpoint, invalidate):
+    k = list(bakery_meta_dict["targets"])[0]
+    d = bakery_meta_dict["targets"][k][endpoint]["storage_options"]
+    if not invalidate:
+        StorageOptions(**d)
+    elif invalidate == "keys":
 
-            # Can't test errors w/out Wrapper b/c StorageOptions is a typing_extensions.TypedDict
-            class Wrapper(BaseModel):
-                so: StorageOptions
+        # Can't test errors w/out Wrapper b/c StorageOptions is a typing_extensions.TypedDict
+        class Wrapper(BaseModel):
+            kwargs_dict: Optional[dict] = None
+            storage_options: Optional[StorageOptions] = None
 
-            for i in range(len(list(d))):
-                key = list(d)[i]
-                d_copy = d.copy()
-                invalid_key = key[1:]
-                d_copy[invalid_key] = d_copy[key]
-                del d_copy[key]
-                with pytest.raises(TypeError):
-                    Wrapper(so=StorageOptions(**d_copy))
+            class Config:
+                validate_assignment = True
+
+            def __init__(self, kwargs_dict):
+                super().__init__()
+                valid_keys = list(StorageOptions.__annotations__.keys())
+                for k in kwargs_dict.keys():
+                    if k not in valid_keys:
+                        raise ValueError(
+                            f"Key {k} not in set of valid `StorageOptions` keys: {valid_keys}."
+                        )
+                self.kwargs_dict = kwargs_dict
+
+        for i in range(len(list(d))):
+            key = list(d)[i]
+            d_copy = d.copy()
+            invalid_key = key[1:]
+            d_copy[invalid_key] = d_copy[key]
+            del d_copy[key]
+            with pytest.raises(ValueError):
+                Wrapper(kwargs_dict=d_copy)
