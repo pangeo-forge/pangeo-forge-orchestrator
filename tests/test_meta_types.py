@@ -33,12 +33,12 @@ def test_bakery_meta(bakery_meta_dict, invalidate):
             with pytest.raises(TypeError):
                 BakeryMeta(**d_copy)
     elif invalidate == "vals":
+        d_copy = d.copy()
         for k, v in d.items():
             v = str(v) if type(v) != str else v[1:]
-            d_copy = d.copy()
             d_copy[k] = v
-            with pytest.raises(ValidationError):
-                BakeryMeta(**d_copy)
+        with pytest.raises(ValidationError):
+            BakeryMeta(**d_copy)
 
 
 def test_cluster(bakery_meta_dict):
@@ -85,14 +85,13 @@ def test_endpoint(bakery_meta_dict, endpoint, invalidate):
 
 
 @pytest.mark.parametrize("endpoint", ["public", "private"])
-@pytest.mark.parametrize("invalidate", [None, "keys"])
+@pytest.mark.parametrize("invalidate", [None, "keys", "vals"])
 def test_storage_options(bakery_meta_dict, endpoint, invalidate):
     k = list(bakery_meta_dict["targets"])[0]
     d = bakery_meta_dict["targets"][k][endpoint]["storage_options"]
     if not invalidate:
         StorageOptions(**d)
-    elif invalidate == "keys":
-
+    else:
         # Can't test errors w/out Wrapper b/c StorageOptions is a typing_extensions.TypedDict
         class Wrapper(BaseModel):
             kwargs_dict: Optional[dict] = None
@@ -110,12 +109,22 @@ def test_storage_options(bakery_meta_dict, endpoint, invalidate):
                             f"Key {k} not in set of valid `StorageOptions` keys: {valid_keys}."
                         )
                 self.kwargs_dict = kwargs_dict
+                self.storage_options = StorageOptions(**self.kwargs_dict)
 
-        for i in range(len(list(d))):
-            key = list(d)[i]
+        if invalidate == "keys":
+            for i in range(len(list(d))):
+                key = list(d)[i]
+                d_copy = d.copy()
+                invalid_key = key[1:]
+                d_copy[invalid_key] = d_copy[key]
+                del d_copy[key]
+                with pytest.raises(ValueError):
+                    Wrapper(kwargs_dict=d_copy)
+
+        elif invalidate == "vals":
             d_copy = d.copy()
-            invalid_key = key[1:]
-            d_copy[invalid_key] = d_copy[key]
-            del d_copy[key]
-            with pytest.raises(ValueError):
+            for k, v in d.items():
+                v = str(v) if type(v) != str else v[1:]
+                d_copy[k] = v
+            with pytest.raises(ValidationError):
                 Wrapper(kwargs_dict=d_copy)

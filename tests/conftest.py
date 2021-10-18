@@ -100,11 +100,10 @@ def make_test_bakery_yaml(url, tempdir):
                         'storage_options': {
                             'anon': True,
                             'client_kwargs': {
-                                'endpoint_url':
-                                'https://ncsa.osn.xsede.org'
-                                }
+                                'endpoint_url': 'https://ncsa.osn.xsede.org'
                             }
-                        },
+                        }
+                    },
                     'private': {
                         'prefix': 'Pangeo/pangeo-forge',
                         'protocol': 's3',
