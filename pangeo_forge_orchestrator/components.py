@@ -9,7 +9,7 @@ import fsspec
 import yaml
 from fsspec.registry import get_filesystem_class, known_implementations
 
-from .meta_types.bakery import BakeryDatabase, BakeryMeta, StorageOptions, Target
+from .meta_types.bakery import BakeryDatabase, BakeryMeta, BakeryName, StorageOptions, Target
 
 # turn fsspec's list of known_implementations into object which pydantic can validate against
 KnownImplementations = Enum("KnownImplementations", [(p, p) for p in list(known_implementations)])
@@ -34,7 +34,7 @@ class Bakery(BakeryDatabase):
     :param credentialed_fs: Credentialed fsspec filesystem for write access to target.
     """
 
-    id: Optional[str] = None  # TODO: validate bakery name
+    name: Optional[BakeryName] = None
     metadata: Optional[BakeryMeta] = None
     write_access: bool = False
 
@@ -48,11 +48,11 @@ class Bakery(BakeryDatabase):
     private_protocol: Optional[KnownImplementations] = None
     credentialed_fs: Optional[fsspec.AbstractFileSystem] = None
 
-    def __init__(self, id, write_access=False, **kwargs):
+    def __init__(self, name, write_access=False, **kwargs):
         super().__init__(**kwargs)
 
-        self.id = id
-        self.metadata = BakeryMeta(**self.bakeries[self.id])
+        self.name = BakeryName(name=name)
+        self.metadata = BakeryMeta(**self.bakeries[self.name.name])
         self.write_access = write_access
 
         targets = list(self.metadata.targets.keys())
