@@ -8,9 +8,30 @@ from pydantic import BaseModel, ValidationError
 from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, Endpoint, StorageOptions, Target
 
 
+def invalidate_keys(d, key):
+    d_copy = d.copy()
+    invalid_key = key[1:]
+    d_copy[invalid_key] = d_copy[key]
+    del d_copy[key]
+    return d_copy
+
+
+def invalidate_vals(d, k, v):
+    d_copy = d.copy()
+    if type(v) == dict:
+        # make dictionaries unparsable for Pydantic
+        v = str(v).replace("{", "")
+        v = v.replace(":", "")
+        v = v.replace("}", "")
+    v = str(v) if type(v) != str else v[1:]
+    v = v if v not in ("True", "False") else "String which Pydantic can't parse to boolean value."
+    d_copy[k] = v
+    return d_copy
+
+
 @pytest.fixture(scope="session")
-def bakery_meta_dict(mock_github_http_server):
-    _, _, bakery_meta_http_path = mock_github_http_server
+def bakery_meta_dict(github_http_server):
+    _, _, bakery_meta_http_path = github_http_server
     with fsspec.open(bakery_meta_http_path) as f:
         d = yaml.safe_load(f.read())
         d = d[list(d)[0]]
@@ -25,20 +46,14 @@ def test_bakery_meta(bakery_meta_dict, invalidate):
         assert bm is not None
     elif invalidate == "keys":
         for i in range(len(list(d))):
-            key = list(d)[i]
-            d_copy = d.copy()
-            invalid_key = key[1:]
-            d_copy[invalid_key] = d_copy[key]
-            del d_copy[key]
+            d_copy = invalidate_keys(d, key=list(d)[i])
             with pytest.raises(TypeError):
                 BakeryMeta(**d_copy)
     elif invalidate == "vals":
-        d_copy = d.copy()
         for k, v in d.items():
-            v = str(v) if type(v) != str else v[1:]
-            d_copy[k] = v
-        with pytest.raises(ValidationError):
-            BakeryMeta(**d_copy)
+            d_copy = invalidate_vals(d, k, v)
+            with pytest.raises(ValidationError):
+                BakeryMeta(**d_copy)
 
 
 def test_cluster(bakery_meta_dict):
@@ -92,39 +107,16 @@ def test_storage_options(bakery_meta_dict, endpoint, invalidate):
     if not invalidate:
         StorageOptions(**d)
     else:
-        # Can't test errors w/out Wrapper b/c StorageOptions is a typing_extensions.TypedDict
-        class Wrapper(BaseModel):
-            kwargs_dict: Optional[dict] = None
-            storage_options: Optional[StorageOptions] = None
-
-            class Config:
-                validate_assignment = True
-
-            def __init__(self, kwargs_dict):
-                super().__init__()
-                valid_keys = list(StorageOptions.__annotations__.keys())
-                for k in kwargs_dict.keys():
-                    if k not in valid_keys:
-                        raise ValueError(
-                            f"Key {k} not in set of valid `StorageOptions` keys: {valid_keys}."
-                        )
-                self.kwargs_dict = kwargs_dict
-                self.storage_options = StorageOptions(**self.kwargs_dict)
-
         if invalidate == "keys":
             for i in range(len(list(d))):
-                key = list(d)[i]
-                d_copy = d.copy()
-                invalid_key = key[1:]
-                d_copy[invalid_key] = d_copy[key]
-                del d_copy[key]
-                with pytest.raises(ValueError):
-                    Wrapper(kwargs_dict=d_copy)
+                d_copy = invalidate_keys(d, key=list(d)[i])
+                with pytest.raises(ValidationError):
+                    StorageOptions(**d_copy)
 
         elif invalidate == "vals":
-            d_copy = d.copy()
             for k, v in d.items():
-                v = str(v) if type(v) != str else v[1:]
-                d_copy[k] = v
-            with pytest.raises(ValidationError):
-                Wrapper(kwargs_dict=d_copy)
+                d_copy = invalidate_vals(d, k, v)
+                print("D is THIS:", d)
+                print("D_COPY is THIS:", d_copy)
+                with pytest.raises(ValidationError):
+                    StorageOptions(**d_copy)

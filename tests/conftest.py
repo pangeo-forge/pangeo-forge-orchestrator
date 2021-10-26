@@ -157,7 +157,7 @@ def bakery_http_server(tmpdir_factory, request):
 
 
 @pytest.fixture(scope="session", params=[dict()])
-def mock_github_http_server(tmpdir_factory, request):
+def github_http_server(tmpdir_factory, request):
     tempdir = tmpdir_factory.mktemp("mock-github")
 
     url = start_http_server(tempdir, request=request)
