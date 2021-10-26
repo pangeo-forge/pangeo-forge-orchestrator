@@ -1,9 +1,7 @@
-from typing import Optional
-
 import pytest
 import fsspec
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, Endpoint, StorageOptions, Target
 
