@@ -2,42 +2,17 @@ import json
 import os
 from dataclasses import dataclass, field, asdict
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 import re
 
 import fsspec
 import yaml
-from pydantic import AnyUrl, BaseModel, FilePath
 from fsspec.registry import get_filesystem_class, known_implementations
 
-from .meta_types.bakery import BakeryMeta, StorageOptions, Target
+from .meta_types.bakery import BakeryDatabase, BakeryMeta, StorageOptions, Target
 
-PANGEO_FORGE_BAKERY_DATABASE = (
-    "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
-)
 # turn fsspec's list of known_implementations into object which pydantic can validate against
 KnownImplementations = Enum("KnownImplementations", [(p, p) for p in list(known_implementations)])
-
-
-class BakeryDatabase(BaseModel):
-    """A database of Pangeo Forge Bakeries.
-
-    :param path: Path to local or remote YAML file with content conforming to ``BakeryMeta`` model.
-    :param bakeries: The content of the YAML file to which ``path`` points.
-    """
-
-    path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
-    bakeries: Optional[dict] = None  # TODO: bakery database type
-
-    class Config:
-        validate_assignment = True  # validate `__init__` assignments
-        arbitrary_types_allowed = True
-
-    def __init__(self, path=PANGEO_FORGE_BAKERY_DATABASE):
-        super().__init__()
-        self.path = path
-        with fsspec.open(self.path) as f:
-            self.bakeries = yaml.safe_load(f.read())
 
 
 class Bakery(BakeryDatabase):
@@ -91,7 +66,8 @@ class Bakery(BakeryDatabase):
         self.prefix = getattr(self.target, default_access).prefix
 
         with fsspec.open(
-            f"{self.get_base_path()}/build-logs.json", **self.default_storage_options,
+            f"{self.get_base_path()}/build-logs.json",
+            **self.default_storage_options.dict(exclude_none=True),
         ) as f:
             self.build_logs = json.loads(f.read())
 

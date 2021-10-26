@@ -1,6 +1,8 @@
 from typing import Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, constr
+import fsspec
+import yaml
+from pydantic import AnyUrl, BaseModel, constr, FilePath, HttpUrl
 from pydantic.dataclasses import dataclass
 
 regions = Literal[
@@ -101,6 +103,9 @@ FARGATE_CLUSTER = "aws.fargate"
 AKS_CLUSTER = "azure.aks"
 clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
 
+PANGEO_FORGE_BAKERY_DATABASE = (
+    "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
+)
 # a regex constraint to ensure that secrets are passed as env var names enclosed in curly braces
 # e.g., `StorageOptions.key` must be assigned to a string such as `"{MY_AWS_KEY}"`
 env_var_name = constr(regex=r'{(.*?)}')
@@ -116,7 +121,7 @@ class StorageOptions(BaseModel):
     use_listings_cache: Optional[bool] = None
 
     class Config:
-        extra = 'forbid'
+        extra = "forbid"
 
 
 @dataclass
@@ -165,3 +170,39 @@ class BakeryMeta:
     cluster: Union[Cluster, None]
     description: Optional[str] = None
     org_website: Optional[str] = None
+
+
+@dataclass
+class BakeryName:
+    name: str
+    region: Optional[regions] = None
+    organization_url: Optional[HttpUrl] = None
+
+    def __post_init__(self):
+        split = self.name.split(".bakery.")
+        self.region = split[-1]
+        reversed_url_list = split[0].split(".")
+        self.organization_url = f"https://{'.'.join(reversed(reversed_url_list))}"
+
+
+class BakeryDatabase(BaseModel):
+    """A database of Pangeo Forge Bakeries.
+
+    :param path: Path to local or remote YAML file with content conforming to ``BakeryMeta`` model.
+    :param bakeries: The content of the YAML file to which ``path`` points.
+    """
+
+    path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
+    bakeries: Optional[dict] = None
+    names: Optional[List[BakeryName]] = None
+
+    class Config:
+        validate_assignment = True  # validate `__init__` assignments, e.g. `self.path`
+        arbitrary_types_allowed = True  # for `fsspec.AbstractFileSystem` in child model
+
+    def __init__(self, path=PANGEO_FORGE_BAKERY_DATABASE):
+        super().__init__()
+        self.path = path
+        with fsspec.open(self.path) as f:
+            self.bakeries = yaml.safe_load(f.read())
+        self.names = [BakeryName(name=name) for name in list(self.bakeries)]

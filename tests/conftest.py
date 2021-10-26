@@ -87,8 +87,8 @@ def make_zarr_local_path(tempdir):
 
 def make_test_bakery_yaml(url, tempdir):
     url = url.split("://")[1]
-    bakery_meta = {
-        'great_bakery': {
+    bakery_database_entry = {
+        'org.test.bakery.aws.us-west-2': {
             'region': 'aws.us-west-2',
             'targets': {
                 'osn': {
@@ -123,9 +123,9 @@ def make_test_bakery_yaml(url, tempdir):
         }
     }
     with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
-        f.write(yaml.dump(bakery_meta))
+        f.write(yaml.dump(bakery_database_entry))
 
-    return bakery_meta
+    return bakery_database_entry
 
 
 def make_build_logs(zarr_fname, tempdir):
@@ -163,7 +163,7 @@ def github_http_server(tmpdir_factory, request):
     url = start_http_server(tempdir, request=request)
     http_base = f"{url}/mock-github0"
 
-    bakery_meta = make_test_bakery_yaml(url, tempdir)
-    bakery_meta_http_path = f"{http_base}/test-bakery.yaml"
+    bakery_database_entry = make_test_bakery_yaml(url, tempdir)
+    bakery_database_http_path = f"{http_base}/test-bakery.yaml"
 
-    return url, bakery_meta, bakery_meta_http_path
+    return url, bakery_database_entry, bakery_database_http_path

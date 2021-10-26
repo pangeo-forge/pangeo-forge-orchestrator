@@ -3,7 +3,14 @@ import fsspec
 import yaml
 from pydantic import ValidationError
 
-from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, Endpoint, StorageOptions, Target
+from pangeo_forge_orchestrator.meta_types.bakery import (
+    BakeryDatabase,
+    BakeryMeta,
+    BakeryName,
+    Endpoint,
+    StorageOptions,
+    Target,
+)
 
 
 def invalidate_keys(d, key):
@@ -34,6 +41,34 @@ def bakery_meta_dict(github_http_server):
         d = yaml.safe_load(f.read())
         d = d[list(d)[0]]
     return d
+
+
+@pytest.mark.parametrize("invalid", [None, "region", "missing-bakery-substring"])
+def test_bakery_name(invalid, github_http_server):
+    _, bakery_database_entry, _ = github_http_server
+    name = list(bakery_database_entry)[0]
+    if not invalid:
+        bn = BakeryName(name=name)
+        assert bn.organization_url == "https://test.org"
+    elif invalid == "region":
+        with pytest.raises(ValidationError):
+            BakeryName(name=name[:-1])
+    elif invalid == "missing-bakery-substring":
+        with pytest.raises(ValidationError):
+            BakeryName(name=name.replace(".bakery.", ""))
+
+
+@pytest.mark.parametrize("invalid", [None, "database_path"])
+def test_bakery_database(invalid, github_http_server):
+    _, bakery_database_entry, bakery_database_http_path = github_http_server
+    if not invalid:
+        bd = BakeryDatabase(path=bakery_database_http_path)
+        assert bd is not None
+        assert bd.bakeries == bakery_database_entry
+    elif invalid == "database_path":
+        with pytest.raises(ValidationError):
+            path = bakery_database_http_path.replace("://", "")
+            BakeryDatabase(path=path)
 
 
 @pytest.mark.parametrize("invalidate", [None, "keys", "vals"])
