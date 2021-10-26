@@ -1,6 +1,6 @@
 from typing import Dict, List, Literal, Optional, Union
-from typing_extensions import TypedDict
 
+from pydantic import BaseModel, constr
 from pydantic.dataclasses import dataclass
 
 regions = Literal[
@@ -91,6 +91,7 @@ regions = Literal[
     "azure.uaecentral",
     "azure.brazilsoutheast",
 ]
+s3_default_cache_types = Literal["bytes", "none"]
 
 S3_PROTOCOL = "s3"
 ABFS_PROTOCOL = "abfs"
@@ -100,18 +101,22 @@ FARGATE_CLUSTER = "aws.fargate"
 AKS_CLUSTER = "azure.aks"
 clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
 
+# a regex constraint to ensure that secrets are passed as env var names enclosed in curly braces
+# e.g., `StorageOptions.key` must be assigned to a string such as `"{MY_AWS_KEY}"`
+env_var_name = constr(regex=r'{(.*?)}')
 
-class StorageOptions(TypedDict, total=False):
-    # Experimenting with this as a TypedDict, rather than a dataclass, because we don't want
-    # arbitrary fields passed into fsspec instances as kwargs (in `components.Bakery`, e.g.)
-    # Pydantic requires `typing_extensions.TypedDict`; `total=False` allows subsets of keys.
-    key: str
-    secret: str
-    anon: bool
-    client_kwargs: dict
-    default_cache_type: str
-    default_fill_cache: bool
-    use_listings_cache: bool
+
+class StorageOptions(BaseModel):
+    key: Optional[env_var_name] = None
+    secret: Optional[env_var_name] = None
+    anon: Optional[bool] = None
+    client_kwargs: Optional[dict] = None
+    default_cache_type: Optional[s3_default_cache_types] = None
+    default_fill_cache: Optional[bool] = None
+    use_listings_cache: Optional[bool] = None
+
+    class Config:
+        extra = 'forbid'
 
 
 @dataclass
