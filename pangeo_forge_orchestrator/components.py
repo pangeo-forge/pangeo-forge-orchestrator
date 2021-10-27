@@ -85,15 +85,15 @@ class Bakery(BakeryDatabase):
             self.private_storage_options = self.target.private.storage_options
             fs_cls = get_filesystem_class(self.private_protocol)
             env_vars = [
-                v for v in self.private_storage_options.values()
+                v for v in self.private_storage_options.dict(exclude_none=True).values()
                 if type(v) == str and v.startswith("{") and v.endswith("}")
             ]
             for v in env_vars:
                 if self.remove_curly_braces(v) not in os.environ.keys():
-                    raise ValueError(f"Environment variable {self.remove_curly_braces(v)} not set.")
+                    raise KeyError(f"Environment variable {self.remove_curly_braces(v)} not set.")
             kw = {
                 k: (v if v not in env_vars else os.environ[self.remove_curly_braces(v)])
-                for k, v in self.private_storage_options.items()
+                for k, v in self.private_storage_options.dict(exclude_none=True).items()
             }
             self.credentialed_fs = fs_cls(**kw)
 
@@ -107,13 +107,13 @@ class Bakery(BakeryDatabase):
     def get_base_path(self):
         return f"{self.default_protocol}://{self.prefix}"
 
-    def get_dataset_path(self, run_id, endpoint="s3"):
-        ds_path = self.build_logs.logs[run_id]["path"]
-        return f"{self.get_base_path(endpoint)}/{ds_path}"
+    def get_dataset_path(self, run_id):
+        ds_path = self.build_logs.logs[run_id].path
+        return f"{self.get_base_path()}/{ds_path}"
 
     def get_dataset_mapper(self, run_id):
         path = self.get_dataset_path(run_id)
-        return fsspec.get_mapper(path, **self.fsspec_open_kwargs)
+        return fsspec.get_mapper(path, **self.default_storage_options.dict(exclude_none=True))
 
     def upload_stac_item(self, stac_item_filename):
         bucket = self.get_base_path("s3")

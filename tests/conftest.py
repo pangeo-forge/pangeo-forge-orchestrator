@@ -140,7 +140,10 @@ def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real
                         'private': {
                             'prefix': 'test-bakery0',
                             'protocol': 'http',
-                            'storage_options': {},
+                            'storage_options': {
+                                "username": "{TEST_BAKERY_USERNAME}",
+                                "password": "{TEST_BAKERY_PASSWORD}",
+                            },
                         }
                     }
                 },
@@ -187,13 +190,14 @@ def bakery_http_server(tmpdir_factory, request):
 
 
 @pytest.fixture(scope="session", params=[dict()])
-def github_http_server(tmpdir_factory, request):
+def github_http_server(tmpdir_factory, request, bakery_http_server):
     tempdir = tmpdir_factory.mktemp("mock-github")
+    bakery_url = bakery_http_server[0]
 
     url = start_http_server(tempdir, request=request)
     http_base = f"{url}/mock-github0"
 
-    bakery_database_entry = make_test_bakery_yaml(url, tempdir)
+    bakery_database_entry = make_test_bakery_yaml(bakery_url, tempdir)
     bakery_database_http_path = f"{http_base}/test-bakery.yaml"
 
     return url, bakery_database_entry, bakery_database_http_path

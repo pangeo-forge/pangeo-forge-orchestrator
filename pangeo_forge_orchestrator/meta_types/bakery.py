@@ -129,6 +129,8 @@ class StorageOptions(BaseModel):
     default_cache_type: Optional[s3_default_cache_types] = None
     default_fill_cache: Optional[bool] = None
     use_listings_cache: Optional[bool] = None
+    username: Optional[env_var_name] = None
+    password: Optional[env_var_name] = None
 
     class Config:
         extra = "forbid"

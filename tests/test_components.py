@@ -1,4 +1,8 @@
+import os
+
 import pytest
+import xarray as xr
+from fsspec.implementations.http import HTTPFileSystem
 from pydantic import ValidationError
 
 from pangeo_forge_orchestrator.components import Bakery, FeedstockMetadata
@@ -6,17 +10,24 @@ from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta
 
 
 @pytest.mark.parametrize("invalid", [None, "database_path", "bakery_name"])
-def test_bakery_component(invalid, github_http_server, bakery_http_server):
-    _ = bakery_http_server  # start bakery server
+def test_bakery_component_read_only(invalid, github_http_server, bakery_http_server):
+    _, _, zarr_http_path, reference_ds, _, _ = bakery_http_server
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
     if not invalid:
         b = Bakery(name=name, path=bakery_database_http_path)
         assert b.bakeries == bakery_database_entry
+        # ensure the bakery's metadata is valid; is this sufficiently tested elsewhere?
         bakery_name = list(b.bakeries)[0]
         bm = BakeryMeta(**b.bakeries[bakery_name])
-        print(b.build_logs)
         assert bm is not None
+        # check read access
+        for run_id in b.build_logs.run_ids:
+            # mapper not strictly necessary for http urls, but method is more generalized this way
+            mapper = b.get_dataset_mapper(run_id)
+            assert mapper.root == zarr_http_path
+            ds = xr.open_zarr(mapper, consolidated=True)
+            xr.testing.assert_identical(ds, reference_ds)
     elif invalid == "database_path":
         with pytest.raises(ValidationError):
             path = bakery_database_http_path.replace("://", "")
@@ -25,6 +36,28 @@ def test_bakery_component(invalid, github_http_server, bakery_http_server):
         with pytest.raises(ValidationError):
             name = name.replace(".bakery.", "")
             Bakery(name=name, path=bakery_database_http_path)
+
+
+@pytest.mark.parametrize("invalid", [None, "env_var_key", "env_var_value"])
+def test_bakery_component_write_access(invalid, github_http_server, bakery_http_server):
+    _ = bakery_http_server  # start bakery server
+    _, bakery_database_entry, bakery_database_http_path = github_http_server
+    name = list(bakery_database_entry)[0]
+    if not invalid:
+        os.environ["TEST_BAKERY_USERNAME"] = "foo"
+        os.environ["TEST_BAKERY_PASSWORD"] = "bar"
+        b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
+        assert isinstance(b.credentialed_fs, HTTPFileSystem)
+
+    elif invalid == "env_var_key":
+        del os.environ["TEST_BAKERY_USERNAME"]
+        del os.environ["TEST_BAKERY_PASSWORD"]
+        os.environ["USERNAME"] = "foo"
+        os.environ["PASSWORD"] = "bar"
+        with pytest.raises(KeyError):
+            Bakery(name=name, path=bakery_database_http_path, write_access=True)
+    elif invalid == "env_var_value":
+        pass
 
 
 def test_feedstock_metadata():
