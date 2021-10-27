@@ -85,60 +85,89 @@ def make_zarr_local_path(tempdir):
     return zarr_path, ds, fname
 
 
-def make_test_bakery_yaml(url, tempdir):
+def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real_target at runtime
     url = url.split("://")[1]
-    bakery_database_entry = {
-        'org.test.bakery.aws.us-west-2': {
-            'region': 'aws.us-west-2',
-            'targets': {
-                'osn': {
-                    'region': 'aws.us-west-2',
-                    'description': 'Open Storage Network (OSN) bucket',
-                    'public': {
-                        'prefix': 'Pangeo/pangeo-forge',
-                        'protocol': 's3',
-                        'storage_options': {
-                            'anon': True,
-                            'client_kwargs': {
-                                'endpoint_url': 'https://ncsa.osn.xsede.org'
+    if real_target:
+        bakery_database_entry = {
+            'org.test-osn.bakery.aws.us-west-2': {
+                'region': 'aws.us-west-2',
+                'targets': {
+                    'osn': {
+                        'region': 'aws.us-west-2',
+                        'description': 'Open Storage Network (OSN) bucket',
+                        'public': {
+                            'prefix': 'Pangeo/pangeo-forge',
+                            'protocol': 's3',
+                            'storage_options': {
+                                'anon': True,
+                                'client_kwargs': {
+                                    'endpoint_url': 'https://ncsa.osn.xsede.org'
+                                }
+                            }
+                        },
+                        'private': {
+                            'prefix': 'Pangeo/pangeo-forge',
+                            'protocol': 's3',
+                            'storage_options': {
+                                'key': '{OSN_KEY}',
+                                'secret': '{OSN_SECRET}',
+                                'client_kwargs': {
+                                    'endpoint_url': 'https://ncsa.osn.xsede.org'
+                                },
+                                'default_cache_type': 'none',
+                                'default_fill_cache': False,
+                                'use_listings_cache': False,
                             }
                         }
-                    },
-                    'private': {
-                        'prefix': 'Pangeo/pangeo-forge',
-                        'protocol': 's3',
-                        'storage_options': {
-                            'key': '{OSN_KEY}',
-                            'secret': '{OSN_SECRET}',
-                            'client_kwargs': {
-                                'endpoint_url': 'https://ncsa.osn.xsede.org'
-                            },
-                            'default_cache_type': 'none',
-                            'default_fill_cache': False,
-                            'use_listings_cache': False}
                     }
-                }
-            },
-            'cluster': None,
+                },
+                'cluster': None,
+            }
         }
-    }
+    else:
+        bakery_database_entry = {
+            'org.test.bakery.aws.us-west-2': {
+                'region': 'aws.us-west-2',  # TODO: Allow wildcard/localhost region type?
+                'targets': {
+                    'local-http-server': {
+                        'region': 'aws.us-west-2',
+                        'description': 'A local http server for testing.',
+                        'public': {
+                            'prefix': f'{url}/test-bakery0',
+                            'protocol': 'http',
+                            'storage_options': {},
+                        },
+                        'private': {
+                            'prefix': 'test-bakery0',
+                            'protocol': 'http',
+                            'storage_options': {},
+                        }
+                    }
+                },
+                'cluster': None,
+            }
+        }
     with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
         f.write(yaml.dump(bakery_database_entry))
 
     return bakery_database_entry
 
 
-def make_build_logs(zarr_fname, tempdir):
+def make_build_logs_local_path(zarr_fname, tempdir):
+    fname = "build-logs.json"
     logs = {
         "00000": {
             "timestamp": "2021-09-25 00:00:00",
-            "feedstock": "mock-feedstock",
+            "feedstock": "mock-feedstock@1.0",
             "recipe": "recipe",
             "path": zarr_fname,
         }
     }
-    with open(f"{tempdir}/build-logs.json", mode="w") as f:
-        f.write(json.dumps(logs))
+    local_path = tempdir.join(fname)
+    with open(local_path, mode="w") as f:
+        json.dump(logs, f)
+
+    return local_path, fname, logs
 
 # Fixtures -------------------------------------------------------------------
 
@@ -147,13 +176,14 @@ def make_build_logs(zarr_fname, tempdir):
 def bakery_http_server(tmpdir_factory, request):
     tempdir = tmpdir_factory.mktemp("test-bakery")
     zarr_local_path, ds, zarr_fname = make_zarr_local_path(tempdir)
-    make_build_logs(zarr_fname, tempdir)
+    _, build_logs_fname, logs = make_build_logs_local_path(zarr_fname, tempdir)
 
     url = start_http_server(tempdir, request=request)
     http_base = f"{url}/test-bakery0"
     zarr_http_path = f"{http_base}/{zarr_fname}"
+    build_logs_http_path = f"{http_base}/{build_logs_fname}"
 
-    return url, zarr_local_path, zarr_http_path, ds
+    return url, zarr_local_path, zarr_http_path, ds, build_logs_http_path, logs
 
 
 @pytest.fixture(scope="session", params=[dict()])

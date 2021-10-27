@@ -1,7 +1,9 @@
+from datetime import datetime
 from typing import Dict, List, Literal, Optional, Union
 
 import fsspec
 import yaml
+from fsspec.registry import known_implementations
 from pydantic import AnyUrl, BaseModel, constr, FilePath, HttpUrl
 from pydantic.dataclasses import dataclass
 
@@ -95,9 +97,8 @@ regions = Literal[
 ]
 s3_default_cache_types = Literal["bytes", "none"]
 
-S3_PROTOCOL = "s3"
-ABFS_PROTOCOL = "abfs"
-protocols = Literal[ABFS_PROTOCOL, S3_PROTOCOL]
+# turn fsspec's list of known_implementations into object which pydantic can validate against
+KnownImplementations = Literal[tuple(list(known_implementations))]
 
 FARGATE_CLUSTER = "aws.fargate"
 AKS_CLUSTER = "azure.aks"
@@ -106,9 +107,18 @@ clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
 PANGEO_FORGE_BAKERY_DATABASE = (
     "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
 )
-# a regex constraint to ensure that secrets are passed as env var names enclosed in curly braces
-# e.g., `StorageOptions.key` must be assigned to a string such as `"{MY_AWS_KEY}"`
-env_var_name = constr(regex=r'{(.*?)}')
+# ensure that secrets are passed as env var names enclosed in curly braces, e.g. `"{MY_AWS_KEY}"`
+env_var_name = constr(regex=r"{(.*?)}")
+# accepts only strings of integer values 0-9
+run_identifier = constr(regex=r"^\d+$")
+# see https://github.com/pangeo-forge/roadmap/pull/34; the "@" delimiter is introduced here
+feedstock_name_with_version = constr(regex=r".*-feedstock@(0|[1-9]\d*)\.(0|[1-9]\d*)$")
+# TODO: possibly move recipe name validation into `pangeo_forge_orchestrator.meta_types.meta`
+# note that the string prior to the optional ":" delimiter must be a valid python identifier, but
+# the string after ":" is a dictionary key, and therefore does not have this requirement
+recipe_or_dictobj_identifier = constr(
+    regex=r"^([A-Za-z][A-Za-z0-9_]*)([:][A-Za-z][A-Za-z0-9_-]*)?$"
+)
 
 
 class StorageOptions(BaseModel):
@@ -126,7 +136,7 @@ class StorageOptions(BaseModel):
 
 @dataclass
 class Endpoint:
-    protocol: protocols
+    protocol: KnownImplementations
     storage_options: Optional[StorageOptions] = None
     prefix: Optional[str] = None
 
@@ -157,7 +167,7 @@ class Cluster:
     prefect_version: str
     worker_image: str
     flow_storage: str
-    flow_storage_protocol: protocols
+    flow_storage_protocol: KnownImplementations
     flow_storage_options: StorageOptions
     max_workers: int
     cluster_options: Optional[FargateClusterOptions] = None
@@ -206,3 +216,20 @@ class BakeryDatabase(BaseModel):
         with fsspec.open(self.path) as f:
             self.bakeries = yaml.safe_load(f.read())
         self.names = [BakeryName(name=name) for name in list(self.bakeries)]
+
+
+@dataclass
+class RunRecord:
+    timestamp: datetime
+    feedstock: feedstock_name_with_version
+    recipe: recipe_or_dictobj_identifier
+    path: str  # TODO: Define naming convention; cf. https://github.com/pangeo-forge/roadmap/pull/27
+
+
+@dataclass
+class BuildLogs:
+    logs: Dict[run_identifier, RunRecord]
+    run_ids: Optional[List[run_identifier]] = None
+
+    def __post_init__(self):
+        self.run_ids = list(self.logs)

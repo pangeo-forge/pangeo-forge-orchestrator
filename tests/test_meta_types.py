@@ -1,3 +1,5 @@
+import copy
+
 import pytest
 import fsspec
 import yaml
@@ -7,14 +9,16 @@ from pangeo_forge_orchestrator.meta_types.bakery import (
     BakeryDatabase,
     BakeryMeta,
     BakeryName,
+    BuildLogs,
     Endpoint,
+    RunRecord,
     StorageOptions,
     Target,
 )
 
 
 def invalidate_keys(d, key):
-    d_copy = d.copy()
+    d_copy = copy.deepcopy(d)
     invalid_key = key[1:]
     d_copy[invalid_key] = d_copy[key]
     del d_copy[key]
@@ -22,7 +26,7 @@ def invalidate_keys(d, key):
 
 
 def invalidate_vals(d, k, v):
-    d_copy = d.copy()
+    d_copy = copy.deepcopy(d)
     if type(v) == dict:
         # make dictionaries unparsable for Pydantic
         v = str(v).replace("{", "")
@@ -149,7 +153,77 @@ def test_storage_options(bakery_meta_dict, endpoint, invalidate):
         elif invalidate == "vals":
             for k, v in d.items():
                 d_copy = invalidate_vals(d, k, v)
-                print("D is THIS:", d)
-                print("D_COPY is THIS:", d_copy)
                 with pytest.raises(ValidationError):
                     StorageOptions(**d_copy)
+
+
+@pytest.mark.parametrize("invalid", [None, "timestamp", "feedstock", "recipe", "path"])
+def test_run_record(invalid, bakery_http_server):
+    logs = bakery_http_server[-1]
+
+    for k in logs.keys():
+        if not invalid:
+            RunRecord(**logs[k])
+        elif invalid == "timestamp":
+            logs_copy = copy.deepcopy(logs)
+            logs_copy[k]["timestamp"] = "String which is not parsable to datetime."
+            with pytest.raises(ValidationError):
+                RunRecord(**logs_copy[k])
+        elif invalid == "feedstock":
+            logs_copy = copy.deepcopy(logs)
+            for invalid_feedstock_name in (
+                # missing minor version number
+                "mock-feedstock@1.",
+                "mock-feedstock@1",
+                # only two decimal places allowed
+                "mock-feedstock@1.0.0",
+                # non-integer characters not allowed
+                "mock-feedstock@1.0a",
+                "mock-feedstock@1.0-beta",
+                # missing required substring `"-feedstock@"`
+                "mock-feedstock1.0",
+                "mock@1.0",
+            ):
+                logs_copy[k]["feedstock"] = invalid_feedstock_name
+                with pytest.raises(ValidationError):
+                    RunRecord(**logs_copy[k])
+        elif invalid == "recipe":
+            logs_copy = copy.deepcopy(logs)
+            for invalid_recipe_name in (
+                # recipe object must be a valid python identifier
+                "recipe&",
+                "1recipe",
+                "rec-ipe",
+                # if colon delimiter is used, a dictionary key must follow it
+                "recipe:",
+                # dictionary key special characters can only be dash or underscore (relax this?)
+                "recipe:key&with*special$characters"
+            ):
+                logs_copy[k]["recipe"] = invalid_recipe_name
+                with pytest.raises(ValidationError):
+                    RunRecord(**logs_copy[k])
+        elif invalid == "path":
+            # only requirement is that path is a string; pydantic will parse anything into a str
+            pass
+
+
+@pytest.mark.parametrize("invalid", [None, "run_id", "runrecord"])
+def test_build_logs(invalid, bakery_http_server):
+    logs = bakery_http_server[-1]
+
+    if not invalid:
+        BuildLogs(logs=logs)
+    elif invalid == "run_id":
+        logs_copy = copy.deepcopy(logs)
+        # run_ids can only contain integer characters from 0-9
+        for invalid_character in ("A", "a", "_",):
+            logs_copy = {f"{k}{invalid_character}": v for k, v in logs_copy.items()}
+            with pytest.raises(ValidationError):
+                BuildLogs(logs=logs_copy)
+    elif invalid == "runrecord":
+        logs_copy = copy.deepcopy(logs)
+        # ensure that `RunRecord` objects are validated from within `BuildLogs`
+        for k in logs.keys():
+            logs_copy[k]["timestamp"] = "String which is not parsable to datetime."
+            with pytest.raises(ValidationError):
+                BuildLogs(logs=logs_copy)
