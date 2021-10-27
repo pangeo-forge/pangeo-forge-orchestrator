@@ -6,7 +6,8 @@ from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta
 
 
 @pytest.mark.parametrize("invalid", [None, "database_path", "bakery_name"])
-def test_bakery_component(invalid, github_http_server):
+def test_bakery_component(invalid, github_http_server, bakery_http_server):
+    _ = bakery_http_server  # start bakery server
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
     if not invalid:

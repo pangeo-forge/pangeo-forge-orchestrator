@@ -1,18 +1,22 @@
 import json
 import os
-from dataclasses import dataclass, field, asdict
-from enum import Enum
-from typing import Optional
 import re
+from dataclasses import dataclass, field, asdict
+from typing import Optional
 
 import fsspec
 import yaml
-from fsspec.registry import get_filesystem_class, known_implementations
+from fsspec.registry import get_filesystem_class
 
-from .meta_types.bakery import BakeryDatabase, BakeryMeta, BakeryName, StorageOptions, Target
-
-# turn fsspec's list of known_implementations into object which pydantic can validate against
-KnownImplementations = Enum("KnownImplementations", [(p, p) for p in list(known_implementations)])
+from .meta_types.bakery import (
+    BakeryDatabase,
+    BakeryMeta,
+    BakeryName,
+    BuildLogs,
+    KnownImplementations,
+    StorageOptions,
+    Target,
+)
 
 
 class Bakery(BakeryDatabase):
@@ -42,7 +46,7 @@ class Bakery(BakeryDatabase):
     default_storage_options: Optional[StorageOptions] = None
     default_protocol: Optional[KnownImplementations] = None
     prefix: Optional[str] = None
-    build_logs: Optional[dict] = None  # TODO: define BuildLogs model
+    build_logs: Optional[BuildLogs] = None
 
     private_storage_options: Optional[StorageOptions] = None
     private_protocol: Optional[KnownImplementations] = None
@@ -69,7 +73,8 @@ class Bakery(BakeryDatabase):
             f"{self.get_base_path()}/build-logs.json",
             **self.default_storage_options.dict(exclude_none=True),
         ) as f:
-            self.build_logs = json.loads(f.read())
+            build_logs_dict = json.loads(f.read())
+            self.build_logs = BuildLogs(logs=build_logs_dict)
 
         if self.write_access:
             if not hasattr(self.target, "private"):
@@ -78,7 +83,7 @@ class Bakery(BakeryDatabase):
             # (alternatively, validation could happen in `meta_types.bakery`)
             self.private_protocol = self.target.private.protocol
             self.private_storage_options = self.target.private.storage_options
-            fs_cls = get_filesystem_class(self.private_protocol.name)
+            fs_cls = get_filesystem_class(self.private_protocol)
             env_vars = [
                 v for v in self.private_storage_options.values()
                 if type(v) == str and v.startswith("{") and v.endswith("}")
@@ -100,10 +105,10 @@ class Bakery(BakeryDatabase):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
     def get_base_path(self):
-        return f"{self.default_protocol.name}://{self.prefix}"
+        return f"{self.default_protocol}://{self.prefix}"
 
     def get_dataset_path(self, run_id, endpoint="s3"):
-        ds_path = self.build_logs[run_id]["path"]
+        ds_path = self.build_logs.logs[run_id]["path"]
         return f"{self.get_base_path(endpoint)}/{ds_path}"
 
     def get_dataset_mapper(self, run_id):
