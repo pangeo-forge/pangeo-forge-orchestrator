@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -113,3 +114,4 @@ def test_generate(github_http_server, bakery_http_server, stac_item_result, to_f
         with open(f"{result['id']}.json") as f:
             on_disk = json.loads(f.read())
         assert result == on_disk
+        os.remove(f"{result['id']}.json")
