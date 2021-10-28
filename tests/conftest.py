@@ -86,9 +86,9 @@ def make_zarr_local_path(tempdir):
     return zarr_path, ds, fname
 
 
-def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real_target at runtime
-    url = url.split("://")[1]
-    if real_target:
+def make_test_bakery_yaml(http_base, tempdir, real_target=False):
+    http_base = http_base.split("://")[1]
+    if real_target:  # TODO: switch real_target at runtime
         bakery_database_entry = {
             'org.test-osn.bakery.aws.us-west-2': {
                 'region': 'aws.us-west-2',
@@ -134,12 +134,12 @@ def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real
                         'region': 'aws.us-west-2',
                         'description': 'A local http server for testing.',
                         'public': {
-                            'prefix': f'{url}/test-bakery0',
+                            'prefix': f'{http_base}',
                             'protocol': 'http',
                             'storage_options': {},
                         },
                         'private': {
-                            'prefix': 'test-bakery0',
+                            'prefix': f'{http_base}',
                             'protocol': 'http',
                             'storage_options': {
                                 "client_kwargs": {
@@ -198,7 +198,7 @@ def bakery_http_server(tmpdir_factory, request):
     zarr_http_path = f"{http_base}/{zarr_fname}"
     build_logs_http_path = f"{http_base}/{build_logs_fname}"
 
-    return tempdir, url, zarr_local_path, zarr_http_path, ds, build_logs_http_path, logs
+    return tempdir, http_base, zarr_local_path, zarr_http_path, ds, build_logs_http_path, logs
 
 
 @pytest.fixture(scope="session", params=[dict()])
