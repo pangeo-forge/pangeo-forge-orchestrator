@@ -45,7 +45,7 @@ class Bakery(BakeryDatabase):
     target: Optional[Target] = None
     default_storage_options: Optional[StorageOptions] = None
     default_protocol: Optional[KnownImplementations] = None
-    prefix: Optional[str] = None
+    default_prefix: Optional[str] = None
     default_fs: Optional[fsspec.AbstractFileSystem] = None
     build_logs: Optional[BuildLogs] = None
 
@@ -68,7 +68,7 @@ class Bakery(BakeryDatabase):
         default_access = "public" if hasattr(self.target, "public") else "private"
         self.default_storage_options = getattr(self.target, default_access).storage_options
         self.default_protocol = getattr(self.target, default_access).protocol
-        self.prefix = getattr(self.target, default_access).prefix
+        self.default_prefix = getattr(self.target, default_access).prefix
 
         default_fs_cls = get_filesystem_class(self.default_protocol)
         self.default_fs = default_fs_cls(**self.default_storage_options.dict(exclude_none=True))
@@ -114,7 +114,7 @@ class Bakery(BakeryDatabase):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
     def get_base_path(self):
-        return f"{self.default_protocol}://{self.prefix}"
+        return f"{self.default_protocol}://{self.default_prefix}"
 
     def get_dataset_path(self, run_id):
         ds_path = self.build_logs.logs[run_id].path

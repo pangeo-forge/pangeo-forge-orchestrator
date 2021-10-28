@@ -7,7 +7,7 @@ import shapely.geometry
 import xarray as xr
 import xstac
 
-from .metadata import BakeryMetadata, FeedstockMetadata
+from .components import Bakery, FeedstockMetadata
 from .notebook import ExecuteNotebook
 
 
@@ -61,7 +61,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     parent = Path(__file__).absolute().parent
     with open(f"{parent}/templates/stac/item_template.json") as f:
         item_template = json.loads(f.read())
-    bakery = BakeryMetadata(bakery_id=bakery_id, write_access=write_access)
+    bakery = Bakery(bakery_id=bakery_id, write_access=write_access)
     feedstock_id = bakery.build_logs[run_id]["feedstock"]
     fstock = FeedstockMetadata(feedstock_id=feedstock_id)
 
