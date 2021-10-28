@@ -4,6 +4,7 @@ import socket
 import subprocess
 import time
 
+import aiohttp
 import numpy as np
 import pandas as pd
 import pytest
@@ -124,7 +125,7 @@ def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real
                 'cluster': None,
             }
         }
-    else:
+    elif not real_target:
         bakery_database_entry = {
             'org.test.bakery.aws.us-west-2': {
                 'region': 'aws.us-west-2',  # TODO: Allow wildcard/localhost region type?
@@ -141,14 +142,17 @@ def make_test_bakery_yaml(url, tempdir, real_target=False):  # TODO: switch real
                             'prefix': 'test-bakery0',
                             'protocol': 'http',
                             'storage_options': {
-                                "username": "{TEST_BAKERY_USERNAME}",
-                                "password": "{TEST_BAKERY_PASSWORD}",
+                                "client_kwargs": {
+                                    "headers": {
+                                        "Authorization": "{TEST_BAKERY_BASIC_AUTH}",
+                                    },
+                                },
                             },
-                        }
-                    }
+                        },
+                    },
                 },
                 'cluster': None,
-            }
+            },
         }
     with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
         f.write(yaml.dump(bakery_database_entry))
@@ -181,7 +185,15 @@ def bakery_http_server(tmpdir_factory, request):
     zarr_local_path, ds, zarr_fname = make_zarr_local_path(tempdir)
     _, build_logs_fname, logs = make_build_logs_local_path(zarr_fname, tempdir)
 
-    url = start_http_server(tempdir, request=request)
+    username, password = "foo", "bar"
+    # plain text env vars for `test_server::test_bakery_server_put`
+    os.environ["TEST_BAKERY_USERNAME"] = username
+    os.environ["TEST_BAKERY_PASSWORD"] = password
+    # encoded env var for `test_components::test_bakery_component_write_access`
+    auth = aiohttp.BasicAuth(username, password)
+    os.environ["TEST_BAKERY_BASIC_AUTH"] = auth.encode()
+
+    url = start_http_server(tempdir, request=request, username=username, password=password)
     http_base = f"{url}/test-bakery0"
     zarr_http_path = f"{http_base}/{zarr_fname}"
     build_logs_http_path = f"{http_base}/{build_logs_fname}"

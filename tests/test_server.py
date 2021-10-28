@@ -2,9 +2,12 @@ import ast
 import json
 import os
 
+import aiohttp
+import pytest
 import fsspec
 import xarray as xr
 import yaml
+from aiohttp.client_exceptions import ClientResponseError
 from fsspec.implementations.http import HTTPFileSystem
 
 
@@ -25,9 +28,10 @@ def test_bakery_server_build_logs(bakery_http_server):
     assert build_logs_dict == logs
 
 
-def test_bakery_server_put(bakery_http_server):
+@pytest.mark.parametrize("creds", [["foo", "bar"], ["foo", "b"], ["f", "bar"], "from_env"])
+def test_bakery_server_put(creds, bakery_http_server):
     tempdir, url = bakery_http_server[:2]
-    fs = HTTPFileSystem()
+
     fname = "test-file.json"
     src_path = os.fspath(tempdir.join(fname))
     dst_path = f"{url}/test-bakery0/{fname}"
@@ -36,10 +40,24 @@ def test_bakery_server_put(bakery_http_server):
     with open(src_path, mode="w") as f:
         json.dump(content, f)
 
+    creds = (
+        creds
+        if not creds == "from_env"
+        else [os.environ[k] for k in ("TEST_BAKERY_USERNAME", "TEST_BAKERY_PASSWORD")]
+    )
+    auth = aiohttp.BasicAuth(*creds)
+    headers = {"Authorization": auth.encode()}
+    fs = HTTPFileSystem(client_kwargs={"headers": headers})
+
     cl = os.path.getsize(src_path)
-    fs.put(src_path, dst_path, headers={"Content-Length": str(cl)})
-    r = fs.cat(dst_path)
-    assert ast.literal_eval(r.decode("utf-8")) == content
+    headers = {"Content-Length": str(cl)}
+    if creds[0] == "foo" and creds[1] == "bar":
+        fs.put(src_path, dst_path, headers=headers)
+        r = fs.cat(dst_path)
+        assert ast.literal_eval(r.decode("utf-8")) == content
+    else:
+        with pytest.raises(ClientResponseError):
+            fs.put(src_path, dst_path, headers=headers)
 
 
 def test_github_server(github_http_server):

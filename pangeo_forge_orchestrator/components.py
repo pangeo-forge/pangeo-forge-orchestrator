@@ -46,6 +46,7 @@ class Bakery(BakeryDatabase):
     default_storage_options: Optional[StorageOptions] = None
     default_protocol: Optional[KnownImplementations] = None
     prefix: Optional[str] = None
+    default_fs: Optional[fsspec.AbstractFileSystem] = None
     build_logs: Optional[BuildLogs] = None
 
     private_storage_options: Optional[StorageOptions] = None
@@ -69,10 +70,10 @@ class Bakery(BakeryDatabase):
         self.default_protocol = getattr(self.target, default_access).protocol
         self.prefix = getattr(self.target, default_access).prefix
 
-        with fsspec.open(
-            f"{self.get_base_path()}/build-logs.json",
-            **self.default_storage_options.dict(exclude_none=True),
-        ) as f:
+        default_fs_cls = get_filesystem_class(self.default_protocol)
+        self.default_fs = default_fs_cls(**self.default_storage_options.dict(exclude_none=True))
+
+        with self.default_fs.open(f"{self.get_base_path()}/build-logs.json") as f:
             build_logs_dict = json.loads(f.read())
             self.build_logs = BuildLogs(logs=build_logs_dict)
 
@@ -83,19 +84,27 @@ class Bakery(BakeryDatabase):
             # (alternatively, validation could happen in `meta_types.bakery`)
             self.private_protocol = self.target.private.protocol
             self.private_storage_options = self.target.private.storage_options
-            fs_cls = get_filesystem_class(self.private_protocol)
-            env_vars = [
-                v for v in self.private_storage_options.dict(exclude_none=True).values()
-                if type(v) == str and v.startswith("{") and v.endswith("}")
-            ]
-            for v in env_vars:
-                if self.remove_curly_braces(v) not in os.environ.keys():
-                    raise KeyError(f"Environment variable {self.remove_curly_braces(v)} not set.")
-            kw = {
-                k: (v if v not in env_vars else os.environ[self.remove_curly_braces(v)])
-                for k, v in self.private_storage_options.dict(exclude_none=True).items()
-            }
-            self.credentialed_fs = fs_cls(**kw)
+            private_fs_cls = get_filesystem_class(self.private_protocol)
+            kw = self._recursively_replace_env_vars(
+                self.private_storage_options.dict(exclude_none=True)
+            )
+            self.credentialed_fs = private_fs_cls(**kw)
+
+    def _recursively_replace_env_vars(self, d):
+        # this method is both (1) not a pure function (mutates instance attributes);
+        # and (2) recursive. So it's perhaps more likely than other methods to create problems.
+        # NB: We need recursion b/c `StorageOptions` can contain nested dicts of arbitary depth.
+        # Let's keep an eye out, but I *think* it works as intendented.
+        for k, v in d.items():
+            if isinstance(v, dict):
+                d[k] = self._recursively_replace_env_vars(v)  # noqa
+            elif type(v) == str and v.startswith("{") and v.endswith("}"):
+                v = self.remove_curly_braces(v)
+                if v not in os.environ.keys():
+                    raise KeyError(f"Environment variable {v} not set.")
+                else:
+                    d[k] = os.environ[v]
+        return d
 
     @staticmethod
     def remove_curly_braces(v):
@@ -114,6 +123,12 @@ class Bakery(BakeryDatabase):
     def get_dataset_mapper(self, run_id):
         path = self.get_dataset_path(run_id)
         return fsspec.get_mapper(path, **self.default_storage_options.dict(exclude_none=True))
+
+    def cat(self, path):
+        return self.default_fs.cat(path)
+
+    def put(self, src_path, dst_path, **kwargs):
+        self.credentialed_fs.put(src_path, dst_path, **kwargs)
 
     def upload_stac_item(self, stac_item_filename):
         bucket = self.get_base_path("s3")

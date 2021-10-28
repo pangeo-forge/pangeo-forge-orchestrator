@@ -125,6 +125,7 @@ class StorageOptions(BaseModel):
     key: Optional[env_var_name] = None
     secret: Optional[env_var_name] = None
     anon: Optional[bool] = None
+    # TODO: ensure `v` in `{"client_kwargs": {"headers": {"Authorization": v}}}` is `env_var_name`?
     client_kwargs: Optional[dict] = None
     default_cache_type: Optional[s3_default_cache_types] = None
     default_fill_cache: Optional[bool] = None

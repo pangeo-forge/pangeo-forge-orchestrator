@@ -1,7 +1,10 @@
+import ast
+import json
 import os
 
 import pytest
 import xarray as xr
+from aiohttp.client_exceptions import ClientResponseError
 from fsspec.implementations.http import HTTPFileSystem
 from pydantic import ValidationError
 
@@ -40,24 +43,42 @@ def test_bakery_component_read_only(invalid, github_http_server, bakery_http_ser
 
 @pytest.mark.parametrize("invalid", [None, "env_var_key", "env_var_value"])
 def test_bakery_component_write_access(invalid, github_http_server, bakery_http_server):
-    _ = bakery_http_server  # start bakery server
+    tempdir, url = bakery_http_server[:2]
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
+
+    def write_test_file():
+        # somewhat repetitive of `test_server::test_bakery_server_put`
+        fname = "test-file.json"
+        src_path = os.fspath(tempdir.join(fname))
+        dst_path = f"{url}/test-bakery0/{fname}"
+        content = dict(a=1)
+        with open(src_path, mode="w") as f:
+            json.dump(content, f)
+
+        cl = os.path.getsize(src_path)
+        headers = {"Content-Length": str(cl)}
+        return content, src_path, dst_path, headers
+
     if not invalid:
-        os.environ["TEST_BAKERY_USERNAME"] = "foo"
-        os.environ["TEST_BAKERY_PASSWORD"] = "bar"
         b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
         assert isinstance(b.credentialed_fs, HTTPFileSystem)
 
+        content, src_path, dst_path, headers = write_test_file()
+        b.put(src_path, dst_path, headers=headers)
+        r = b.cat(dst_path)
+        assert ast.literal_eval(r.decode("utf-8")) == content
+
     elif invalid == "env_var_key":
-        del os.environ["TEST_BAKERY_USERNAME"]
-        del os.environ["TEST_BAKERY_PASSWORD"]
-        os.environ["USERNAME"] = "foo"
-        os.environ["PASSWORD"] = "bar"
+        del os.environ["TEST_BAKERY_BASIC_AUTH"]
         with pytest.raises(KeyError):
             Bakery(name=name, path=bakery_database_http_path, write_access=True)
     elif invalid == "env_var_value":
-        pass
+        os.environ["TEST_BAKERY_BASIC_AUTH"] = "incorrect plain text auth string"
+        b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
+        content, src_path, dst_path, headers = write_test_file()
+        with pytest.raises(ClientResponseError):
+            b.put(src_path, dst_path, headers=headers)
 
 
 def test_feedstock_metadata():
