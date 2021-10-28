@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from pangeo_forge_orchestrator.catalog import generate
@@ -92,7 +94,8 @@ def stac_item_result(bakery_http_server):
     return result
 
 
-def test_generate(github_http_server, bakery_http_server, stac_item_result):
+@pytest.mark.parametrize("to_file", [False, True])
+def test_generate(github_http_server, bakery_http_server, stac_item_result, to_file):
     _ = bakery_http_server  # start bakery server
     github_http_base, bakery_database_entry, bakery_database_http_path = github_http_server
     bakery_name = list(bakery_database_entry)[0]
@@ -102,5 +105,11 @@ def test_generate(github_http_server, bakery_http_server, stac_item_result):
         run_id="00000",
         bakery_database_path=bakery_database_http_path,
         feedstock_metadata_url_base=github_http_base,
+        to_file=to_file,
     )
     assert result == stac_item_result
+
+    if to_file:
+        with open(f"{result['id']}.json") as f:
+            on_disk = json.loads(f.read())
+        assert result == on_disk

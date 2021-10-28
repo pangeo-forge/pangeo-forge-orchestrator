@@ -59,6 +59,7 @@ def generate(
             # following loop not needed if we use `tempfile` instead of local files
             for f in [stac_item_filename, *nb_local_paths]:
                 os.remove(f)
+        return item_result
 
 
 def _generate(
