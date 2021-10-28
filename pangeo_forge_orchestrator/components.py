@@ -113,12 +113,13 @@ class Bakery(BakeryDatabase):
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
-    def get_base_path(self):
-        return f"{self.default_protocol}://{self.default_prefix}"
+    def get_base_path(self, protocol=None):
+        p = self.default_protocol if not protocol else protocol
+        return f"{p}://{self.default_prefix}"
 
-    def get_dataset_path(self, run_id):
+    def get_dataset_path(self, run_id, protocol=None):
         ds_path = self.build_logs.logs[run_id].path
-        return f"{self.get_base_path()}/{ds_path}"
+        return f"{self.get_base_path(protocol=protocol)}/{ds_path}"
 
     def get_dataset_mapper(self, run_id):
         path = self.get_dataset_path(run_id)
@@ -143,10 +144,8 @@ class FeedstockMetadata:
 
     feedstock_id: str
     url_format: str = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"
-    metadata_url_format: str = (
-        "https://raw.githubusercontent.com/pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
-    )
-    metadata_dict: dict = field(init=False)
+    metadata_url_base: str = "https://raw.githubusercontent.com"
+    metadata_url_format: str = "pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
     metadata_dict: dict = field(init=False)
 
     def __post_init__(self):
@@ -155,7 +154,11 @@ class FeedstockMetadata:
         version_split = version.split(".")
         majv, minv = version_split[0], version_split[1]
         self.url = self.url_format.format(name=name, majv=majv, minv=minv)
-        self.metadata_url = self.metadata_url_format.format(name=name, majv=majv, minv=minv)
+
+        self.metadata_url = (
+            f"{self.metadata_url_base}/"
+            f"{self.metadata_url_format.format(name=name, majv=majv, minv=minv)}"
+        )
         with fsspec.open(self.metadata_url) as f:
             read_yaml = f.read()
             self.metadata_dict = yaml.safe_load(read_yaml)

@@ -176,6 +176,50 @@ def make_build_logs_local_path(zarr_fname, tempdir):
 
     return local_path, fname, logs
 
+
+def make_meta_yaml_local_path(tempdir):
+    meta_yaml = {
+        "title": "Mock Feedstock",
+        "description": "Random test data.",
+        "pangeo_forge_version": "0.6.1",
+        "pangeo_notebook_version": "2021.07.17",
+        "recipes": [
+            {
+                "id": "mock-feedstock",
+                "object": "recipe",
+            },
+        ],
+        "provenance": {
+            "providers": [
+                {
+                    "name": "NumPy Random",
+                    "description": "NumPy random data.",
+                    "roles": ["producer", "licensor"],
+                    "url": "https://pangeo-forge-random-data.org",
+                    "license": "CC-BY-4.0"
+                }
+            ],
+        },
+        "maintainers": [
+            {
+                "name": "Awesome Pangeo Forge Contributor",
+                "orcid": "0000-0000-0000-0000",
+                "github": "awpfc",
+            }
+        ],
+        "bakery": {
+            "id": "org.test.bakery.aws.us-west-2",  # must come from a valid list of bakeries
+            "target": "local-http-server",
+            "resources": {
+                "memory": 4096,
+                "cpu": 1024,
+            }
+        }
+    }
+    with open(f"{tempdir}/meta.yaml", mode="w") as f:
+        f.write(yaml.dump(meta_yaml))
+
+
 # Fixtures -------------------------------------------------------------------
 
 
@@ -203,13 +247,19 @@ def bakery_http_server(tmpdir_factory, request):
 
 @pytest.fixture(scope="session", params=[dict()])
 def github_http_server(tmpdir_factory, request, bakery_http_server):
-    tempdir = tmpdir_factory.mktemp("mock-github")
-    bakery_url = bakery_http_server[1]
+    tempdir_0 = tmpdir_factory.mktemp("mock-github")
 
-    url = start_http_server(tempdir, request=request)
+    # TODO: generate path from feedstock in `build-logs.json`; probably make `logs` dict a fixture.
+    meta_path = tempdir_0 / "pangeo-forge" / "mock-feedstock" / "v1.0" / "feedstock"
+    os.makedirs(meta_path)
+
+    make_meta_yaml_local_path(meta_path)
+
+    url = start_http_server(tempdir_0, request=request)
     http_base = f"{url}/mock-github0"
 
-    bakery_database_entry = make_test_bakery_yaml(bakery_url, tempdir)
+    bakery_url = bakery_http_server[1]
+    bakery_database_entry = make_test_bakery_yaml(bakery_url, tempdir_0)
     bakery_database_http_path = f"{http_base}/test-bakery.yaml"
 
-    return url, bakery_database_entry, bakery_database_http_path
+    return http_base, bakery_database_entry, bakery_database_http_path

@@ -12,21 +12,28 @@ from .notebook import ExecuteNotebook
 
 
 def generate(
-    bakery_id,
+    bakery_name,
     run_id,
-    to_file=None,
+    bakery_database_path=None,
+    feedstock_metadata_url_base=None,
+    to_file=False,
+    print_result=False,
     execute_notebooks=False,
     endpoints=["s3", "https"],
 ):
     write_access = True if to_file == "bakery" else False
     item_result, feedstock_id, bakery = _generate(
-        bakery_id=bakery_id,
+        bakery_name=bakery_name,
         run_id=run_id,
+        bakery_database_path=bakery_database_path,
+        feedstock_metadata_url_base=feedstock_metadata_url_base,
         endpoints=endpoints,
         write_access=write_access,
     )
-    if not to_file:
+    if print_result:
         print(item_result)
+    if not to_file:
+        return item_result
     elif to_file:
         stac_item_filename = f"{feedstock_id}.json"
         # first dump; second required in "bakery" block below, if `execute_notebooks == True`
@@ -54,16 +61,31 @@ def generate(
                 os.remove(f)
 
 
-def _generate(bakery_id, run_id, endpoints, write_access):
+def _generate(
+    bakery_name,
+    run_id,
+    bakery_database_path,
+    feedstock_metadata_url_base,
+    endpoints,
+    write_access,
+):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
     """
     parent = Path(__file__).absolute().parent
     with open(f"{parent}/templates/stac/item_template.json") as f:
         item_template = json.loads(f.read())
-    bakery = Bakery(bakery_id=bakery_id, write_access=write_access)
-    feedstock_id = bakery.build_logs[run_id]["feedstock"]
-    fstock = FeedstockMetadata(feedstock_id=feedstock_id)
+
+    bakery_kw = dict(name=bakery_name, write_access=write_access)
+    if bakery_database_path:
+        bakery_kw.update(dict(path=bakery_database_path))
+    bakery = Bakery(**bakery_kw)
+
+    feedstock_id = bakery.build_logs.logs[run_id].feedstock
+    fstock_kw = dict(feedstock_id=feedstock_id)
+    if feedstock_metadata_url_base:
+        fstock_kw.update(dict(metadata_url_base=feedstock_metadata_url_base))
+    fstock = FeedstockMetadata(**fstock_kw)
 
     mapper = bakery.get_dataset_mapper(run_id)
     ds = xr.open_zarr(mapper, consolidated=True)
@@ -83,7 +105,7 @@ def _generate(bakery_id, run_id, endpoints, write_access):
     for ep in endpoints:
         key = f"zarr-{ep}"
         longname = "S3 File System" if ep == "s3" else "HTTPS"
-        path = bakery.get_dataset_path(run_id, endpoint=ep)
+        path = bakery.get_dataset_path(run_id, protocol=ep)
         assets[key]["href"] = path
         assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
         desc = fstock.metadata_dict['description']
@@ -93,7 +115,9 @@ def _generate(bakery_id, run_id, endpoints, write_access):
         # add `xarray assets` extension details
         assets[key]["xarray:open_kwargs"] = dict(consolidated=True)
         if ep == "s3":
-            assets[key]["xarray:storage_options"] = bakery.fsspec_open_kwargs
+            assets[key]["xarray:storage_options"] = (
+                bakery.default_storage_options.dict(exclude_none=True)
+            )
 
     # ~~~~~~~~~~~~~~~~~~~~ Feedstock Asset ~~~~~~~~~~~~~~~~~~~~~~~
     pff = "pangeo-forge-feedstock"
@@ -144,7 +168,7 @@ def _make_time_bounds(ds):
         return f"{str(ds['time'].values[n])[:19]}Z"
 
     time_bounds = (
-        {b: format_datetime(n) for n, b in zip([0, -1], ["start_datetime", "end_datetime"])} 
+        {b: format_datetime(n) for n, b in zip([0, -1], ["start_datetime", "end_datetime"])}
         if len(ds['time']) > 1
         else {"datetime": format_datetime(n=0)}
     )
