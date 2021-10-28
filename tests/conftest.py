@@ -186,13 +186,13 @@ def bakery_http_server(tmpdir_factory, request):
     zarr_http_path = f"{http_base}/{zarr_fname}"
     build_logs_http_path = f"{http_base}/{build_logs_fname}"
 
-    return url, zarr_local_path, zarr_http_path, ds, build_logs_http_path, logs
+    return tempdir, url, zarr_local_path, zarr_http_path, ds, build_logs_http_path, logs
 
 
 @pytest.fixture(scope="session", params=[dict()])
 def github_http_server(tmpdir_factory, request, bakery_http_server):
     tempdir = tmpdir_factory.mktemp("mock-github")
-    bakery_url = bakery_http_server[0]
+    bakery_url = bakery_http_server[1]
 
     url = start_http_server(tempdir, request=request)
     http_base = f"{url}/mock-github0"

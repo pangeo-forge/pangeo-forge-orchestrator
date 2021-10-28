@@ -1,10 +1,11 @@
 """
-Compare: https://github.com/pangeo-forge/pangeo-forge-recipes/blob/master/tests/http_auth_server.py
+Compare:
+- https://github.com/pangeo-forge/pangeo-forge-recipes/blob/master/tests/http_auth_server.py
+- https://blog.anvileight.com/posts/simple-python-http-server/#do-post
 """
 import base64
 import http.server
 import socketserver
-from urllib.parse import urlparse
 
 import click
 
@@ -14,13 +15,12 @@ import click
 @click.option("--port")
 @click.option("--username")
 @click.option("--password")
-@click.option("--required-query-string")
-def serve_forever(address, port, username, password, required_query_string):
+def serve_forever(address, port, username, password):
 
     port = int(port)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
-        def do_GET(self):
+        def do_POST(self):
             if username:
                 auth = self.headers.get("Authorization")
                 if (
@@ -33,13 +33,10 @@ def serve_forever(address, port, username, password, required_query_string):
                     self.send_header("WWW-Authenticate", "Basic")
                     self.end_headers()
                     return
-            if required_query_string:
-                query = urlparse(self.path).query
-                if query != required_query_string:
-                    self.send_response(400)
-                    self.end_headers()
-                    return
-            return http.server.SimpleHTTPRequestHandler.do_GET(self)
+            content_length = int(self.headers['Content-Length'])
+            self.rfile.read(content_length)
+            self.send_response(200)
+            self.end_headers()
 
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer((address, port), Handler) as httpd:
