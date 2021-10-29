@@ -123,8 +123,9 @@ def test_generate(
                 on_disk = json.loads(f.read())
             assert gen_result == on_disk == stac_item_result
 
-            for suffix in (".json", "_via_http.ipynb"):
-                os.remove(f"{gen_result['id']}{suffix}")
+            os.remove(f"{gen_result['id']}.json")
+            if execute_notebooks:
+                os.remove(f"{gen_result['id']}_via_http.ipynb")
 
             # TODO: validate notebook output; possibly by checking for:
             # "<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.\n" ?
