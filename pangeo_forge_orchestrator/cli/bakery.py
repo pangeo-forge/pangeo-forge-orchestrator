@@ -4,7 +4,8 @@ import typer
 from rich import print
 from rich.table import Table
 
-from ..metadata import BakeryDatabase, BakeryMetadata
+from ..components import Bakery
+from ..meta_types.bakery import BakeryDatabase
 
 app = typer.Typer()
 
@@ -25,12 +26,12 @@ def ls(
         bakery_db = BakeryDatabase(**kw)
         print(list(bakery_db.bakeries))
     else:
-        bakery_meta = BakeryMetadata(bakery_id, **kw)
+        bakery_meta = Bakery(bakery_id, **kw)
         if view == "general-info":
             print(bakery_meta.bakeries[bakery_id])
         elif view == "build-logs":
             if not feedstock_id:
-                logs = bakery_meta.build_logs
+                logs = bakery_meta.build_logs.logs
                 table = _table_from_bakery_logs(logs)
                 print(table)
             else:
@@ -55,10 +56,10 @@ def _table_from_bakery_logs(logs: dict):
     rows = [
         [
             k,
-            logs[k]["timestamp"],
-            logs[k]["feedstock"],
-            logs[k]["recipe"],
-            logs[k]["path"],
+            str(logs[k].timestamp),
+            logs[k].feedstock,
+            logs[k].recipe,
+            logs[k].path,
         ]
         for k in reversed(logs.keys())
     ]

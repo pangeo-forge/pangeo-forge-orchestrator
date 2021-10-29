@@ -119,7 +119,7 @@ class Bakery(BakeryDatabase):
         return re.search("{(.*?)}", v).group(1).strip()
 
     def filter_logs(self, feedstock):
-        return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
+        return {k: v for k, v in self.build_logs.logs.items() if feedstock in v.feedstock}
 
     def get_base_path(self, write_access=False):
         protocol = self.default_protocol if not write_access else self.private_protocol

@@ -1,39 +1,51 @@
 import pytest
 
-from .check_stdout import check_stdout
+from .check_stdout import check_stdout, drop_characters
 
-subcommands = {
-    "ls": (
-        "['devseed.bakery.development.aws.us-west-2',"
-        "'devseed.bakery.development.azure.westeurope','test_bakery']"
-    ),
-    "ls --bakery-id test_bakery": (
-        "{'targets':{'local_server':{'bakery_root':'{url}/test-bakery0','fsspec_open_kwargs':{},"
-        "'protocol':'http'}}}"
-    ),
-    "ls --bakery-id test_bakery --view build-logs --feedstock-id mock-feedstock": (
-        "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓"
-        "┃RunID┃Timestamp┃Feedstock┃Recipe┃Path┃"
-        "┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩"
-        "│00000│2021-09-2500:00:00│mock-feedstock│recipe│test-dataset.zarr│"
-        "└────────┴─────────────────────┴────────────────┴────────┴───────────────────┘"
-    ),
-}
-subcommands = [[cmd, output] for cmd, output in subcommands.items()]
+logs_table = (
+    "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓"
+    "┃ RunID  ┃     Timestamp       ┃     Feedstock      ┃ Recipe ┃       Path        ┃"
+    "┡━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━┩"
+    "│{run_id}│    {timestamp}      │   {fstock_name}    │{recipe}│    {zarr_path}    │"
+    "└────────┴─────────────────────┴────────────────────┴────────┴───────────────────┘"
+)
+cmds_and_responses = [
+    ["ls", "['{bakery_name}']"],
+    ["ls --bakery-id {bakery_name}", "{meta_yaml_dict}"],
+    ["ls --bakery-id {bakery_name} --view build-logs", logs_table],
+    ["ls --bakery-id {bakery_name} --view build-logs --feedstock-id {fstock_name}", logs_table],
+]
 
 
-@pytest.fixture(scope="session", params=[*subcommands])
-def bakery_subcommand(request, bakery_http_server):
-    url = bakery_http_server[0].split("://")[1]
-    bakery_meta_http_path = bakery_http_server[-1]
-
+@pytest.fixture(scope="session", params=[*cmds_and_responses])
+def bakery_subcommand(request, github_http_server, bakery_http_server, drop_chars=("\n", " ")):
+    _, bakery_database_entry, bakery_meta_http_path = github_http_server
+    bakery_name = list(bakery_database_entry)[0]
+    build_logs_dict = bakery_http_server[-1]
+    run_id = list(build_logs_dict)[0]
     request.param[0] = request.param[0].replace(
-        "ls", f"ls --extra-bakery-yaml {bakery_meta_http_path}"
+        "ls", f"ls --custom-db {bakery_meta_http_path}"
     )
-    if "{url}" in request.param[1]:
-        request.param[1] = request.param[1].replace("{url}", url)
-    return request.param
+    substitutions = {
+        "{bakery_name}": bakery_name,
+        "{meta_yaml_dict}": drop_characters(
+            str(bakery_database_entry[bakery_name]), drop_chars=drop_chars
+        ),
+        "{fstock_name}": build_logs_dict[run_id]["feedstock"],
+        "{run_id}": run_id,
+        "{timestamp}": str(build_logs_dict[run_id]["timestamp"]),
+        "{recipe}": build_logs_dict[run_id]["recipe"],
+        "{zarr_path}": build_logs_dict[run_id]["path"],
+    }
+    for i, cmd_or_resp in enumerate(request.param):
+        for k in substitutions.keys():
+            if k in cmd_or_resp:
+                request.param[i] = request.param[i].replace(k, substitutions[k])
+
+    return request.param, drop_chars
 
 
 def test_bakery_ls(bakery_subcommand):
-    check_stdout(bakery_subcommand, module="bakery", drop_chars=("\n", " "))
+    cmd_and_resp, drop_chars = bakery_subcommand
+    eval_dict = False if "'protocol':'http'" not in cmd_and_resp[1] else True
+    check_stdout(cmd_and_resp, module="bakery", drop_chars=drop_chars, eval_dict=eval_dict)
