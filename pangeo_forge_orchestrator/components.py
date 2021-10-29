@@ -51,6 +51,7 @@ class Bakery(BakeryDatabase):
 
     private_storage_options: Optional[StorageOptions] = None
     private_protocol: Optional[KnownImplementations] = None
+    private_prefix: Optional[str] = None
     credentialed_fs: Optional[fsspec.AbstractFileSystem] = None
 
     def __init__(self, name, write_access=False, **kwargs):
@@ -84,6 +85,7 @@ class Bakery(BakeryDatabase):
             # (alternatively, validation could happen in `meta_types.bakery`)
             self.private_protocol = self.target.private.protocol
             self.private_storage_options = self.target.private.storage_options
+            self.private_prefix = self.target.private.prefix
             private_fs_cls = get_filesystem_class(self.private_protocol)
             kw = self._recursively_replace_env_vars(
                 self.private_storage_options.dict(exclude_none=True)
@@ -113,13 +115,14 @@ class Bakery(BakeryDatabase):
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.items() if feedstock in v["feedstock"]}
 
-    def get_base_path(self, protocol=None):
-        p = self.default_protocol if not protocol else protocol
-        return f"{p}://{self.default_prefix}"
+    def get_base_path(self, write_access=False):
+        protocol = self.default_protocol if not write_access else self.private_protocol
+        prefix = self.default_prefix if not write_access else self.private_prefix
+        return f"{protocol}://{prefix}"
 
-    def get_dataset_path(self, run_id, protocol=None):
+    def get_dataset_path(self, run_id):
         ds_path = self.build_logs.logs[run_id].path
-        return f"{self.get_base_path(protocol=protocol)}/{ds_path}"
+        return f"{self.get_base_path()}/{ds_path}"
 
     def get_dataset_mapper(self, run_id):
         path = self.get_dataset_path(run_id)
@@ -129,14 +132,13 @@ class Bakery(BakeryDatabase):
         return self.default_fs.cat(path)
 
     def put(self, src_path, dst_path, **kwargs):
+        if "http" in dst_path:
+            # needed for testing, but don't think this hurts?
+            # in reality, we'll rarely be writing over http(s)
+            cl = os.path.getsize(src_path)
+            headers = {"Content-Length": str(cl)}
+            kwargs.update(dict(headers=headers))
         self.credentialed_fs.put(src_path, dst_path, **kwargs)
-
-    def upload_stac_item(self, stac_item_filename):
-        bucket = self.get_base_path("s3")
-        item_bakery_path = f"{bucket}/stac/{stac_item_filename}"
-        self.credentialed_fs.put(stac_item_filename, item_bakery_path)
-        item_bakery_http_path = item_bakery_path.replace(bucket, self.get_base_path("https"))
-        return item_bakery_http_path
 
 
 @dataclass

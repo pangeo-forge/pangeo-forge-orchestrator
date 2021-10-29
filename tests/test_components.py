@@ -52,8 +52,8 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
         b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
         assert isinstance(b.credentialed_fs, HTTPFileSystem)
 
-        content, src_path, dst_path, headers = write_test_file(tempdir, http_base)
-        b.put(src_path, dst_path, headers=headers)
+        content, src_path, dst_path, _ = write_test_file(tempdir, http_base)
+        b.put(src_path, dst_path)
         r = b.cat(dst_path)
         assert ast.literal_eval(r.decode("utf-8")) == content
 
@@ -64,9 +64,9 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
     elif invalid == "env_var_value":
         os.environ["TEST_BAKERY_BASIC_AUTH"] = "incorrect plain text auth string"
         b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
-        content, src_path, dst_path, headers = write_test_file(tempdir, http_base)
+        content, src_path, dst_path, _ = write_test_file(tempdir, http_base)
         with pytest.raises(ClientResponseError):
-            b.put(src_path, dst_path, headers=headers)
+            b.put(src_path, dst_path)
 
 
 def test_feedstock_metadata():
