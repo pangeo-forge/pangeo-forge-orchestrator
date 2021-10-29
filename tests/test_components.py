@@ -1,6 +1,8 @@
 import ast
+import json
 import os
 
+import fsspec
 import pytest
 import xarray as xr
 from aiohttp.client_exceptions import ClientResponseError
@@ -54,8 +56,13 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
 
         content, src_path, dst_path, _ = write_test_file(tempdir, http_base)
         b.put(src_path, dst_path)
+
         r = b.cat(dst_path)
         assert ast.literal_eval(r.decode("utf-8")) == content
+
+        with fsspec.open(dst_path) as f:
+            d = json.loads(f.read())
+        assert d == content
 
     elif invalid == "env_var_key":
         del os.environ["TEST_BAKERY_BASIC_AUTH"]

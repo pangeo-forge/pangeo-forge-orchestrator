@@ -12,9 +12,8 @@ from fsspec.implementations.http import HTTPFileSystem
 
 
 def write_test_file(tempdir, http_base):
-    fname = "test-file.json"
-    src_path = os.fspath(tempdir.join(fname))
-    dst_path = f"{http_base}/{fname}"
+    src_path = os.fspath(tempdir.join("test-src.json"))
+    dst_path = f"{http_base}/test-dst.json"
     content = dict(a=1)
     with open(src_path, mode="w") as f:
         json.dump(content, f)
