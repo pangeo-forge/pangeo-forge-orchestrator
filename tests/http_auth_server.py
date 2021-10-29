@@ -42,11 +42,15 @@ def serve_forever(address, port, username, password):
 
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length)
-            d = ast.literal_eval(body.decode("utf-8"))
-            outpath = self.path[1:]  # drop leading `"/"`
 
+            try:
+                d = ast.literal_eval(body.decode("utf-8"))  # tests might POST a Python dict...
+            except ValueError:
+                d = json.loads(body.decode("utf-8"))  # ... or a STAC Item
+
+            outpath = self.path[1:]  # drop leading `"/"`
             with open(outpath, mode="w") as f:
-                json.dump(d, f)  # assumes tests are always/only POSTing JSON, which I think is true
+                json.dump(d, f)
 
             self.send_response(200)
             self.end_headers()

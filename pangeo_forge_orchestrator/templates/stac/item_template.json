@@ -11,27 +11,10 @@
         "end_datetime": null
     },
     "assets": {
-        "zarr-https": {
-            "href": "",
-            "type": "application/vnd+zarr",
-            "title": "",
-            "description": "",
-            "roles": ["data", "zarr", "https"],
-            "xarray:open_kwargs": null
-        },
-        "zarr-s3": {
-            "href": "",
-            "type": "application/vnd+zarr",
-            "title": "",
-            "description": "",
-            "roles": ["data", "zarr", "s3"],
-            "xarray:storage_options": null,
-            "xarray:open_kwargs": null
-        },
         "thumbnail": {
             "href": "",
             "type": "image/png",
-            "title": "Daymet {frequency} {FULL_REGIONS[region]} map thumbnail"
+            "title": ""
         },
         "pangeo-forge-feedstock": {
             "href": "",

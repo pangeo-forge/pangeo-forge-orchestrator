@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -64,25 +65,17 @@ def stac_item_result(bakery_http_server):
         },
         'links': [],
         'assets': {
-            'zarr-https': {
-                'href': f'https://127.0.0.1:{local_bakery_port}/test-bakery0/test-dataset.zarr',
+            'zarr-http': {
+                'href': f'http://127.0.0.1:{local_bakery_port}/test-bakery0/test-dataset.zarr',
                 'type': 'application/vnd+zarr',
-                'title': 'Mock Feedstock - HTTPS Zarr root',
-                'description': 'HTTPS Zarr root for random test data.',
+                'title': 'Mock Feedstock - HTTP File System Zarr root',
+                'description': 'HTTP File System Zarr root for random test data.',
                 'xarray:open_kwargs': {'consolidated': True},
-                'roles': ['data', 'zarr', 'https'],
-            },
-            'zarr-s3': {
-                'href': f's3://127.0.0.1:{local_bakery_port}/test-bakery0/test-dataset.zarr',
-                'type': 'application/vnd+zarr',
-                'title': 'Mock Feedstock - S3 File System Zarr root',
-                'description': 'S3 File System Zarr root for random test data.',
-                'xarray:storage_options': {},
-                'xarray:open_kwargs': {'consolidated': True},
-                'roles': ['data', 'zarr', 's3'],
+                'xarray:storage_options': None,
+                'roles': ['data', 'zarr', 'http'],
             },
             'pangeo-forge-feedstock': {
-                'href': 'https://github.com/pangeo-forge/mock-feedstock/tree/v1.0',
+                'href': 'https://github.com/pangeo-forge/mock-feedstock/tree/v1.0',  # TODO: fix?
                 'type': '',
                 'title': 'Pangeo Forge Feedstock (GitHub repository) for mock-feedstock@1.0'
             },
@@ -96,22 +89,42 @@ def stac_item_result(bakery_http_server):
 
 
 @pytest.mark.parametrize("to_file", [False, True])
-def test_generate(github_http_server, bakery_http_server, stac_item_result, to_file):
+@pytest.mark.parametrize("execute_notebooks", [False, True])
+def test_generate(
+    github_http_server,
+    bakery_http_server,
+    stac_item_result,
+    to_file,
+    execute_notebooks,
+):
     _ = bakery_http_server  # start bakery server
     github_http_base, bakery_database_entry, bakery_database_http_path = github_http_server
     bakery_name = list(bakery_database_entry)[0]
-
-    result = generate(
+    kw = dict(
         bakery_name=bakery_name,
         run_id="00000",
         bakery_database_path=bakery_database_http_path,
+        bakery_stac_relative_path="",
         feedstock_metadata_url_base=github_http_base,
         to_file=to_file,
+        execute_notebooks=execute_notebooks,
+        endpoints=["http"],
     )
-    assert result == stac_item_result
+    if to_file is False and execute_notebooks is True:
+        with pytest.raises(ValueError):
+            generate(**kw)
+    else:
+        gen_result = generate(**kw)
+        assert gen_result == stac_item_result
 
-    if to_file:
-        with open(f"{result['id']}.json") as f:
-            on_disk = json.loads(f.read())
-        assert result == on_disk
-        os.remove(f"{result['id']}.json")
+        if to_file:
+            parent = Path(__file__).absolute().parent
+            with open(f"{parent}/{gen_result['id']}.json") as f:
+                on_disk = json.loads(f.read())
+            assert gen_result == on_disk == stac_item_result
+
+            for suffix in (".json", "_via_http.ipynb"):
+                os.remove(f"{gen_result['id']}{suffix}")
+
+            # TODO: validate notebook output; possibly by checking for:
+            # "<style>/* CSS stylesheet for displaying xarray objects in jupyterlab.\n" ?

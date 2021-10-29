@@ -54,12 +54,15 @@ class Bakery(BakeryDatabase):
     private_prefix: Optional[str] = None
     credentialed_fs: Optional[fsspec.AbstractFileSystem] = None
 
-    def __init__(self, name, write_access=False, **kwargs):
+    stac_relative_path: str = "stac"  # TODO: avoid repitition in __init__?
+
+    def __init__(self, name, write_access=False, stac_relative_path="stac", **kwargs):
         super().__init__(**kwargs)
 
         self.name = BakeryName(name=name)
         self.metadata = BakeryMeta(**self.bakeries[self.name.name])
         self.write_access = write_access
+        self.stac_relative_path = stac_relative_path
 
         targets = list(self.metadata.targets.keys())
         if len(targets) > 1:  # TODO: select target somehow
@@ -119,6 +122,9 @@ class Bakery(BakeryDatabase):
         protocol = self.default_protocol if not write_access else self.private_protocol
         prefix = self.default_prefix if not write_access else self.private_prefix
         return f"{protocol}://{prefix}"
+
+    def get_stac_path(self, write_access=False):
+        return f"{self.get_base_path(write_access=write_access)}/{self.stac_relative_path}"
 
     def get_dataset_path(self, run_id):
         ds_path = self.build_logs.logs[run_id].path

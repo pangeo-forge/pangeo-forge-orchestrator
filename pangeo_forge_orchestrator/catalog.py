@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 
 from rich import print
@@ -15,17 +14,23 @@ def generate(
     bakery_name,
     run_id,
     bakery_database_path=None,
+    bakery_stac_relative_path=None,
     feedstock_metadata_url_base=None,
     to_file=False,
     print_result=False,
     execute_notebooks=False,
+    upload_notebooks=True,
+    post_gist=False,
     endpoints=["s3", "https"],
 ):
-    write_access = True if to_file == "bakery" else False
+    if to_file is False and execute_notebooks is True:
+        raise ValueError("Must write STAC Item to file to execute notebooks.")
+    write_access = True if to_file and execute_notebooks else False
     item_result, feedstock_id, bakery = _generate(
         bakery_name=bakery_name,
         run_id=run_id,
         bakery_database_path=bakery_database_path,
+        bakery_stac_relative_path=bakery_stac_relative_path,
         feedstock_metadata_url_base=feedstock_metadata_url_base,
         endpoints=endpoints,
         write_access=write_access,
@@ -39,26 +44,29 @@ def generate(
         # first dump; second required in "bakery" block below, if `execute_notebooks == True`
         with open(stac_item_filename, mode="w") as outfile:
             json.dump(item_result, outfile)
-        if to_file == "bakery":
-            if execute_notebooks:
-                exnb = ExecuteNotebook(feedstock_id)
-                # upload provisional STAC Item to Bakery for notebook execution from correct source
-                item_bakery_http_path = bakery.upload_stac_item(stac_item_filename)
+        if execute_notebooks:
+            exnb = ExecuteNotebook(feedstock_id)
+            if not upload_notebooks:
+                raise NotImplementedError("Currently can't execute notebook without uploading.")
+            else:
+                # upload provisional STAC Item to Bakery for notebook execution from correct src
+                item_dst_path = f"{bakery.get_stac_path(write_access=True)}{stac_item_filename}"
+                bakery.put(stac_item_filename, item_dst_path)
                 nb_local_paths = []
                 for endpoint in endpoints:
                     # next line has to happen after item is dumped to local file
-                    nb_local_path = exnb.execute(endpoint, item_bakery_http_path)
+                    nb_local_path = exnb.execute(endpoint, item_dst_path)
                     nb_local_paths.append(nb_local_path)
-                    nb_url = exnb.post_gist(nb_local_path)
-                    item_result["assets"][f"jupyter-notebook-example-{endpoint}"]["href"] = nb_url
+                    if post_gist:
+                        nb_url = exnb.post_gist(nb_local_path)
+                        nb_asset = item_result["assets"][f"jupyter-notebook-example-{endpoint}"]
+                        nb_asset["href"] = nb_url
                 # clobber local Item with updated Item before re-uploadeding to Bakery
                 with open(stac_item_filename, mode="w") as outfile:
                     json.dump(item_result, outfile)
-            # clobber provisional Bakery Item with Item that's been updated with `nb_urls`
-            _ = bakery.upload_stac_item(stac_item_filename)
-            # following loop not needed if we use `tempfile` instead of local files
-            for f in [stac_item_filename, *nb_local_paths]:
-                os.remove(f)
+                # clobber provisional Bakery Item with Item that's been updated with `nb_urls`
+                bakery.put(stac_item_filename, item_dst_path)
+
         return item_result
 
 
@@ -66,6 +74,7 @@ def _generate(
     bakery_name,
     run_id,
     bakery_database_path,
+    bakery_stac_relative_path,
     feedstock_metadata_url_base,
     endpoints,
     write_access,
@@ -80,6 +89,8 @@ def _generate(
     bakery_kw = dict(name=bakery_name, write_access=write_access)
     if bakery_database_path:
         bakery_kw.update(dict(path=bakery_database_path))
+    if bakery_stac_relative_path != None:  # noqa; `bakery_stac_relative_path` could be an empty string
+        bakery_kw.update(dict(stac_relative_path=bakery_stac_relative_path))
     bakery = Bakery(**bakery_kw)
 
     feedstock_id = bakery.build_logs.logs[run_id].feedstock
@@ -105,8 +116,21 @@ def _generate(
     # ~~~~~~~~~~~~~~~~~~~~ Data Assets ~~~~~~~~~~~~~~~~~~~~~~~~~~~
     for ep in endpoints:
         key = f"zarr-{ep}"
-        longname = "S3 File System" if ep == "s3" else "HTTPS"
-        path = bakery.get_dataset_path(run_id, protocol=ep)
+        assets.update(
+            {
+                f"{key}": {
+                    "href": "",
+                    "type": "application/vnd+zarr",
+                    "title": "",
+                    "description": "",
+                    "roles": ["data", "zarr", f"{ep}"],
+                    "xarray:storage_options": None,
+                    "xarray:open_kwargs": None,
+                },
+            }
+        )
+        longname = f"{ep.upper()} File System"
+        path = bakery.get_dataset_path(run_id)
         assets[key]["href"] = path
         assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
         desc = fstock.metadata_dict['description']

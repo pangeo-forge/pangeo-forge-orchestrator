@@ -18,6 +18,7 @@ class ExecuteNotebook:
     nbviewer_url_base: str = "https://nbviewer.org/gist/cisaacstern"  # change to Pangeo Forge Bot
 
     def make_template_path(self, endpoint):
+        endpoint = endpoint if endpoint != "http" else "https"  # TODO: better solution for tests?
         return f"{endpoint}_loading_template.ipynb"
 
     def make_filename(self, endpoint):
@@ -30,7 +31,7 @@ class ExecuteNotebook:
         pm.execute_notebook(template_path, filename, parameters=parameters)
         return filename
 
-    def post_gist(self, local_path):
+    def post_gist(self, local_path, url="https://api.github.com/gists"):
         if "GITHUB_API_TOKEN" not in os.environ.keys():
             raise ValueError(
                 "Environment variable 'GITHUB_API_TOKEN' required for Gist API authentication."
@@ -46,7 +47,7 @@ class ExecuteNotebook:
             "files": {local_path: {"content": json.dumps(content)}}
         }
         r = requests.post(
-            url="https://api.github.com/gists",
+            url=url,
             headers={"Authorization": f"token {os.environ['GITHUB_API_TOKEN']}"},
             params={"scope": "gist"},
             data=json.dumps(payload)
