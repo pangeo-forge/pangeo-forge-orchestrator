@@ -177,8 +177,16 @@ def make_build_logs_local_path(zarr_fname, tempdir):
     return local_path, fname, logs
 
 
-def make_meta_yaml_local_path(tempdir):
-    meta_yaml = {
+def make_meta_yaml_local_path(tempdir, meta_yaml):
+    with open(f"{tempdir}/meta.yaml", mode="w") as f:
+        f.write(yaml.dump(meta_yaml))
+
+
+# Fixtures -------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def meta_yaml():
+    return {
         "title": "Mock Feedstock",
         "description": "Random test data.",
         "pangeo_forge_version": "0.6.1",
@@ -216,11 +224,6 @@ def make_meta_yaml_local_path(tempdir):
             }
         }
     }
-    with open(f"{tempdir}/meta.yaml", mode="w") as f:
-        f.write(yaml.dump(meta_yaml))
-
-
-# Fixtures -------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session", params=[dict()])
@@ -246,14 +249,14 @@ def bakery_http_server(tmpdir_factory, request):
 
 
 @pytest.fixture(scope="session", params=[dict()])
-def github_http_server(tmpdir_factory, request, bakery_http_server):
+def github_http_server(tmpdir_factory, request, bakery_http_server, meta_yaml):
     tempdir_0 = tmpdir_factory.mktemp("mock-github")
 
     # TODO: generate path from feedstock in `build-logs.json`; probably make `logs` dict a fixture.
     meta_path = tempdir_0 / "pangeo-forge" / "mock-feedstock" / "v1.0" / "feedstock"
     os.makedirs(meta_path)
 
-    make_meta_yaml_local_path(meta_path)
+    make_meta_yaml_local_path(meta_path, meta_yaml)
 
     url = start_http_server(tempdir_0, request=request)
     http_base = f"{url}/mock-github0"
@@ -263,3 +266,20 @@ def github_http_server(tmpdir_factory, request, bakery_http_server):
     bakery_database_http_path = f"{http_base}/test-bakery.yaml"
 
     return http_base, bakery_database_entry, bakery_database_http_path
+
+
+@pytest.fixture(scope="session")
+def invalid_feedstock_names():
+    return (
+        # missing minor version number
+        "mock-feedstock@1.",
+        "mock-feedstock@1",
+        # only two decimal places allowed
+        "mock-feedstock@1.0.0",
+        # non-integer characters not allowed
+        "mock-feedstock@1.0a",
+        "mock-feedstock@1.0-beta",
+        # missing required substring `"-feedstock@"`
+        "mock-feedstock1.0",
+        "mock@1.0",
+    )

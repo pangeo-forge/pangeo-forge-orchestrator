@@ -1,10 +1,12 @@
 import json
 import os
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict
 from typing import Optional
 
 import fsspec
+from pydantic.dataclasses import dataclass
+from pydantic.networks import AnyUrl
 import yaml
 from fsspec.registry import get_filesystem_class
 
@@ -13,6 +15,7 @@ from .meta_types.bakery import (
     BakeryMeta,
     BakeryName,
     BuildLogs,
+    feedstock_name_with_version,
     KnownImplementations,
     StorageOptions,
     Target,
@@ -150,13 +153,15 @@ class Bakery(BakeryDatabase):
 @dataclass
 class FeedstockMetadata:
 
-    feedstock_id: str
-    url_format: str = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"
-    metadata_url_base: str = "https://raw.githubusercontent.com"
+    feedstock_id: feedstock_name_with_version
+    url_format: AnyUrl = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"
+    metadata_url_base: AnyUrl = "https://raw.githubusercontent.com"
     metadata_url_format: str = "pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
-    metadata_dict: dict = field(init=False)
+    metadata_dict: Optional[dict] = None
 
-    def __post_init__(self):
+    def __post_init_post_parse__(self):
+        # We are using `__post_init_post_parse__`, as opposed to `__post_init__`, so that we can
+        # validate `self.feedstock_id` before doing the remainder of our field assignements, below.
         ids = self.feedstock_id.split("@")
         name, version = ids[0], ids[1]
         version_split = version.split(".")

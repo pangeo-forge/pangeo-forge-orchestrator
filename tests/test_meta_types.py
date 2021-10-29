@@ -17,6 +17,9 @@ from pangeo_forge_orchestrator.meta_types.bakery import (
 )
 
 
+# Helpers -----------------------------------------------------------------------------------------
+
+
 def invalidate_keys(d, key):
     d_copy = copy.deepcopy(d)
     invalid_key = key[1:]
@@ -38,6 +41,9 @@ def invalidate_vals(d, k, v):
     return d_copy
 
 
+# Fixtures ----------------------------------------------------------------------------------------
+
+
 @pytest.fixture(scope="session")
 def bakery_meta_dict(github_http_server):
     _, _, bakery_meta_http_path = github_http_server
@@ -45,6 +51,9 @@ def bakery_meta_dict(github_http_server):
         d = yaml.safe_load(f.read())
         d = d[list(d)[0]]
     return d
+
+
+# Tests -------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("invalid", [None, "region", "missing-bakery-substring"])
@@ -158,7 +167,7 @@ def test_storage_options(bakery_meta_dict, endpoint, invalidate):
 
 
 @pytest.mark.parametrize("invalid", [None, "timestamp", "feedstock", "recipe", "path"])
-def test_run_record(invalid, bakery_http_server):
+def test_run_record(invalid, bakery_http_server, invalid_feedstock_names):
     logs = bakery_http_server[-1]
 
     for k in logs.keys():
@@ -171,20 +180,8 @@ def test_run_record(invalid, bakery_http_server):
                 RunRecord(**logs_copy[k])
         elif invalid == "feedstock":
             logs_copy = copy.deepcopy(logs)
-            for invalid_feedstock_name in (
-                # missing minor version number
-                "mock-feedstock@1.",
-                "mock-feedstock@1",
-                # only two decimal places allowed
-                "mock-feedstock@1.0.0",
-                # non-integer characters not allowed
-                "mock-feedstock@1.0a",
-                "mock-feedstock@1.0-beta",
-                # missing required substring `"-feedstock@"`
-                "mock-feedstock1.0",
-                "mock@1.0",
-            ):
-                logs_copy[k]["feedstock"] = invalid_feedstock_name
+            for fstock_name in invalid_feedstock_names:
+                logs_copy[k]["feedstock"] = fstock_name
                 with pytest.raises(ValidationError):
                     RunRecord(**logs_copy[k])
         elif invalid == "recipe":

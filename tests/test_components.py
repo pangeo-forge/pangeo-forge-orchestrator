@@ -76,7 +76,16 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
             b.put(src_path, dst_path)
 
 
-def test_feedstock_metadata():
-    f_id = "noaa-oisst-avhrr-only-feedstock@1.0"
-    f = FeedstockMetadata(feedstock_id=f_id)
-    assert f is not None
+@pytest.mark.parametrize("invalid", [None, "metadata_url_base", "feedstock_name"])
+def test_feedstock_metadata(github_http_server, meta_yaml, invalid, invalid_feedstock_names):
+    github_http_base, _, _ = github_http_server
+    if not invalid:
+        f = FeedstockMetadata(feedstock_id="mock-feedstock@1.0", metadata_url_base=github_http_base)
+        assert f.metadata_dict == meta_yaml
+    elif invalid == "metadata_url_base":
+        with pytest.raises(FileNotFoundError):
+            FeedstockMetadata(feedstock_id="mock-feedstock@1.0")
+    elif invalid == "feedstock_name":
+        for f_id in invalid_feedstock_names:
+            with pytest.raises(ValidationError):
+                FeedstockMetadata(feedstock_id=f_id, metadata_url_base=github_http_base)
