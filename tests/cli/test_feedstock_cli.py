@@ -2,15 +2,18 @@ import pytest
 
 from .check_stdout import check_stdout
 
-subcommands = {
-    "--help": (
-        "Usage: pangeo-forge feedstock [OPTIONS] COMMAND [ARGS]..."
-        "Options:  --help  Show this message and exit."
-    )
-}
-subcommands = [(cmd, output) for cmd, output in subcommands.items()]
+cmds_and_responses = [
+    [
+        "--help",
+        """Usage: pangeo-forge feedstock [OPTIONS] COMMAND [ARGS]...
+
+        Options:
+        --help  Show this message and exit.
+        """,
+    ]
+]
 
 
-@pytest.mark.parametrize("subcmd", subcommands)
-def test_recipe_lint(subcmd):
-    check_stdout(subcmd, module="feedstock", drop_chars=("\n"))
+@pytest.mark.parametrize("cmd_and_resp", cmds_and_responses)
+def test_recipe_lint(cmd_and_resp):
+    check_stdout(cmd_and_resp, module="feedstock", drop_chars=(" ", "\n"))
