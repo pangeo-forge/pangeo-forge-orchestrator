@@ -208,6 +208,7 @@ class BakeryDatabase(BaseModel):
     path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
     bakeries: Optional[dict] = None
     names: Optional[List[BakeryName]] = None
+    parsed_bakeries: Optional[Dict[str, BakeryMeta]] = None
 
     class Config:
         validate_assignment = True  # validate `__init__` assignments, e.g. `self.path`
@@ -219,6 +220,7 @@ class BakeryDatabase(BaseModel):
         with fsspec.open(self.path) as f:
             self.bakeries = yaml.safe_load(f.read())
         self.names = [BakeryName(name=name) for name in list(self.bakeries)]
+        self.parsed_bakeries = {n.name: BakeryMeta(**self.bakeries[n.name]) for n in self.names}
 
 
 @dataclass

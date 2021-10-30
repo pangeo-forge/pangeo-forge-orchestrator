@@ -1,0 +1,3 @@
+
+class PangeoForgeValidationError(Exception):
+    pass
