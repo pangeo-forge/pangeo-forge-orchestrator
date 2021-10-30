@@ -2,12 +2,11 @@ import pytest
 
 from .check_stdout import check_stdout
 
-subcommands = {
-    "lint path-to-a-recipe": "Linting recipe path-to-a-recipe",
-}
-subcommands = [(cmd, output) for cmd, output in subcommands.items()]
+cmds_and_responses = [
+    ["lint path/to-a/recipe", "Linting recipe path/to-a/recipe"]
+]
 
 
-@pytest.mark.parametrize("subcmd", subcommands)
+@pytest.mark.parametrize("subcmd", cmds_and_responses)
 def test_recipe_lint(subcmd):
     check_stdout(subcmd, module="recipe", drop_chars=("\n"))
