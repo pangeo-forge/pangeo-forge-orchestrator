@@ -29,9 +29,7 @@ def bakery_subcommand(request, github_http_server, bakery_http_server, drop_char
     )
     substitutions = {
         "{bakery_name}": bakery_name,
-        "{meta_yaml_dict}": drop_characters(
-            str(bakery_database_entry[bakery_name]), drop_chars=drop_chars
-        ),
+        "{meta_yaml_dict}": str(bakery_database_entry[bakery_name]),
         "{fstock_name}": build_logs_dict[run_id]["feedstock"],
         "{run_id}": run_id,
         "{timestamp}": str(build_logs_dict[run_id]["timestamp"]),
@@ -48,5 +46,5 @@ def bakery_subcommand(request, github_http_server, bakery_http_server, drop_char
 
 def test_bakery_ls(bakery_subcommand):
     cmd_and_resp, drop_chars = bakery_subcommand
-    eval_dict = False if "'protocol':'http'" not in cmd_and_resp[1] else True
+    eval_dict = False if "'protocol': 'http'" not in cmd_and_resp[1] else True
     check_stdout(cmd_and_resp, module="bakery", drop_chars=drop_chars, eval_dict=eval_dict)

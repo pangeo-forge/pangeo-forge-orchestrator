@@ -24,11 +24,13 @@ def check_stdout(subcmd, module, drop_chars, eval_dict=False):
     env = dict(os.environ, COLUMNS="200")
     out = subprocess.check_output(cmd, env=env)
     out = out.decode("utf-8")
-    out = drop_characters(out, drop_chars=drop_chars)
     if eval_dict:
         d0 = ast.literal_eval(out)
         d1 = ast.literal_eval(subcmd[1])
+        print("\n >>", d0)
+        print("\n >>", d1)
         assert d0 == d1
     else:
+        out = drop_characters(out, drop_chars=drop_chars)
         expected_resp = drop_characters(subcmd[1], drop_chars=drop_chars)
         assert out == expected_resp
