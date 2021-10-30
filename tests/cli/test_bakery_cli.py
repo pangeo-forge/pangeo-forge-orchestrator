@@ -1,6 +1,6 @@
 import pytest
 
-from .check_stdout import check_stdout, drop_characters
+from .check_stdout import check_stdout
 
 logs_table = (
     "┏━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┓"
