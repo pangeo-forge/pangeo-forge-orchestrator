@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -10,11 +9,7 @@ from pangeo_forge_orchestrator.catalog import generate
 @pytest.mark.parametrize("to_file", [False, True])
 @pytest.mark.parametrize("execute_notebooks", [False, True])
 def test_generate(
-    github_http_server,
-    bakery_http_server,
-    stac_item_result,
-    to_file,
-    execute_notebooks,
+    github_http_server, bakery_http_server, stac_item_result, to_file, execute_notebooks,
 ):
     _ = bakery_http_server  # start bakery server
     github_http_base, bakery_database_entry, bakery_database_http_path = github_http_server
@@ -37,8 +32,7 @@ def test_generate(
         assert gen_result == stac_item_result
 
         if to_file:
-            parent = Path(__file__).absolute().parent
-            with open(f"{parent}/{gen_result['id']}.json") as f:
+            with open(f"{gen_result['id']}.json") as f:
                 on_disk = json.loads(f.read())
             assert gen_result == on_disk == stac_item_result
 
