@@ -41,7 +41,7 @@ jobs:
       - name: setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
-      #    activate-environment: pangeo-forge-recipes
+          activate-environment: pfo-poetry
       #    environment-file: ci/py${{ matrix.python-version }}.yml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
@@ -51,6 +51,10 @@ jobs:
         run: |
           conda install -c conda-forge poetry
           poetry install
+      - name: install ipykernel for papermill notebook execution
+        shell: bash -l {0}
+        run: |
+          python -m ipykernel install --user --name pfo-poetry
       - name: print conda env
         shell: bash -l {0}
         run: |
