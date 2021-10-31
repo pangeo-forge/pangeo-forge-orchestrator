@@ -1,7 +1,7 @@
 import copy
 
-import pytest
 import fsspec
+import pytest
 import yaml
 from pydantic import ValidationError
 
@@ -15,7 +15,6 @@ from pangeo_forge_orchestrator.meta_types.bakery import (
     StorageOptions,
     Target,
 )
-
 
 # Helpers -----------------------------------------------------------------------------------------
 
@@ -194,7 +193,7 @@ def test_run_record(invalid, bakery_http_server, invalid_feedstock_names):
                 # if colon delimiter is used, a dictionary key must follow it
                 "recipe:",
                 # dictionary key special characters can only be dash or underscore (relax this?)
-                "recipe:key&with*special$characters"
+                "recipe:key&with*special$characters",
             ):
                 logs_copy[k]["recipe"] = invalid_recipe_name
                 with pytest.raises(ValidationError):
@@ -213,7 +212,11 @@ def test_build_logs(invalid, bakery_http_server):
     elif invalid == "run_id":
         logs_copy = copy.deepcopy(logs)
         # run_ids can only contain integer characters from 0-9
-        for invalid_character in ("A", "a", "_",):
+        for invalid_character in (
+            "A",
+            "a",
+            "_",
+        ):
             logs_copy = {f"{k}{invalid_character}": v for k, v in logs_copy.items()}
             with pytest.raises(ValidationError):
                 BuildLogs(logs=logs_copy)

@@ -24,9 +24,7 @@ def bakery_subcommand(request, github_http_server, bakery_http_server, drop_char
     bakery_name = list(bakery_database_entry)[0]
     build_logs_dict = bakery_http_server[-1]
     run_id = list(build_logs_dict)[0]
-    request.param[0] = request.param[0].replace(
-        "ls", f"ls --custom-db {bakery_meta_http_path}"
-    )
+    request.param[0] = request.param[0].replace("ls", f"ls --custom-db {bakery_meta_http_path}")
     substitutions = {
         "{bakery_name}": bakery_name,
         "{meta_yaml_dict}": str(bakery_database_entry[bakery_name]),

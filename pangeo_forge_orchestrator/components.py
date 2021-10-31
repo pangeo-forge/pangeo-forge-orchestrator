@@ -5,20 +5,20 @@ from dataclasses import asdict
 from typing import Optional
 
 import fsspec
+import yaml  # type: ignore
+from fsspec.registry import get_filesystem_class
 from pydantic.dataclasses import dataclass
 from pydantic.networks import AnyUrl
-import yaml
-from fsspec.registry import get_filesystem_class
 
 from .meta_types.bakery import (
     BakeryDatabase,
     BakeryMeta,
     BakeryName,
     BuildLogs,
-    feedstock_name_with_version,
     KnownImplementations,
     StorageOptions,
     Target,
+    feedstock_name_with_version,
 )
 
 
@@ -47,13 +47,13 @@ class Bakery(BakeryDatabase):
 
     target: Optional[Target] = None
     default_storage_options: Optional[StorageOptions] = None
-    default_protocol: Optional[KnownImplementations] = None
+    default_protocol: Optional[KnownImplementations] = None  # type: ignore
     default_prefix: Optional[str] = None
     default_fs: Optional[fsspec.AbstractFileSystem] = None
     build_logs: Optional[BuildLogs] = None
 
     private_storage_options: Optional[StorageOptions] = None
-    private_protocol: Optional[KnownImplementations] = None
+    private_protocol: Optional[KnownImplementations] = None  # type: ignore
     private_prefix: Optional[str] = None
     credentialed_fs: Optional[fsspec.AbstractFileSystem] = None
 

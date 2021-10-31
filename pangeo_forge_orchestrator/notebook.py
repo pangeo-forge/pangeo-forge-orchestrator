@@ -1,11 +1,10 @@
 import json
 import os
-import requests
-
 from dataclasses import dataclass
 from pathlib import Path
 
 import papermill as pm
+import requests  # type: ignore
 
 parent = Path(__file__).absolute().parent
 
@@ -44,18 +43,18 @@ class ExecuteNotebook:
         payload = {
             "description": f"An example notebook for loading {feedstock_id} via {protocol}.",
             "public": True,
-            "files": {local_path: {"content": json.dumps(content)}}
+            "files": {local_path: {"content": json.dumps(content)}},
         }
         r = requests.post(
             url=url,
             headers={"Authorization": f"token {os.environ['GITHUB_API_TOKEN']}"},
             params={"scope": "gist"},
-            data=json.dumps(payload)
+            data=json.dumps(payload),
         )
         # uncomment for debugging (move to logger.DEBUG later)
         # print("Gist POST returned status code", r.status_code)
         # print("url", r.url)
         # print("text", r.text)
-        gist_id = json.loads(r.text)['id']
+        gist_id = json.loads(r.text)["id"]
         print(f"{local_path} POSTed as Gist with ID {gist_id}")
         return f"{self.nbviewer_url_base}/{gist_id}"

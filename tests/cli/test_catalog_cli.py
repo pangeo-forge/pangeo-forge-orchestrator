@@ -10,7 +10,7 @@ cmds_and_responses = [
             "--feedstock-metadata-url-base {feedstock_metadata_url_base} "
             "--endpoints http"
         ),
-        "{item_result}"
+        "{item_result}",
     ]
 ]
 

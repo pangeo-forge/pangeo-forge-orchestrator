@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from rich import print
 import shapely.geometry
 import xarray as xr
 import xstac
+from rich import print
 
 from .components import Bakery, FeedstockMetadata
 from .notebook import ExecuteNotebook
@@ -89,7 +89,7 @@ def _generate(
     bakery_kw = dict(name=bakery_name, write_access=write_access)
     if bakery_database_path:
         bakery_kw.update(dict(path=bakery_database_path))
-    if bakery_stac_relative_path != None:  # noqa; `bakery_stac_relative_path` could be an empty string
+    if bakery_stac_relative_path != None:  # noqa; empty strings don't eval w/ `cond is not None`
         bakery_kw.update(dict(stac_relative_path=bakery_stac_relative_path))
     bakery = Bakery(**bakery_kw)
 
@@ -133,15 +133,15 @@ def _generate(
         path = bakery.get_dataset_path(run_id)
         assets[key]["href"] = path
         assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
-        desc = fstock.metadata_dict['description']
+        desc = fstock.metadata_dict["description"]
         desc = f"{desc[0].lower()}{desc[1:]}"
         # all descriptions may not work with this format string; generalize more, perhaps.
         assets[key]["description"] = f"{longname} Zarr root for {desc}"
         # add `xarray assets` extension details
         assets[key]["xarray:open_kwargs"] = dict(consolidated=True)
         if ep == "s3":
-            assets[key]["xarray:storage_options"] = (
-                bakery.default_storage_options.dict(exclude_none=True)
+            assets[key]["xarray:storage_options"] = bakery.default_storage_options.dict(
+                exclude_none=True
             )
 
     # ~~~~~~~~~~~~~~~~~~~~ Feedstock Asset ~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,7 +194,7 @@ def _make_time_bounds(ds):
 
     time_bounds = (
         {b: format_datetime(n) for n, b in zip([0, -1], ["start_datetime", "end_datetime"])}
-        if len(ds['time']) > 1
+        if len(ds["time"]) > 1
         else {"datetime": format_datetime(n=0)}
     )
     return time_bounds

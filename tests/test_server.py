@@ -3,8 +3,8 @@ import json
 import os
 
 import aiohttp
-import pytest
 import fsspec
+import pytest
 import xarray as xr
 import yaml
 from aiohttp.client_exceptions import ClientResponseError

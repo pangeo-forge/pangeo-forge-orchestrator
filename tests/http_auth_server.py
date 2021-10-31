@@ -22,7 +22,6 @@ def serve_forever(address, port, username, password):
     port = int(port)
 
     class Handler(http.server.SimpleHTTPRequestHandler):
-
         def do_GET(self):
             return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
@@ -40,7 +39,7 @@ def serve_forever(address, port, username, password):
                     self.end_headers()
                     return
 
-            content_length = int(self.headers['Content-Length'])
+            content_length = int(self.headers["Content-Length"])
             body = self.rfile.read(content_length)
 
             try:

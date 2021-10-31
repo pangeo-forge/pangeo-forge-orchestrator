@@ -2,9 +2,7 @@ import pytest
 
 from .check_stdout import check_stdout
 
-cmds_and_responses = [
-    ["lint path/to-a/recipe", "Linting recipe path/to-a/recipe"]
-]
+cmds_and_responses = [["lint path/to-a/recipe", "Linting recipe path/to-a/recipe"]]
 
 
 @pytest.mark.parametrize("subcmd", cmds_and_responses)

@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Dict, List, Literal, Optional, Union
 
 import fsspec
-import yaml
+import yaml  # type: ignore
 from fsspec.registry import known_implementations
-from pydantic import AnyUrl, BaseModel, constr, FilePath, HttpUrl
+from pydantic import AnyUrl, BaseModel, FilePath, HttpUrl, constr
 from pydantic.dataclasses import dataclass
 
 regions = Literal[
@@ -98,11 +98,11 @@ regions = Literal[
 s3_default_cache_types = Literal["bytes", "none"]
 
 # turn fsspec's list of known_implementations into object which pydantic can validate against
-KnownImplementations = Literal[tuple(list(known_implementations))]
+KnownImplementations = Literal[tuple(list(known_implementations))]  # type: ignore
 
 FARGATE_CLUSTER = "aws.fargate"
 AKS_CLUSTER = "azure.aks"
-clusters = Literal[AKS_CLUSTER, FARGATE_CLUSTER]
+clusters = Literal[FARGATE_CLUSTER, AKS_CLUSTER]  # type: ignore
 
 PANGEO_FORGE_BAKERY_DATABASE = (
     "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
@@ -122,16 +122,16 @@ recipe_or_dictobj_identifier = constr(
 
 
 class StorageOptions(BaseModel):
-    key: Optional[env_var_name] = None
-    secret: Optional[env_var_name] = None
+    key: Optional[env_var_name] = None  # type: ignore
+    secret: Optional[env_var_name] = None  # type: ignore
     anon: Optional[bool] = None
     # TODO: ensure `v` in `{"client_kwargs": {"headers": {"Authorization": v}}}` is `env_var_name`?
     client_kwargs: Optional[dict] = None
     default_cache_type: Optional[s3_default_cache_types] = None
     default_fill_cache: Optional[bool] = None
     use_listings_cache: Optional[bool] = None
-    username: Optional[env_var_name] = None
-    password: Optional[env_var_name] = None
+    username: Optional[env_var_name] = None  # type: ignore
+    password: Optional[env_var_name] = None  # type: ignore
 
     class Config:
         extra = "forbid"
@@ -139,7 +139,7 @@ class StorageOptions(BaseModel):
 
 @dataclass
 class Endpoint:
-    protocol: KnownImplementations
+    protocol: KnownImplementations  # type: ignore
     storage_options: Optional[StorageOptions] = None
     prefix: Optional[str] = None
 
@@ -164,13 +164,13 @@ class FargateClusterOptions:
 
 @dataclass
 class Cluster:
-    type: clusters
+    type: clusters  # type: ignore
     pangeo_forge_version: str
     pangeo_notebook_version: str
     prefect_version: str
     worker_image: str
     flow_storage: str
-    flow_storage_protocol: KnownImplementations
+    flow_storage_protocol: KnownImplementations  # type: ignore
     flow_storage_options: StorageOptions
     max_workers: int
     cluster_options: Optional[FargateClusterOptions] = None
@@ -226,15 +226,15 @@ class BakeryDatabase(BaseModel):
 @dataclass
 class RunRecord:
     timestamp: datetime
-    feedstock: feedstock_name_with_version
-    recipe: recipe_or_dictobj_identifier
+    feedstock: feedstock_name_with_version  # type: ignore
+    recipe: recipe_or_dictobj_identifier  # type: ignore
     path: str  # TODO: Define naming convention; cf. https://github.com/pangeo-forge/roadmap/pull/27
 
 
 @dataclass
 class BuildLogs:
-    logs: Dict[run_identifier, RunRecord]
-    run_ids: Optional[List[run_identifier]] = None
+    logs: Dict[run_identifier, RunRecord]  # type: ignore
+    run_ids: Optional[List[run_identifier]] = None  # type: ignore
 
     def __post_init__(self):
         self.run_ids = list(self.logs)

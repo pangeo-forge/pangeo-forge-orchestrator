@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import socket
 import subprocess
 import time
@@ -10,7 +10,6 @@ import pandas as pd
 import pytest
 import xarray as xr
 import yaml
-
 
 # Helper functions -----------------------------------------------------------
 
@@ -90,68 +89,62 @@ def make_test_bakery_yaml(http_base, tempdir, real_target=False):
     http_base = http_base.split("://")[1]
     if real_target:  # TODO: switch real_target at runtime
         bakery_database_entry = {
-            'org.test-osn.bakery.aws.us-west-2': {
-                'region': 'aws.us-west-2',
-                'targets': {
-                    'osn': {
-                        'region': 'aws.us-west-2',
-                        'description': 'Open Storage Network (OSN) bucket',
-                        'public': {
-                            'prefix': 'Pangeo/pangeo-forge',
-                            'protocol': 's3',
-                            'storage_options': {
-                                'anon': True,
-                                'client_kwargs': {
-                                    'endpoint_url': 'https://ncsa.osn.xsede.org'
-                                }
-                            }
+            "org.test-osn.bakery.aws.us-west-2": {
+                "region": "aws.us-west-2",
+                "targets": {
+                    "osn": {
+                        "region": "aws.us-west-2",
+                        "description": "Open Storage Network (OSN) bucket",
+                        "public": {
+                            "prefix": "Pangeo/pangeo-forge",
+                            "protocol": "s3",
+                            "storage_options": {
+                                "anon": True,
+                                "client_kwargs": {"endpoint_url": "https://ncsa.osn.xsede.org"},
+                            },
                         },
-                        'private': {
-                            'prefix': 'Pangeo/pangeo-forge',
-                            'protocol': 's3',
-                            'storage_options': {
-                                'key': '{OSN_KEY}',
-                                'secret': '{OSN_SECRET}',
-                                'client_kwargs': {
-                                    'endpoint_url': 'https://ncsa.osn.xsede.org'
-                                },
-                                'default_cache_type': 'none',
-                                'default_fill_cache': False,
-                                'use_listings_cache': False,
-                            }
-                        }
+                        "private": {
+                            "prefix": "Pangeo/pangeo-forge",
+                            "protocol": "s3",
+                            "storage_options": {
+                                "key": "{OSN_KEY}",
+                                "secret": "{OSN_SECRET}",
+                                "client_kwargs": {"endpoint_url": "https://ncsa.osn.xsede.org"},
+                                "default_cache_type": "none",
+                                "default_fill_cache": False,
+                                "use_listings_cache": False,
+                            },
+                        },
                     }
                 },
-                'cluster': None,
+                "cluster": None,
             }
         }
     elif not real_target:
         bakery_database_entry = {
-            'org.test.bakery.aws.us-west-2': {
-                'region': 'aws.us-west-2',  # TODO: Allow wildcard/localhost region type?
-                'targets': {
-                    'local-http-server': {
-                        'region': 'aws.us-west-2',
-                        'description': 'A local http server for testing.',
-                        'public': {
-                            'prefix': f'{http_base}',
-                            'protocol': 'http',
-                            'storage_options': {},
+            "org.test.bakery.aws.us-west-2": {
+                "region": "aws.us-west-2",  # TODO: Allow wildcard/localhost region type?
+                "targets": {
+                    "local-http-server": {
+                        "region": "aws.us-west-2",
+                        "description": "A local http server for testing.",
+                        "public": {
+                            "prefix": f"{http_base}",
+                            "protocol": "http",
+                            "storage_options": {},
                         },
-                        'private': {
-                            'prefix': f'{http_base}',
-                            'protocol': 'http',
-                            'storage_options': {
+                        "private": {
+                            "prefix": f"{http_base}",
+                            "protocol": "http",
+                            "storage_options": {
                                 "client_kwargs": {
-                                    "headers": {
-                                        "Authorization": "{TEST_BAKERY_BASIC_AUTH}",
-                                    },
+                                    "headers": {"Authorization": "{TEST_BAKERY_BASIC_AUTH}"},
                                 },
                             },
                         },
                     },
                 },
-                'cluster': None,
+                "cluster": None,
             },
         }
     with open(f"{tempdir}/test-bakery.yaml", mode="w") as f:
@@ -184,6 +177,7 @@ def make_meta_yaml_local_path(tempdir, meta_yaml):
 
 # Fixtures -------------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def meta_yaml():
     return {
@@ -191,12 +185,7 @@ def meta_yaml():
         "description": "Random test data.",
         "pangeo_forge_version": "0.6.1",
         "pangeo_notebook_version": "2021.07.17",
-        "recipes": [
-            {
-                "id": "mock-feedstock",
-                "object": "recipe",
-            },
-        ],
+        "recipes": [{"id": "mock-feedstock", "object": "recipe"}],
         "provenance": {
             "providers": [
                 {
@@ -204,7 +193,7 @@ def meta_yaml():
                     "description": "NumPy random data.",
                     "roles": ["producer", "licensor"],
                     "url": "https://pangeo-forge-random-data.org",
-                    "license": "CC-BY-4.0"
+                    "license": "CC-BY-4.0",
                 }
             ],
         },
@@ -218,11 +207,8 @@ def meta_yaml():
         "bakery": {
             "id": "org.test.bakery.aws.us-west-2",  # must come from a valid list of bakeries
             "target": "local-http-server",
-            "resources": {
-                "memory": 4096,
-                "cpu": 1024,
-            }
-        }
+            "resources": {"memory": 4096, "cpu": 1024},
+        },
     }
 
 
@@ -290,77 +276,77 @@ def stac_item_result(bakery_http_server):
     bakery_http_base = bakery_http_server[1]
     local_bakery_port = bakery_http_base.split("127.0.0.1:")[1][:5]
     result = {
-        'type': 'Feature',
-        'stac_version': '1.0.0',
-        'id': 'mock-feedstock@1.0',
-        'properties': {
-            'cube:dimensions': {
-                'time': {
-                    'type': 'temporal',
-                    'extent': ['2010-01-01T00:00:00Z', '2010-01-10T00:00:00Z'],
-                    'step': 'P1DT0H0M0S',
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "id": "mock-feedstock@1.0",
+        "properties": {
+            "cube:dimensions": {
+                "time": {
+                    "type": "temporal",
+                    "extent": ["2010-01-01T00:00:00Z", "2010-01-10T00:00:00Z"],
+                    "step": "P1DT0H0M0S",
                 },
-                'lon': {
-                    'type': 'spatial',
-                    'axis': 'x',
-                    'description': 'longitude',
-                    'extent': [5.0, 355.0],
-                    'step': 10.0,
+                "lon": {
+                    "type": "spatial",
+                    "axis": "x",
+                    "description": "longitude",
+                    "extent": [5.0, 355.0],
+                    "step": 10.0,
                 },
-                'lat': {
-                    'type': 'spatial',
-                    'axis': 'y',
-                    'description': 'latitude',
-                    'extent': [5.0, 175.0],
-                    'step': 10.0,
-                },
-            },
-            'cube:variables': {
-                'bar': {
-                    'type': 'data',
-                    'description': 'Beautiful Bar',
-                    'dimensions': ['time', 'lat', 'lon'],
-                    'shape': [10, 18, 36],
-                    'chunks': [10, 18, 36],
-                    'attrs': {'long_name': 'Beautiful Bar'},
-                },
-                'foo': {
-                    'type': 'data',
-                    'description': 'Fantastic Foo',
-                    'dimensions': ['time', 'lat', 'lon'],
-                    'shape': [10, 18, 36],
-                    'chunks': [10, 18, 36],
-                    'attrs': {'long_name': 'Fantastic Foo'},
+                "lat": {
+                    "type": "spatial",
+                    "axis": "y",
+                    "description": "latitude",
+                    "extent": [5.0, 175.0],
+                    "step": 10.0,
                 },
             },
-            'datetime': None,
-            'start_datetime': '2010-01-01T00:00:00Z',
-            'end_datetime': '2010-01-10T00:00:00Z',
+            "cube:variables": {
+                "bar": {
+                    "type": "data",
+                    "description": "Beautiful Bar",
+                    "dimensions": ["time", "lat", "lon"],
+                    "shape": [10, 18, 36],
+                    "chunks": [10, 18, 36],
+                    "attrs": {"long_name": "Beautiful Bar"},
+                },
+                "foo": {
+                    "type": "data",
+                    "description": "Fantastic Foo",
+                    "dimensions": ["time", "lat", "lon"],
+                    "shape": [10, 18, 36],
+                    "chunks": [10, 18, 36],
+                    "attrs": {"long_name": "Fantastic Foo"},
+                },
+            },
+            "datetime": None,
+            "start_datetime": "2010-01-01T00:00:00Z",
+            "end_datetime": "2010-01-10T00:00:00Z",
         },
-        'geometry': {
-            'type': 'Polygon',
-            'coordinates': [[[175.0, 5.0], [175.0, 355.0], [5.0, 355.0], [5.0, 5.0], [175.0, 5.0]]],
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[175.0, 5.0], [175.0, 355.0], [5.0, 355.0], [5.0, 5.0], [175.0, 5.0]]],
         },
-        'links': [],
-        'assets': {
-            'zarr-http': {
-                'href': f'http://127.0.0.1:{local_bakery_port}/test-bakery0/test-dataset.zarr',
-                'type': 'application/vnd+zarr',
-                'title': 'Mock Feedstock - HTTP File System Zarr root',
-                'description': 'HTTP File System Zarr root for random test data.',
-                'xarray:open_kwargs': {'consolidated': True},
-                'xarray:storage_options': None,
-                'roles': ['data', 'zarr', 'http'],
+        "links": [],
+        "assets": {
+            "zarr-http": {
+                "href": f"http://127.0.0.1:{local_bakery_port}/test-bakery0/test-dataset.zarr",
+                "type": "application/vnd+zarr",
+                "title": "Mock Feedstock - HTTP File System Zarr root",
+                "description": "HTTP File System Zarr root for random test data.",
+                "xarray:open_kwargs": {"consolidated": True},
+                "xarray:storage_options": None,
+                "roles": ["data", "zarr", "http"],
             },
-            'pangeo-forge-feedstock': {
-                'href': 'https://github.com/pangeo-forge/mock-feedstock/tree/v1.0',  # TODO: fix?
-                'type': '',
-                'title': 'Pangeo Forge Feedstock (GitHub repository) for mock-feedstock@1.0'
+            "pangeo-forge-feedstock": {
+                "href": "https://github.com/pangeo-forge/mock-feedstock/tree/v1.0",  # TODO: fix?
+                "type": "",
+                "title": "Pangeo Forge Feedstock (GitHub repository) for mock-feedstock@1.0",
             },
-            'jupyter-notebook-example-https': {'href': '_', 'type': '', 'title': ''},
-            'jupyter-notebook-example-s3': {'href': '_', 'type': '', 'title': ''},
+            "jupyter-notebook-example-https": {"href": "_", "type": "", "title": ""},
+            "jupyter-notebook-example-s3": {"href": "_", "type": "", "title": ""},
         },
-        'bbox': [5.0, 5.0, 175.0, 355.0],
-        'stac_extensions': ['https://stac-extensions.github.io/datacube/v2.0.0/schema.json'],
+        "bbox": [5.0, 5.0, 175.0, 355.0],
+        "stac_extensions": ["https://stac-extensions.github.io/datacube/v2.0.0/schema.json"],
     }
     return result

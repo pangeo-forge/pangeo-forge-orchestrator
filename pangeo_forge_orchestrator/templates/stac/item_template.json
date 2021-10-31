@@ -1,35 +1,35 @@
 {
-    "id": "",
-    "type": "Feature",
-    "links": [],
-    "bbox": "",
-    "geometry": "",
-    "stac_version": "1.0.0",
-    "properties": {
-        "datetime": null,
-        "start_datetime": null,
-        "end_datetime": null
+  "id": "",
+  "type": "Feature",
+  "links": [],
+  "bbox": "",
+  "geometry": "",
+  "stac_version": "1.0.0",
+  "properties": {
+    "datetime": null,
+    "start_datetime": null,
+    "end_datetime": null
+  },
+  "assets": {
+    "thumbnail": {
+      "href": "",
+      "type": "image/png",
+      "title": ""
     },
-    "assets": {
-        "thumbnail": {
-            "href": "",
-            "type": "image/png",
-            "title": ""
-        },
-        "pangeo-forge-feedstock": {
-            "href": "",
-            "type": "",
-            "title": ""
-        },
-        "jupyter-notebook-example-https": {
-            "href": "_",
-            "type": "",
-            "title": ""
-        },
-        "jupyter-notebook-example-s3": {
-            "href": "_",
-            "type": "",
-            "title": ""
-        }
+    "pangeo-forge-feedstock": {
+      "href": "",
+      "type": "",
+      "title": ""
+    },
+    "jupyter-notebook-example-https": {
+      "href": "_",
+      "type": "",
+      "title": ""
+    },
+    "jupyter-notebook-example-s3": {
+      "href": "_",
+      "type": "",
+      "title": ""
     }
+  }
 }
