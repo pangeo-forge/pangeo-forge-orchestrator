@@ -25,6 +25,7 @@ types-PyYAML = "^6.0.0"
 pytest = "^6.2"
 pre-commit = "^2.15.0"
 codecov = "^2.1.12"
+pytest-cov = "^3.0.0"
 
 [tool.poetry.scripts]
 pangeo-forge = "pangeo_forge_orchestrator.cli.main:app"
