@@ -63,16 +63,15 @@ jobs:
       - name: Run Tests
         shell: bash -l {0}
         run: |
-          pytest tests -v
-      #      --redirect-dask-worker-logs-to-stdout=DEBUG \
-      #      --cov=pangeo_forge_recipes --cov-config .coveragerc \
-      #      --cov-report term-missing \
-      #      --cov-report xml \
-      #      --durations=10 --durations-min=1.0
-      #- name: Codecov
-      #  uses: codecov/codecov-action@v2.0.2
-      #  with:
-      #    file: ./coverage.xml
-      #    env_vars: OS,PYTHON
-      #    name: codecov-umbrella
-      #    fail_ci_if_error: false
+          pytest tests -v --cov=pangeo_forge_orchestrator \
+            --cov-config .coveragerc \
+            --cov-report term-missing \
+            --cov-report xml \
+            --durations=10 --durations-min=1.0
+      - name: Codecov
+        uses: codecov/codecov-action@v2.0.2
+        with:
+          file: ./coverage.xml
+          env_vars: OS,PYTHON
+          name: codecov-umbrella
+          fail_ci_if_error: false
