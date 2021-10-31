@@ -20,6 +20,7 @@ xstac = { git = "https://github.com/cisaacstern/xstac.git", branch = "drop-adlfs
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2"
+pre-commit = "^2.15.0"
 
 [tool.poetry.scripts]
 pangeo-forge = "pangeo_forge_orchestrator.cli.main:app"
@@ -27,3 +28,6 @@ pangeo-forge = "pangeo_forge_orchestrator.cli.main:app"
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[settings]
+known_third_party = ["aiohttp", "click", "fsspec", "numpy", "pandas", "papermill", "pydantic", "pytest", "requests", "rich", "shapely", "typer", "xarray", "xstac", "yaml"]
