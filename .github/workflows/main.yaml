@@ -49,6 +49,7 @@ jobs:
       - name: install pangeo-forge-orchestrator plus deps
         shell: bash -l {0}
         run: |
+          conda install -c conda-forge poetry
           poetry install
       - name: print conda env
         shell: bash -l {0}
