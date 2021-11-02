@@ -9,7 +9,7 @@ license = "Apache 2.0"
 python = "^3.8"
 fsspec = "^2021.10.0"
 gcsfs = "^2021.10.0"
-pangeo-forge-recipes = { git = "https://github.com/pangeo-forge/pangeo-forge-recipes", branch = "main" }
+pangeo-forge-recipes = { git = "https://github.com/pangeo-forge/pangeo-forge-recipes", branch = "master" }
 papermill = "^2.3.3"
 pydantic = "^1.8.2"
 rich = "^10.12.0"
