@@ -6,7 +6,7 @@ authors = ["cisaacstern <62192187+cisaacstern@users.noreply.github.com>"]
 license = "Apache 2.0"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.7"
 fsspec = "^2021.10.0"
 gcsfs = "^2021.10.0"
 pangeo-forge-recipes = { git = "https://github.com/pangeo-forge/pangeo-forge-recipes", branch = "master" }
