@@ -134,7 +134,7 @@ There are many reasons why a user would want to review these Bakery details, but
 
 <summary> Output details </summary>
 
-```json
+```python
 {
     'type': 'Feature',
     'stac_version': '1.0.0',
