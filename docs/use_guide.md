@@ -134,6 +134,7 @@ There are many reasons why a user would want to review these Bakery details, but
 
 <summary> Output details </summary>
 
+```json
 {
     'type': 'Feature',
     'stac_version': '1.0.0',
@@ -241,6 +242,7 @@ There are many reasons why a user would want to review these Bakery details, but
     'bbox': [-89.875, 0.125, 89.875, 359.875],
     'stac_extensions': ['https://stac-extensions.github.io/datacube/v2.0.0/schema.json']
 }
+```
 
 
 </details>
@@ -248,4 +250,4 @@ There are many reasons why a user would want to review these Bakery details, but
 
 Metadata for this Item which exists in the dataset itself is extracted using [https://github.com/TomAugspurger/xstac](https://github.com/TomAugspurger/xstac).
 
-The `make-stac-item` command's `--to-file` flag provides functionality for writing the resulting STAC Item either to local disk or to a specified path in the Bakery storage target. The `--execute-notebooks` flag executes example notebooks using [papermill](https://papermill.readthedocs.io/en/latest/). There is also a draft feature in `pangeo_forge_orchestrator.notebook` for POST the executed notebooks to GitHub Gist, but this is currently [one of the gaps in testing](https://app.codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/blob/620989215c8d191d55c3080d403d6454a895230b/pangeo_forge_orchestrator/notebook.py).
+The `make-stac-item` command's `--to-file` flag provides functionality for writing the resulting STAC Item either to local disk or to a specified path in the Bakery storage target. The `--execute-notebooks` flag executes example notebooks using [papermill](https://papermill.readthedocs.io/en/latest/). There is also a draft feature in `pangeo_forge_orchestrator.notebook` for POSTing the executed notebooks to GitHub Gist, but this is currently [one of the gaps in testing](https://app.codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/blob/620989215c8d191d55c3080d403d6454a895230b/pangeo_forge_orchestrator/notebook.py).
