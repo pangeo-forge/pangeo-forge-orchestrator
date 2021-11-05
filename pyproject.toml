@@ -1,38 +1,10 @@
-[tool.poetry]
-name = "pangeo-forge-orchestrator"
-version = "0.1"
-description = "Tools for introspecting and executing the various modular components of Pangeo Forge."
-authors = ["cisaacstern <62192187+cisaacstern@users.noreply.github.com>"]
-license = "Apache 2.0"
-
-[tool.poetry.dependencies]
-python = "^3.8"
-fsspec = "^2021.10.0"
-gcsfs = "^2021.10.0"
-pangeo-forge-recipes = { git = "https://github.com/pangeo-forge/pangeo-forge-recipes", branch = "master" }
-papermill = "^2.3.3"
-pydantic = "^1.8.2"
-rich = "^10.12.0"
-s3fs = "^2021.10.0"
-shapely = "^1.7.1"
-typer = { extras = ["all"], version = "^0.4.0" }
-xstac = { git = "https://github.com/TomAugspurger/xstac", branch = "main" }
-jupyterlab = "^3.2.1"
-types-requests = "^2.25.11"
-types-PyYAML = "^6.0.0"
-
-[tool.poetry.dev-dependencies]
-pytest = "^6.2"
-pre-commit = "^2.15.0"
-codecov = "^2.1.12"
-pytest-cov = "^3.0.0"
-
-[tool.poetry.scripts]
-pangeo-forge = "pangeo_forge_orchestrator.cli.main:app"
+[tool.black]
+line-length = 100
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]
+build-backend = "setuptools.build_meta"
 
-[settings]
-known_third_party = ["aiohttp", "click", "fsspec", "numpy", "pandas", "papermill", "pydantic", "pytest", "requests", "rich", "shapely", "typer", "xarray", "xstac", "yaml"]
+[tool.setuptools_scm]
+write_to = "pangeo_forge_orchestrator/_version.py"
+write_to_template = "__version__ = '{version}'"
