@@ -16,7 +16,7 @@ def ls(
     bakery_id: Optional[str] = None,
     view: str = "general-info",
     feedstock_id: Optional[str] = None,
-):
+) -> None:
     """
     List available bakeries and associated build-logs.
     """
