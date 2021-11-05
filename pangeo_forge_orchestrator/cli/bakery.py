@@ -40,7 +40,7 @@ def ls(
                 print(table)
 
 
-def _table_from_bakery_logs(logs: dict):
+def _table_from_bakery_logs(logs: dict) -> Table:
     """
     """
     table = Table()
