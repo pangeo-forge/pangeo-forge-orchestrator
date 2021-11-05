@@ -17,18 +17,11 @@ def make_stac_item(
     endpoints: Optional[List[str]] = None,
     print_result: bool = True,
     to_file: Optional[bool] = False,
-    execute_notebooks: bool = False,
 ):
     """
     Generate a STAC Item for a `bakery_name` + `run_id` pair.
     """
-    kw = dict(
-        bakery_name=bakery_name,
-        run_id=run_id,
-        print_result=print_result,
-        to_file=to_file,
-        execute_notebooks=execute_notebooks,
-    )
+    kw = dict(bakery_name=bakery_name, run_id=run_id, print_result=print_result, to_file=to_file,)
     if bakery_database_path:
         kw.update(dict(bakery_database_path=bakery_database_path))
     if feedstock_metadata_url_base:

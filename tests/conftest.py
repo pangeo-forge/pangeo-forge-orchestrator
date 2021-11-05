@@ -343,8 +343,6 @@ def stac_item_result(bakery_http_server):
                 "type": "",
                 "title": "Pangeo Forge Feedstock (GitHub repository) for mock-feedstock@1.0",
             },
-            "jupyter-notebook-example-https": {"href": "_", "type": "", "title": ""},
-            "jupyter-notebook-example-s3": {"href": "_", "type": "", "title": ""},
         },
         "bbox": [5.0, 5.0, 175.0, 355.0],
         "stac_extensions": ["https://stac-extensions.github.io/datacube/v2.0.0/schema.json"],

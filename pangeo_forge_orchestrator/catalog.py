@@ -7,7 +7,6 @@ import xstac
 from rich import print
 
 from .components import Bakery, FeedstockMetadata
-from .notebook import ExecuteNotebook
 
 
 def generate(
@@ -16,16 +15,11 @@ def generate(
     bakery_database_path=None,
     bakery_stac_relative_path=None,
     feedstock_metadata_url_base=None,
-    to_file=False,
     print_result=False,
-    execute_notebooks=False,
-    upload_notebooks=True,
-    post_gist=False,
+    to_file=False,
     endpoints=["s3", "https"],
 ):
-    if to_file is False and execute_notebooks is True:
-        raise ValueError("Must write STAC Item to file to execute notebooks.")
-    write_access = True if to_file and execute_notebooks else False
+    write_access = True if to_file else False
     item_result, feedstock_id, bakery = _generate(
         bakery_name=bakery_name,
         run_id=run_id,
@@ -41,31 +35,11 @@ def generate(
         return item_result
     elif to_file:
         stac_item_filename = f"{feedstock_id}.json"
-        # first dump; second required in "bakery" block below, if `execute_notebooks == True`
         with open(stac_item_filename, mode="w") as outfile:
             json.dump(item_result, outfile)
-        if execute_notebooks:
-            exnb = ExecuteNotebook(feedstock_id)
-            if not upload_notebooks:
-                raise NotImplementedError("Currently can't execute notebook without uploading.")
-            else:
-                # upload provisional STAC Item to Bakery for notebook execution from correct src
-                item_dst_path = f"{bakery.get_stac_path(write_access=True)}{stac_item_filename}"
-                bakery.put(stac_item_filename, item_dst_path)
-                nb_local_paths = []
-                for endpoint in endpoints:
-                    # next line has to happen after item is dumped to local file
-                    nb_local_path = exnb.execute(endpoint, item_dst_path)
-                    nb_local_paths.append(nb_local_path)
-                    if post_gist:
-                        nb_url = exnb.post_gist(nb_local_path)
-                        nb_asset = item_result["assets"][f"jupyter-notebook-example-{endpoint}"]
-                        nb_asset["href"] = nb_url
-                # clobber local Item with updated Item before re-uploadeding to Bakery
-                with open(stac_item_filename, mode="w") as outfile:
-                    json.dump(item_result, outfile)
-                # clobber provisional Bakery Item with Item that's been updated with `nb_urls`
-                bakery.put(stac_item_filename, item_dst_path)
+        # if to_bakery:
+        item_dst_path = f"{bakery.get_stac_path(write_access=True)}{stac_item_filename}"
+        bakery.put(stac_item_filename, item_dst_path)
 
         return item_result
 
