@@ -36,6 +36,8 @@ repos:
     hooks:
     -   id: mypy
         exclude: tests
+        additional_dependencies:
+          - 'pydantic'
 
 -   repo: https://github.com/pycqa/isort
     rev: 5.5.4
