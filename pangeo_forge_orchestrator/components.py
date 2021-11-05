@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import re
@@ -93,30 +94,8 @@ class Bakery(BakeryDatabase):
             self.private_storage_options = self.target.private.storage_options
             self.private_prefix = self.target.private.prefix
             private_fs_cls = get_filesystem_class(self.private_protocol)
-            kw = self._recursively_replace_env_vars(
-                self.private_storage_options.dict(exclude_none=True)
-            )
+            kw = _recursively_replace_env_vars(self.private_storage_options.dict(exclude_none=True))
             self.credentialed_fs = private_fs_cls(**kw)
-
-    def _recursively_replace_env_vars(self, d):
-        # this method is both (1) not a pure function (mutates instance attributes);
-        # and (2) recursive. So it's perhaps more likely than other methods to create problems.
-        # NB: We need recursion b/c `StorageOptions` can contain nested dicts of arbitary depth.
-        # Let's keep an eye out, but I *think* it works as intendented.
-        for k, v in d.items():
-            if isinstance(v, dict):
-                d[k] = self._recursively_replace_env_vars(v)  # noqa
-            elif type(v) == str and v.startswith("{") and v.endswith("}"):
-                v = self.remove_curly_braces(v)
-                if v not in os.environ.keys():
-                    raise KeyError(f"Environment variable {v} not set.")
-                else:
-                    d[k] = os.environ[v]
-        return d
-
-    @staticmethod
-    def remove_curly_braces(v):
-        return re.search("{(.*?)}", v).group(1).strip()
 
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.logs.items() if feedstock in v.feedstock}
@@ -175,3 +154,22 @@ class FeedstockMetadata:
         with fsspec.open(self.metadata_url) as f:
             read_yaml = f.read()
             self.metadata_dict = yaml.safe_load(read_yaml)
+
+
+def _remove_curly_braces(v):
+    return re.search("{(.*?)}", v).group(1).strip()
+
+
+def _recursively_replace_env_vars(d):
+    # NB: We need recursion b/c `StorageOptions` can contain nested dicts of arbitary depth.
+    d = copy.deepcopy(d)
+    for k, v in d.items():
+        if isinstance(v, dict):
+            d[k] = _recursively_replace_env_vars(v)  # noqa
+        elif type(v) == str and v.startswith("{") and v.endswith("}"):
+            v = _remove_curly_braces(v)
+            if v not in os.environ.keys():
+                raise KeyError(f"Environment variable {v} not set.")
+            else:
+                d[k] = os.environ[v]
+    return d
