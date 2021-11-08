@@ -27,8 +27,6 @@ def check_stdout(subcmd, module, drop_chars, eval_dict=False):
     if eval_dict:
         d0 = ast.literal_eval(out)
         d1 = ast.literal_eval(subcmd[1])
-        print("\n >>", d0)
-        print("\n >>", d1)
         assert d0 == d1
     else:
         out = drop_characters(out, drop_chars=drop_chars)
