@@ -11,10 +11,10 @@ logs_table = (
 )
 cmds_and_responses = [
     ["ls", "['{bakery_name}']"],
-    ["ls --bakery-id {bakery_name}", "{meta_yaml_dict}"],
+    ["ls --bakery-name {bakery_name}", "{meta_yaml_dict}"],
     # TODO: more entries for build logs fixture, so the full & filtered tables are not identical
-    ["ls --bakery-id {bakery_name} --view build-logs", logs_table],
-    ["ls --bakery-id {bakery_name} --view build-logs --feedstock-id {fstock_name}", logs_table],
+    ["ls --bakery-name {bakery_name} --view build-logs", logs_table],
+    ["ls --bakery-name {bakery_name} --view build-logs --feedstock-id {fstock_name}", logs_table],
 ]
 
 
