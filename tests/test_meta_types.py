@@ -186,6 +186,7 @@ def test_storage_options(bakery_meta_dict, endpoint, invalidate):
 @pytest.mark.parametrize("invalid", [None, "timestamp", "feedstock", "recipe", "path"])
 def test_run_record(invalid, bakery_http_server, invalid_feedstock_names):
     logs = bakery_http_server[-1]
+    logs = logs.to_dict(orient="index")
 
     for k in logs.keys():
         if not invalid:
@@ -224,6 +225,7 @@ def test_run_record(invalid, bakery_http_server, invalid_feedstock_names):
 @pytest.mark.parametrize("invalid", [None, "run_id", "runrecord"])
 def test_build_logs(invalid, bakery_http_server):
     logs = bakery_http_server[-1]
+    logs = logs.to_dict(orient="index")
 
     if not invalid:
         BuildLogs(logs=logs)

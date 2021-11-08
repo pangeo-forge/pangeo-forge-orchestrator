@@ -10,7 +10,7 @@ app = typer.Typer()
 @app.command()
 def make_stac_item(
     bakery_name: str,  # TODO: Provide stricter type from `..meta_types.bakery` here
-    run_id: str,  # TODO: same as above
+    run_id: int,
     bakery_database_path: Optional[str] = None,
     # bakery_stac_relative_path: Optional[str] = None,
     feedstock_metadata_url_base: Optional[str] = None,

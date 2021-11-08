@@ -1,11 +1,11 @@
 import copy
-import json
 import os
 import re
 from dataclasses import asdict, dataclass
 from typing import Optional
 
 import fsspec
+import pandas as pd
 import yaml  # type: ignore
 from fsspec.registry import get_filesystem_class
 from pydantic.dataclasses import dataclass as pydantic_dataclass
@@ -47,9 +47,9 @@ class Bakery:
             d = yaml.safe_load(f.read())
             self.bakery_database = bakery_database_from_dict(d)
 
-        with self.default_fs.open(f"{self.get_base_path()}/build-logs.json") as f:
-            build_logs_dict = json.load(f)
-            self.build_logs = BuildLogs(logs=build_logs_dict)
+        with self.default_fs.open(f"{self.get_base_path()}/build-logs.csv") as f:
+            df = pd.read_csv(f)
+            self.build_logs = BuildLogs(logs=df.to_dict(orient="index"))
 
         if self.write_access:
             if not hasattr(self.target, "private"):

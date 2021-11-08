@@ -57,7 +57,7 @@ def _table_from_bakery_logs(logs: dict) -> Table:
     for k, v in columns.items():
         table.add_column(k, style=v)
     rows = [
-        [k, str(logs[k].timestamp), logs[k].feedstock, logs[k].recipe, logs[k].path]
+        [str(k), str(logs[k].timestamp), logs[k].feedstock, logs[k].recipe, logs[k].path]
         for k in reversed(logs.keys())
     ]
     for r in rows:

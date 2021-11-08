@@ -1,4 +1,3 @@
-import json
 import os
 import socket
 import subprocess
@@ -154,19 +153,19 @@ def make_test_bakery_yaml(http_base, tempdir, real_target=False):
 
 
 def make_build_logs_local_path(zarr_fname, tempdir):
-    fname = "build-logs.json"
-    logs = {
-        "00000": {
-            "timestamp": "2021-09-25 00:00:00",
-            "feedstock": "mock-feedstock@1.0",
-            "recipe": "recipe",
-            "path": zarr_fname,
-        }
-    }
+    fname = "build-logs.csv"
     local_path = tempdir.join(fname)
-    with open(local_path, mode="w") as f:
-        json.dump(logs, f)
-
+    df = pd.DataFrame.from_dict(dict(timestamp=[], feedstock=[], recipe=[], path=[]))
+    df.to_csv(local_path, index=False)
+    logs = pd.DataFrame.from_dict(
+        dict(
+            timestamp=["2021-09-25 00:00:00"],
+            feedstock=["mock-feedstock@1.0"],
+            recipe=["recipe"],
+            path=[zarr_fname],
+        ),
+    )
+    logs.to_csv(local_path, mode="a", index=False, header=False)
     return local_path, fname, logs
 
 
@@ -238,7 +237,7 @@ def bakery_http_server(tmpdir_factory, request):
 def github_http_server(tmpdir_factory, request, bakery_http_server, meta_yaml):
     tempdir_0 = tmpdir_factory.mktemp("mock-github")
 
-    # TODO: generate path from feedstock in `build-logs.json`; probably make `logs` dict a fixture.
+    # TODO: generate path from feedstock in `build-logs.csv`; probably make `logs` df a fixture.
     meta_path = tempdir_0 / "pangeo-forge" / "mock-feedstock" / "v1.0" / "feedstock"
     os.makedirs(meta_path)
 

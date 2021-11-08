@@ -22,14 +22,14 @@ cmds_and_responses = [
 def bakery_subcommand(request, github_http_server, bakery_http_server, drop_chars=("\n", " ")):
     _, bakery_database_entry, bakery_meta_http_path = github_http_server
     bakery_name = list(bakery_database_entry)[0]
-    build_logs_dict = bakery_http_server[-1]
+    build_logs_dict = bakery_http_server[-1].to_dict(orient="index")
     run_id = list(build_logs_dict)[0]
     request.param[0] = request.param[0].replace("ls", f"ls --custom-db {bakery_meta_http_path}")
     substitutions = {
         "{bakery_name}": bakery_name,
         "{meta_yaml_dict}": str(bakery_database_entry[bakery_name]),
         "{fstock_name}": build_logs_dict[run_id]["feedstock"],
-        "{run_id}": run_id,
+        "{run_id}": str(run_id),
         "{timestamp}": str(build_logs_dict[run_id]["timestamp"]),
         "{recipe}": build_logs_dict[run_id]["recipe"],
         "{zarr_path}": build_logs_dict[run_id]["path"],

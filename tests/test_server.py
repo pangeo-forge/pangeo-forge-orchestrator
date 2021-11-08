@@ -4,6 +4,7 @@ import os
 
 import aiohttp
 import fsspec
+import pandas as pd
 import pytest
 import xarray as xr
 import yaml
@@ -34,10 +35,9 @@ def test_bakery_server_zarr_store(bakery_http_server):
 def test_bakery_server_build_logs(bakery_http_server):
     _, _, _, _, _, build_logs_http_path, logs = bakery_http_server
 
-    with fsspec.open(build_logs_http_path) as f:
-        build_logs_dict = json.loads(f.read())
+    build_logs = pd.read_csv(build_logs_http_path)
 
-    assert build_logs_dict == logs
+    assert build_logs.equals(logs)
 
 
 @pytest.mark.parametrize("creds", [["foo", "bar"], ["foo", "b"], ["f", "bar"], "from_env"])

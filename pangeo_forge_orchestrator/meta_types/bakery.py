@@ -105,8 +105,6 @@ clusters = Literal[FARGATE_CLUSTER, AKS_CLUSTER]  # type: ignore
 
 # ensure that secrets are passed as env var names enclosed in curly braces, e.g. `"{MY_AWS_KEY}"`
 env_var_name = constr(regex=r"{(.*?)}")
-# accepts only strings of integer values 0-9
-run_identifier = constr(regex=r"^\d+$")
 # see https://github.com/pangeo-forge/roadmap/pull/34; the "@" delimiter is introduced here
 feedstock_name_with_version = constr(regex=r".*-feedstock@(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 # TODO: possibly move recipe name validation into `pangeo_forge_orchestrator.meta_types.meta`
@@ -222,8 +220,8 @@ class RunRecord:
 
 @dataclass(frozen=True)
 class BuildLogs:
-    logs: Dict[run_identifier, RunRecord]  # type: ignore
+    logs: Dict[int, RunRecord]
 
     @property
-    def run_ids(self) -> List[run_identifier]:  # type: ignore
+    def run_ids(self) -> List[int]:
         return list(self.logs)

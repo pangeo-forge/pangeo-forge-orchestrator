@@ -15,7 +15,7 @@ def test_generate(
     bakery_name = list(bakery_database_entry)[0]
     kw = dict(
         bakery_name=bakery_name,
-        run_id="00000",
+        run_id=0,
         bakery_database_path=bakery_database_http_path,
         bakery_stac_relative_path="",
         feedstock_metadata_url_base=github_http_base,
