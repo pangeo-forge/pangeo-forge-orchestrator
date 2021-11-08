@@ -62,7 +62,7 @@ def _generate(
 
     bakery_kw = dict(name=bakery_name, write_access=write_access)
     if bakery_database_path:
-        bakery_kw.update(dict(path=bakery_database_path))
+        bakery_kw.update(dict(database_path=bakery_database_path))
     if bakery_stac_relative_path != None:  # noqa; empty strings don't eval w/ `cond is not None`
         bakery_kw.update(dict(stac_relative_path=bakery_stac_relative_path))
     bakery = Bakery(**bakery_kw)
