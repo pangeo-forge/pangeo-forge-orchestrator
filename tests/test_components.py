@@ -10,7 +10,7 @@ from fsspec.implementations.http import HTTPFileSystem
 from pydantic import ValidationError
 
 from pangeo_forge_orchestrator.components import Bakery, FeedstockMetadata
-from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta
+from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, BakeryName
 
 from .test_server import write_test_file
 
@@ -21,12 +21,10 @@ def test_bakery_component_read_only(invalid, github_http_server, bakery_http_ser
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
     if not invalid:
-        b = Bakery(name=name, path=bakery_database_http_path)
-        assert b.bakeries == bakery_database_entry
-        # ensure the bakery's metadata is valid; is this sufficiently tested elsewhere?
-        bakery_name = list(b.bakeries)[0]
-        bm = BakeryMeta(**b.bakeries[bakery_name])
-        assert bm is not None
+        b = Bakery(name=name, database_path=bakery_database_http_path)
+        assert b.bakery_database.bakeries == {
+            BakeryName(name=k): BakeryMeta(**v) for k, v in bakery_database_entry.items()
+        }
         # check read access
         for run_id in b.build_logs.run_ids:
             # mapper not strictly necessary for http urls, but method is more generalized this way
@@ -35,13 +33,13 @@ def test_bakery_component_read_only(invalid, github_http_server, bakery_http_ser
             ds = xr.open_zarr(mapper, consolidated=True)
             xr.testing.assert_identical(ds, reference_ds)
     elif invalid == "database_path":
-        with pytest.raises(ValidationError):
+        with pytest.raises(FileNotFoundError):
             path = bakery_database_http_path.replace("://", "")
-            Bakery(name=name, path=path)
+            Bakery(name=name, database_path=path)
     elif invalid == "bakery_name":
         with pytest.raises(ValidationError):
             name = name.replace(".bakery.", "")
-            Bakery(name=name, path=bakery_database_http_path)
+            Bakery(name=name, database_path=bakery_database_http_path)
 
 
 @pytest.mark.parametrize("invalid", [None, "env_var_key", "env_var_value"])
@@ -51,7 +49,7 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
     name = list(bakery_database_entry)[0]
 
     if not invalid:
-        b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
+        b = Bakery(name=name, database_path=bakery_database_http_path, write_access=True)
         assert isinstance(b.credentialed_fs, HTTPFileSystem)
 
         content, src_path, dst_path, _ = write_test_file(tempdir, http_base)
@@ -67,10 +65,10 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
     elif invalid == "env_var_key":
         del os.environ["TEST_BAKERY_BASIC_AUTH"]
         with pytest.raises(KeyError):
-            Bakery(name=name, path=bakery_database_http_path, write_access=True)
+            Bakery(name=name, database_path=bakery_database_http_path, write_access=True)
     elif invalid == "env_var_value":
         os.environ["TEST_BAKERY_BASIC_AUTH"] = "incorrect plain text auth string"
-        b = Bakery(name=name, path=bakery_database_http_path, write_access=True)
+        b = Bakery(name=name, database_path=bakery_database_http_path, write_access=True)
         content, src_path, dst_path, _ = write_test_file(tempdir, http_base)
         with pytest.raises(ClientResponseError):
             b.put(src_path, dst_path)
