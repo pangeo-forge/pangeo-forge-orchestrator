@@ -13,7 +13,7 @@ def test_bakery_database_validation(invalid, github_http_server):
         validate_bakery_database(path=bakery_database_http_path)
     elif invalid == "http_path":
         path = bakery_database_http_path.replace("://", "")
-        with pytest.raises(PangeoForgeValidationError):
+        with pytest.raises(FileNotFoundError):
             validate_bakery_database(path=path)
     elif invalid == "content":
         with pytest.raises(PangeoForgeValidationError):
