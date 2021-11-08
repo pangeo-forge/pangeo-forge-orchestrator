@@ -1,11 +1,10 @@
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union, get_args
 
-import fsspec
-import yaml  # type: ignore
 from fsspec.registry import known_implementations
-from pydantic import AnyUrl, BaseModel, FilePath, HttpUrl, constr
+from pydantic import BaseModel, constr, validator
 from pydantic.dataclasses import dataclass
+from pydantic.networks import HttpUrl
 
 regions = Literal[
     "aws.us-east-1",
@@ -104,9 +103,6 @@ FARGATE_CLUSTER = "aws.fargate"
 AKS_CLUSTER = "azure.aks"
 clusters = Literal[FARGATE_CLUSTER, AKS_CLUSTER]  # type: ignore
 
-PANGEO_FORGE_BAKERY_DATABASE = (
-    "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
-)
 # ensure that secrets are passed as env var names enclosed in curly braces, e.g. `"{MY_AWS_KEY}"`
 env_var_name = constr(regex=r"{(.*?)}")
 # accepts only strings of integer values 0-9
@@ -185,42 +181,35 @@ class BakeryMeta:
     org_website: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class BakeryName:
     name: str
-    region: Optional[regions] = None
-    organization_url: Optional[HttpUrl] = None
 
-    def __post_init__(self):
-        split = self.name.split(".bakery.")
-        self.region = split[-1]
+    @validator("name")
+    def name_must_match_spec(cls, v):
+
+        split = v.split(".bakery.")
+        region = split[-1]
+        assert region in get_args(regions)
+
+        class CheckHttpUrl(BaseModel):
+            url: HttpUrl
+
         reversed_url_list = split[0].split(".")
-        self.organization_url = f"https://{'.'.join(reversed(reversed_url_list))}"
+        organization_url = f"https://{'.'.join(reversed(reversed_url_list))}"
+        CheckHttpUrl(url=organization_url)
+
+        return v
 
 
-class BakeryDatabase(BaseModel):
-    """A database of Pangeo Forge Bakeries.
+@dataclass
+class BakeryDatabase:
+    bakeries: Dict[BakeryName, BakeryMeta]
 
-    :param path: Path to local or remote YAML file with content conforming to ``BakeryMeta`` model.
-    :param bakeries: The content of the YAML file to which ``path`` points.
-    """
 
-    path: Optional[Union[AnyUrl, FilePath]] = None  # Not optional, but assigned in __init__
-    bakeries: Optional[dict] = None
-    names: Optional[List[BakeryName]] = None
-    parsed_bakeries: Optional[Dict[str, BakeryMeta]] = None
-
-    class Config:
-        validate_assignment = True  # validate `__init__` assignments, e.g. `self.path`
-        arbitrary_types_allowed = True  # for `fsspec.AbstractFileSystem` in child model
-
-    def __init__(self, path=PANGEO_FORGE_BAKERY_DATABASE):
-        super().__init__()
-        self.path = path
-        with fsspec.open(self.path) as f:
-            self.bakeries = yaml.safe_load(f.read())
-        self.names = [BakeryName(name=name) for name in list(self.bakeries)]
-        self.parsed_bakeries = {n.name: BakeryMeta(**self.bakeries[n.name]) for n in self.names}
+def bakery_database_from_dict(d):
+    d = {BakeryName(name=k): BakeryMeta(**v) for k, v in d.items()}
+    return BakeryDatabase(bakeries=d)
 
 
 @dataclass

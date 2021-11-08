@@ -6,7 +6,6 @@ import yaml
 from pydantic import ValidationError
 
 from pangeo_forge_orchestrator.meta_types.bakery import (
-    BakeryDatabase,
     BakeryMeta,
     BakeryName,
     BuildLogs,
@@ -14,6 +13,7 @@ from pangeo_forge_orchestrator.meta_types.bakery import (
     RunRecord,
     StorageOptions,
     Target,
+    bakery_database_from_dict,
 )
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -60,8 +60,7 @@ def test_bakery_name(invalid, github_http_server):
     _, bakery_database_entry, _ = github_http_server
     name = list(bakery_database_entry)[0]
     if not invalid:
-        bn = BakeryName(name=name)
-        assert bn.organization_url == "https://test.org"
+        _ = BakeryName(name=name)
     elif invalid == "region":
         with pytest.raises(ValidationError):
             BakeryName(name=name[:-1])
@@ -70,17 +69,36 @@ def test_bakery_name(invalid, github_http_server):
             BakeryName(name=name.replace(".bakery.", ""))
 
 
-@pytest.mark.parametrize("invalid", [None, "database_path"])
+@pytest.mark.parametrize("invalid", [None, "bakery_name", "bakery_meta_keys", "bakery_meta_vals"])
 def test_bakery_database(invalid, github_http_server):
     _, bakery_database_entry, bakery_database_http_path = github_http_server
+
+    with fsspec.open(bakery_database_http_path) as f:
+        d = yaml.safe_load(f.read())
+
     if not invalid:
-        bd = BakeryDatabase(path=bakery_database_http_path)
-        assert bd is not None
-        assert bd.bakeries == bakery_database_entry
-    elif invalid == "database_path":
+        bd = bakery_database_from_dict(d)
+        for i, kv in enumerate(bakery_database_entry.items()):
+            k, v = kv
+            bn = BakeryName(k)
+            assert list(bd.bakeries)[i] == bn
+            assert bd.bakeries[bn] == BakeryMeta(**v)
+    elif invalid == "bakery_name":
+        d_copy = copy.deepcopy(d)
+        for k in d.keys():
+            d_copy[k.replace(".bakery.", "")] = d_copy.pop(k)
         with pytest.raises(ValidationError):
-            path = bakery_database_http_path.replace("://", "")
-            BakeryDatabase(path=path)
+            _ = bakery_database_from_dict(d_copy)
+    elif invalid == "bakery_meta_keys":
+        d_copy = copy.deepcopy(d)
+        _ = d_copy[list(d_copy)[0]].pop("targets")
+        with pytest.raises(TypeError):
+            _ = bakery_database_from_dict(d_copy)
+    elif invalid == "bakery_meta_vals":
+        d_copy = copy.deepcopy(d)
+        _ = d_copy[list(d_copy)[0]]["targets"] = "Not a `targets` dict"
+        with pytest.raises(ValidationError):
+            _ = bakery_database_from_dict(d_copy)
 
 
 @pytest.mark.parametrize("invalidate", [None, "keys", "vals"])
