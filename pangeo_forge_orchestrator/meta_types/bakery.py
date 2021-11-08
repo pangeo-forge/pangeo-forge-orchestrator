@@ -133,14 +133,14 @@ class StorageOptions(BaseModel):
         extra = "forbid"
 
 
-@dataclass
+@dataclass(frozen=True)
 class Endpoint:
     protocol: KnownImplementations  # type: ignore
     storage_options: Optional[StorageOptions] = None
     prefix: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class Target:
     region: regions
     private: Optional[Endpoint] = None
@@ -149,7 +149,7 @@ class Target:
     prefix: Optional[str] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class FargateClusterOptions:
     vpc: str
     cluster_arn: str
@@ -158,7 +158,7 @@ class FargateClusterOptions:
     security_groups: List[str]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Cluster:
     type: clusters  # type: ignore
     pangeo_forge_version: str
@@ -172,7 +172,7 @@ class Cluster:
     cluster_options: Optional[FargateClusterOptions] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class BakeryMeta:
     region: regions
     targets: Dict[str, Target]
@@ -202,7 +202,7 @@ class BakeryName:
         return v
 
 
-@dataclass
+@dataclass(frozen=True)
 class BakeryDatabase:
     bakeries: Dict[BakeryName, BakeryMeta]
 
@@ -212,7 +212,7 @@ def bakery_database_from_dict(d):
     return BakeryDatabase(bakeries=d)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RunRecord:
     timestamp: datetime
     feedstock: feedstock_name_with_version  # type: ignore
@@ -220,10 +220,10 @@ class RunRecord:
     path: str  # TODO: Define naming convention; cf. https://github.com/pangeo-forge/roadmap/pull/27
 
 
-@dataclass
+@dataclass(frozen=True)
 class BuildLogs:
     logs: Dict[run_identifier, RunRecord]  # type: ignore
-    run_ids: Optional[List[run_identifier]] = None  # type: ignore
 
-    def __post_init__(self):
-        self.run_ids = list(self.logs)
+    @property
+    def run_ids(self) -> List[run_identifier]:  # type: ignore
+        return list(self.logs)
