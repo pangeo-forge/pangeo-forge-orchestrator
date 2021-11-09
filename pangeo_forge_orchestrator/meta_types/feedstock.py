@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 from typing import List, Literal, Optional
+
+from pydantic.dataclasses import dataclass
 
 
 @dataclass
@@ -48,7 +49,7 @@ class Maintainer:
 
 
 @dataclass
-class Meta:
+class MetaDotYaml:
     title: str
     description: str
     pangeo_forge_version: str

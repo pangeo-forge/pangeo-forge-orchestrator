@@ -20,6 +20,7 @@ from .meta_types.bakery import (
     bakery_database_from_dict,
     feedstock_name_with_version,
 )
+from .meta_types.feedstock import MetaDotYaml
 
 PANGEO_FORGE_BAKERY_DATABASE = (
     "https://raw.githubusercontent.com/pangeo-forge/bakery-database/main/bakeries.yaml"
@@ -167,8 +168,8 @@ class FeedstockMetadata:
             f"{self.metadata_url_format.format(name=name, majv=majv, minv=minv)}"
         )
         with fsspec.open(self.metadata_url) as f:
-            read_yaml = f.read()
-            self.metadata_dict = yaml.safe_load(read_yaml)
+            d = yaml.safe_load(f.read())
+            self.meta_dot_yaml = MetaDotYaml(**d)
 
 
 def _remove_curly_braces(v):

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from pangeo_forge_orchestrator.components import Bakery, FeedstockMetadata
 from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, BakeryName
+from pangeo_forge_orchestrator.meta_types.feedstock import MetaDotYaml
 
 from .test_server import write_test_file
 
@@ -79,7 +80,7 @@ def test_feedstock_metadata(github_http_server, meta_yaml, invalid, invalid_feed
     github_http_base, _, _ = github_http_server
     if not invalid:
         f = FeedstockMetadata(feedstock_id="mock-feedstock@1.0", metadata_url_base=github_http_base)
-        assert f.metadata_dict == meta_yaml
+        assert f.meta_dot_yaml == MetaDotYaml(**meta_yaml)
     elif invalid == "metadata_url_base":
         with pytest.raises(FileNotFoundError):
             FeedstockMetadata(feedstock_id="mock-feedstock@1.0")

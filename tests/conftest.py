@@ -192,9 +192,9 @@ def meta_yaml():
                     "description": "NumPy random data.",
                     "roles": ["producer", "licensor"],
                     "url": "https://pangeo-forge-random-data.org",
-                    "license": "CC-BY-4.0",
                 }
             ],
+            "license": "CC-BY-4.0",
         },
         "maintainers": [
             {

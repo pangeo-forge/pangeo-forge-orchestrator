@@ -1,4 +1,5 @@
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import shapely.geometry
@@ -106,8 +107,8 @@ def _generate(
         longname = f"{ep.upper()} File System"
         path = bakery.get_dataset_path(run_id)
         assets[key]["href"] = path
-        assets[key]["title"] = f"{fstock.metadata_dict['title']} - {longname} Zarr root"
-        desc = fstock.metadata_dict["description"]
+        assets[key]["title"] = f"{fstock.meta_dot_yaml.title} - {longname} Zarr root"
+        desc = fstock.meta_dot_yaml.description
         desc = f"{desc[0].lower()}{desc[1:]}"
         # all descriptions may not work with this format string; generalize more, perhaps.
         assets[key]["description"] = f"{longname} Zarr root for {desc}"
@@ -128,7 +129,7 @@ def _generate(
 
     # ~~~~~~~~~~~~~~~~~~~~ Thumbnail Asset ~~~~~~~~~~~~~~~~~~~~~~~
     # how are we going to create thumbnails? link them from `meta.yaml`?
-    if "thumbnails" not in fstock.metadata_dict.keys():
+    if "thumbnails" not in asdict(fstock.meta_dot_yaml).keys():
         del assets["thumbnail"]
 
     # ---------------------- XSTAC -------------------------------
