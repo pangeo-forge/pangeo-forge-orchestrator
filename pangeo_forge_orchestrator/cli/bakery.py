@@ -4,7 +4,7 @@ import typer
 from rich import print
 from rich.table import Table
 
-from ..components import Bakery
+from ..interfaces import Bakery
 from ..meta_types.bakery import bakery_database_from_dict
 from ..validation.validate_bakery_database import open_bakery_database_yaml
 

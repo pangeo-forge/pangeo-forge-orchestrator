@@ -147,7 +147,7 @@ class Bakery:
 
 
 @pydantic_dataclass
-class FeedstockMetadata:
+class Feedstock:
 
     feedstock_id: feedstock_name_with_version  # type: ignore
     url_format: str = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"

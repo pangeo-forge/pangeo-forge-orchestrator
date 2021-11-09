@@ -2,7 +2,7 @@ import fsspec
 import yaml
 from pydantic import ValidationError
 
-from ..components import PANGEO_FORGE_BAKERY_DATABASE
+from ..interfaces import PANGEO_FORGE_BAKERY_DATABASE
 from ..meta_types.bakery import bakery_database_from_dict
 from .exceptions import PangeoForgeValidationError
 

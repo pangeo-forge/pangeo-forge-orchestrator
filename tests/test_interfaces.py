@@ -9,7 +9,7 @@ from aiohttp.client_exceptions import ClientResponseError
 from fsspec.implementations.http import HTTPFileSystem
 from pydantic import ValidationError
 
-from pangeo_forge_orchestrator.components import Bakery, FeedstockMetadata
+from pangeo_forge_orchestrator.interfaces import Bakery, Feedstock
 from pangeo_forge_orchestrator.meta_types.bakery import BakeryMeta, BakeryName
 from pangeo_forge_orchestrator.meta_types.feedstock import MetaDotYaml
 
@@ -17,7 +17,7 @@ from .test_server import write_test_file
 
 
 @pytest.mark.parametrize("invalid", [None, "database_path", "bakery_name"])
-def test_bakery_component_read_only(invalid, github_http_server, bakery_http_server):
+def test_bakery_interface_read_only(invalid, github_http_server, bakery_http_server):
     _, _, _, zarr_http_path, reference_ds, _, _ = bakery_http_server
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
@@ -44,7 +44,7 @@ def test_bakery_component_read_only(invalid, github_http_server, bakery_http_ser
 
 
 @pytest.mark.parametrize("invalid", [None, "env_var_key", "env_var_value"])
-def test_bakery_component_write_access(invalid, github_http_server, bakery_http_server):
+def test_bakery_interface_write_access(invalid, github_http_server, bakery_http_server):
     tempdir, http_base = bakery_http_server[:2]
     _, bakery_database_entry, bakery_database_http_path = github_http_server
     name = list(bakery_database_entry)[0]
@@ -79,12 +79,12 @@ def test_bakery_component_write_access(invalid, github_http_server, bakery_http_
 def test_feedstock_metadata(github_http_server, meta_yaml, invalid, invalid_feedstock_names):
     github_http_base, _, _ = github_http_server
     if not invalid:
-        f = FeedstockMetadata(feedstock_id="mock-feedstock@1.0", metadata_url_base=github_http_base)
+        f = Feedstock(feedstock_id="mock-feedstock@1.0", metadata_url_base=github_http_base)
         assert f.meta_dot_yaml == MetaDotYaml(**meta_yaml)
     elif invalid == "metadata_url_base":
         with pytest.raises(FileNotFoundError):
-            FeedstockMetadata(feedstock_id="mock-feedstock@1.0")
+            Feedstock(feedstock_id="mock-feedstock@1.0")
     elif invalid == "feedstock_name":
         for f_id in invalid_feedstock_names:
             with pytest.raises(ValidationError):
-                FeedstockMetadata(feedstock_id=f_id, metadata_url_base=github_http_base)
+                Feedstock(feedstock_id=f_id, metadata_url_base=github_http_base)

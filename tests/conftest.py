@@ -221,7 +221,7 @@ def bakery_http_server(tmpdir_factory, request):
     # plain text env vars for `test_server::test_bakery_server_put`
     os.environ["TEST_BAKERY_USERNAME"] = username
     os.environ["TEST_BAKERY_PASSWORD"] = password
-    # encoded env var for `test_components::test_bakery_component_write_access`
+    # encoded env var for `test_interfaces::test_bakery_interface_write_access`
     auth = aiohttp.BasicAuth(username, password)
     os.environ["TEST_BAKERY_BASIC_AUTH"] = auth.encode()
 

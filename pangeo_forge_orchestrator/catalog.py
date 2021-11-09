@@ -7,7 +7,7 @@ import xarray as xr
 import xstac
 from rich import print
 
-from .components import Bakery, FeedstockMetadata
+from .interfaces import Bakery, Feedstock
 
 
 def generate(
@@ -72,7 +72,7 @@ def _generate(
     fstock_kw = dict(feedstock_id=feedstock_id)
     if feedstock_metadata_url_base:
         fstock_kw.update(dict(metadata_url_base=feedstock_metadata_url_base))
-    fstock = FeedstockMetadata(**fstock_kw)
+    fstock = Feedstock(**fstock_kw)
 
     mapper = bakery.get_dataset_mapper(run_id)
     ds = xr.open_zarr(mapper, consolidated=True)
