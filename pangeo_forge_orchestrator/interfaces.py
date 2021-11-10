@@ -29,7 +29,7 @@ PANGEO_FORGE_BAKERY_DATABASE = (
 
 @dataclass
 class Bakery:
-    """Bakery component of ``pangeo-forge-orchestrator``.
+    """Bakery interface of ``pangeo-forge-orchestrator``.
 
     :param name: The globally unique bakery name.
     :param write_access: Whether or not the instance grants write access to the bakery.
@@ -117,20 +117,21 @@ class Bakery:
     def filter_logs(self, feedstock):
         return {k: v for k, v in self.build_logs.logs.items() if feedstock in v.feedstock}
 
-    def get_base_path(self, write_access=False):
-        protocol = self.default_protocol if not write_access else self.private_protocol
-        prefix = self.default_prefix if not write_access else self.private_prefix
-        return f"{protocol}://{prefix}"
+    def get_base_path(self, access: str = "default"):
+        """
+        :param access: One of "default" or "private".
+        """
+        return f"{getattr(self, f'{access}_protocol')}://{getattr(self, f'{access}_prefix')}"
 
-    def get_stac_path(self, write_access=False):
-        return f"{self.get_base_path(write_access=write_access)}/{self.stac_relative_path}"
+    def get_stac_path(self, access: str = "default"):
+        return f"{self.get_base_path(access=access)}/{self.stac_relative_path}"
 
-    def get_dataset_path(self, run_id):
-        ds_path = self.build_logs.logs[run_id].path
-        return f"{self.get_base_path()}/{ds_path}"
+    def get_dataset_path(self, run_id, access: str = "default"):
+        ds_relative_path = self.build_logs.logs[run_id].path
+        return f"{self.get_base_path(access=access)}/{ds_relative_path}"
 
-    def get_dataset_mapper(self, run_id):
-        path = self.get_dataset_path(run_id)
+    def get_dataset_mapper(self, run_id, access: str = "default"):
+        path = self.get_dataset_path(run_id, access=access)
         return fsspec.get_mapper(path, **self.default_storage_options.dict(exclude_none=True))
 
     def cat(self, path):
