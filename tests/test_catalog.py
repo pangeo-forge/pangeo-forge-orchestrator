@@ -20,7 +20,6 @@ def test_generate(
         bakery_stac_relative_path="",
         feedstock_metadata_url_base=github_http_base,
         to_file=to_file,
-        endpoints=["http"],
     )
     gen_result = generate(**kw)
     assert gen_result == stac_item_result

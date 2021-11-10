@@ -334,7 +334,7 @@ def stac_item_result(bakery_http_server):
                 "title": "Mock Feedstock - HTTP File System Zarr root",
                 "description": "HTTP File System Zarr root for random test data.",
                 "xarray:open_kwargs": {"consolidated": True},
-                "xarray:storage_options": None,
+                "xarray:storage_options": {},
                 "roles": ["data", "zarr", "http"],
             },
             "pangeo-forge-feedstock": {

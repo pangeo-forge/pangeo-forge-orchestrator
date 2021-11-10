@@ -1,6 +1,7 @@
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Optional
 
 import shapely.geometry
 import xarray as xr
@@ -9,26 +10,40 @@ from rich import print
 
 from .interfaces import Bakery, Feedstock
 
+fmt_openers = dict(zarr=xr.open_zarr)
+fmt_kwargs = dict(zarr=dict(consolidated=True))
+
 
 def generate(
-    bakery_name,
-    run_id,
-    bakery_database_path=None,
-    bakery_stac_relative_path=None,
-    feedstock_metadata_url_base=None,
-    print_result=False,
-    to_file=False,
-    endpoints=["s3", "https"],
-):
-    write_access = True if to_file else False
-    item_result, feedstock_id, bakery = _generate(
+    bakery_name: str,
+    run_id: int,
+    bakery_database_path: Optional[str] = None,
+    bakery_stac_relative_path: Optional[str] = None,
+    feedstock_metadata_url_base: Optional[str] = None,
+    print_result: bool = False,
+    to_file: bool = False,
+) -> None:
+    """Generate a STAC Item for a Pangeo Forge ARCO dataset.
+
+    :param bakery_name: [description]
+    :param run_id: [description]
+    :param bakery_database_path: [description]. Defaults to None.
+    :param bakery_stac_relative_path: [description]. Defaults to None.
+    :param feedstock_metadata_url_base: [description]. Defaults to None.
+    :param print_result: [description]. Defaults to False.
+    :param to_file: [description]. Defaults to False.
+    :param endpoints: [description]. Defaults to ["s3", "https"].
+
+    Returns:
+        None: [description]
+    """
+    item_result, feedstock_id, bakery = _make_stac_item(
         bakery_name=bakery_name,
         run_id=run_id,
         bakery_database_path=bakery_database_path,
         bakery_stac_relative_path=bakery_stac_relative_path,
         feedstock_metadata_url_base=feedstock_metadata_url_base,
-        endpoints=endpoints,
-        write_access=write_access,
+        write_access=to_file,
     )
     if print_result:
         print(item_result)
@@ -39,19 +54,18 @@ def generate(
         with open(stac_item_filename, mode="w") as outfile:
             json.dump(item_result, outfile)
         # if to_bakery:
-        item_dst_path = f"{bakery.get_stac_path(write_access=True)}{stac_item_filename}"
+        item_dst_path = f"{bakery.get_stac_path(access='private')}{stac_item_filename}"
         bakery.put(stac_item_filename, item_dst_path)
 
         return item_result
 
 
-def _generate(
+def _make_stac_item(
     bakery_name,
     run_id,
     bakery_database_path,
     bakery_stac_relative_path,
     feedstock_metadata_url_base,
-    endpoints,
     write_access,
 ):
     """
@@ -75,7 +89,9 @@ def _generate(
     fstock = Feedstock(**fstock_kw)
 
     mapper = bakery.get_dataset_mapper(run_id)
-    ds = xr.open_zarr(mapper, consolidated=True)
+    fmt = mapper.root.split(".")[-1]
+    ds_opener, ds_open_kwargs = fmt_openers[fmt], fmt_kwargs[fmt]
+    ds = ds_opener(mapper, **ds_open_kwargs)
     bbox = _make_bounding_box(ds)
     time_bounds = _make_time_bounds(ds)
 
@@ -89,8 +105,12 @@ def _generate(
     # ---------------------- ASSETS ------------------------------
     assets = item_template["assets"]
     # ~~~~~~~~~~~~~~~~~~~~ Data Assets ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    for ep in endpoints:
-        key = f"zarr-{ep}"
+    # TODO: What if there is more than one public endpoint? e.g., http + s3
+    # └──> (Bakery database spec doesn't seem to support this currently; only "public vs. private".)
+    # The following is a loop to leave room for this in the future.
+    for access in ["default"]:
+        protocol = getattr(bakery, f"{access}_protocol")
+        key = f"zarr-{protocol}"
         assets.update(
             {
                 f"{key}": {
@@ -98,26 +118,24 @@ def _generate(
                     "type": "application/vnd+zarr",
                     "title": "",
                     "description": "",
-                    "roles": ["data", "zarr", f"{ep}"],
+                    "roles": ["data", "zarr", f"{protocol}"],
                     "xarray:storage_options": None,
                     "xarray:open_kwargs": None,
                 },
             }
         )
-        longname = f"{ep.upper()} File System"
-        path = bakery.get_dataset_path(run_id)
+        longname = f"{protocol.upper()} File System"
+        path = bakery.get_dataset_path(run_id, access=access)
         assets[key]["href"] = path
         assets[key]["title"] = f"{fstock.meta_dot_yaml.title} - {longname} Zarr root"
         desc = fstock.meta_dot_yaml.description
         desc = f"{desc[0].lower()}{desc[1:]}"
-        # all descriptions may not work with this format string; generalize more, perhaps.
+        # TODO: all descriptions may not work with this format string; generalize more, perhaps.
         assets[key]["description"] = f"{longname} Zarr root for {desc}"
         # add `xarray assets` extension details
-        assets[key]["xarray:open_kwargs"] = dict(consolidated=True)
-        if ep == "s3":
-            assets[key]["xarray:storage_options"] = bakery.default_storage_options.dict(
-                exclude_none=True
-            )
+        assets[key]["xarray:open_kwargs"] = ds_open_kwargs
+        so = getattr(bakery, f"{access}_storage_options")
+        assets[key]["xarray:storage_options"] = so.dict(exclude_none=True)
 
     # ~~~~~~~~~~~~~~~~~~~~ Feedstock Asset ~~~~~~~~~~~~~~~~~~~~~~~
     pff = "pangeo-forge-feedstock"

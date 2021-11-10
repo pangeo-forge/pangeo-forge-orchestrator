@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 import typer
 
@@ -14,7 +14,6 @@ def make_stac_item(
     bakery_database_path: Optional[str] = None,
     # bakery_stac_relative_path: Optional[str] = None,
     feedstock_metadata_url_base: Optional[str] = None,
-    endpoints: Optional[List[str]] = None,
     print_result: bool = True,
     to_file: Optional[bool] = False,
 ):
@@ -26,6 +25,4 @@ def make_stac_item(
         kw.update(dict(bakery_database_path=bakery_database_path))
     if feedstock_metadata_url_base:
         kw.update(dict(feedstock_metadata_url_base=feedstock_metadata_url_base))
-    if endpoints:
-        kw.update(dict(endpoints=endpoints))
-    generate(**kw)
+    generate(**kw)  # type: ignore
