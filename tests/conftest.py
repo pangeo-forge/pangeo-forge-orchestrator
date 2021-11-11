@@ -280,19 +280,18 @@ def stac_item_result(bakery_http_server):
         "id": "mock-feedstock@1.0",
         "properties": {
             "cube:dimensions": {
-                "time": {
+                "T": {
                     "type": "temporal",
                     "extent": ["2010-01-01T00:00:00Z", "2010-01-10T00:00:00Z"],
-                    "step": "P1DT0H0M0S",
                 },
-                "lon": {
+                "X": {
                     "type": "spatial",
                     "axis": "x",
                     "description": "longitude",
                     "extent": [5.0, 355.0],
                     "step": 10.0,
                 },
-                "lat": {
+                "Y": {
                     "type": "spatial",
                     "axis": "y",
                     "description": "latitude",

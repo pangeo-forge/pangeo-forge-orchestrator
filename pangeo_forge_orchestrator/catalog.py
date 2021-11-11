@@ -3,12 +3,15 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
+import cf_xarray  # noqa
 import shapely.geometry
 import xarray as xr
 import xstac
 from rich import print
 
 from .interfaces import Bakery, Feedstock
+
+xr.set_options(keep_attrs=True)  # for cf_xarray
 
 fmt_openers = dict(zarr=xr.open_zarr)
 fmt_kwargs = dict(zarr=dict(consolidated=True))
@@ -92,15 +95,32 @@ def _make_stac_item(
     fmt = mapper.root.split(".")[-1]
     ds_opener, ds_open_kwargs = fmt_openers[fmt], fmt_kwargs[fmt]
     ds = ds_opener(mapper, **ds_open_kwargs)
-    bbox = _make_bounding_box(ds)
-    time_bounds = _make_time_bounds(ds)
+
+    # -------------- Infer axes with `cf_xarray` -----------------
+    ds = ds.cf.guess_coord_axis()  # pass `verbose=True` for debugging
+    # TODO: Upstream following loop to `cf_xarray.accessor::ATTRS` dict?
+    for ax, coord in zip(("X", "Y"), ("longitude", "latitude")):
+        if ax not in ds.cf.axes.keys() and coord in ds.cf.coordinates.keys():
+            for c in ds.cf.coordinates[coord]:
+                ds[c].attrs.update(dict(axis=ax))
+    dims = dict(
+        temporal_dimension=("T" if "T" in ds.cf.axes.keys() else None),
+        x_dimension=("X" if "X" in ds.cf.axes.keys() else None),
+        y_dimension=("Y" if "Y" in ds.cf.axes.keys() else None),
+    )
 
     # -------------- TOP LEVEL FIELDS + PROPERTIES ---------------
-    item_template["id"] = feedstock_id
-    item_template["bbox"] = bbox
-    item_template["geometry"] = shapely.geometry.mapping(shapely.geometry.box(*bbox))
-    for k in time_bounds.keys():
-        item_template["properties"][k] = time_bounds[k]
+    # If any of these are missing, we won't have a valid STAC Item
+    # TODO: Resolve redundancy with `xstac`/datacube extension section below.
+    if dims["temporal_dimension"] is not None:
+        time_bounds = _make_time_bounds(ds)
+        for k in time_bounds.keys():
+            item_template["properties"][k] = time_bounds[k]
+    if dims["x_dimension"] is not None and dims["y_dimension"] is not None:
+        bbox = _make_bounding_box(ds)
+        item_template["id"] = feedstock_id
+        item_template["bbox"] = bbox
+        item_template["geometry"] = shapely.geometry.mapping(shapely.geometry.box(*bbox))
 
     # ---------------------- ASSETS ------------------------------
     assets = item_template["assets"]
@@ -151,12 +171,16 @@ def _make_stac_item(
         del assets["thumbnail"]
 
     # ---------------------- XSTAC -------------------------------
-    # to generalize this, contributors may need to specify dimensions + ref system in `meta.yaml`?
-    kw = dict(
-        temporal_dimension="time", x_dimension="lon", y_dimension="lat", reference_system=False
-    )
-    item = xstac.xarray_to_stac(ds, item_template, **kw)
-    item_result = item.to_dict(include_self_link=False)
+    if None not in dims.values():
+        # we have all necessary dimension names; generate Datacube Extension via `xstac`
+        item = xstac.xarray_to_stac(
+            ds, item_template, via_cf_namespace=True, reference_system=False, **dims
+        )
+        item_result = item.to_dict(include_self_link=False)
+    else:
+        # missing at least one required dim name; skip Datacube Extension generation
+        item_result = item_template
+
     return item_result, feedstock_id, bakery
 
 
@@ -166,8 +190,8 @@ def _make_bounding_box(ds):
     """
     # generalizable if cf convention linting is implemented in recipe contribution workflow?
     # https://cfconventions.org/Data/cf-conventions/cf-conventions-1.9/cf-conventions.html#latitude-coordinate
-    lats = [ds["lat"].values[0], ds["lat"].values[-1]]
-    lons = [ds["lon"].values[0], ds["lon"].values[-1]]
+    lats = [ds.cf["Y"].values[0], ds.cf["Y"].values[-1]]
+    lons = [ds.cf["X"].values[0], ds.cf["X"].values[-1]]
     # convert longitude from 0-360 scale to -180-180 scale
     lons = [lon - 360 if lon > 180 else lon for lon in lons]
     lons = sorted(lons)
@@ -183,11 +207,11 @@ def _make_time_bounds(ds):
     """
     # datetime handling will require edge-casing for model output data, etc.
     def format_datetime(n, ds=ds):
-        return f"{str(ds['time'].values[n])[:19]}Z"
+        return f"{str(ds.cf['T'].values[n])[:19]}Z"
 
     time_bounds = (
         {b: format_datetime(n) for n, b in zip([0, -1], ["start_datetime", "end_datetime"])}
-        if len(ds["time"]) > 1
+        if len(ds.cf["T"]) > 1
         else {"datetime": format_datetime(n=0)}
     )
     return time_bounds
