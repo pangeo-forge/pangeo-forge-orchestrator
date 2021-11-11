@@ -17,7 +17,7 @@ cmds_and_responses = [
 @pytest.fixture(scope="session", params=[*cmds_and_responses])
 def catalog_subcommand(request, github_http_server, bakery_http_server, stac_item_result):
     # much (but not all) of this is repetitive of the `test_bakery_cli::bakery_subcommand` fixture
-    github_http_base, bakery_database_entry, bakery_meta_http_path = github_http_server
+    github_http_base, bakery_database_entry, bakery_database_http_path = github_http_server
     bakery_name = list(bakery_database_entry)[0]
     build_logs_dict = bakery_http_server[-1].to_dict(orient="index")
 
@@ -26,7 +26,7 @@ def catalog_subcommand(request, github_http_server, bakery_http_server, stac_ite
         "{run_id}": str(list(build_logs_dict)[0]),
         "{item_result}": str(stac_item_result),
         # TODO: harmonize db naming with bakery cli & `test_bakery_cli::bakery_subcommand` fixture
-        "{bakery_database_path}": bakery_meta_http_path,
+        "{bakery_database_path}": bakery_database_http_path,
         "{feedstock_metadata_url_base}": github_http_base,
     }
     for i, cmd_or_resp in enumerate(request.param):

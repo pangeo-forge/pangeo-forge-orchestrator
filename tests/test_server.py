@@ -65,9 +65,9 @@ def test_bakery_server_put(creds, bakery_http_server):
 
 
 def test_github_server(github_http_server):
-    _, bakery_meta, bakery_meta_http_path = github_http_server
+    _, bakery_database, bakery_database_http_path = github_http_server
 
-    with fsspec.open(bakery_meta_http_path) as f:
-        bakery_http_meta = yaml.safe_load(f.read())
+    with fsspec.open(bakery_database_http_path) as f:
+        bakery_http_database = yaml.safe_load(f.read())
 
-    assert bakery_http_meta == bakery_meta
+    assert bakery_http_database == bakery_database
