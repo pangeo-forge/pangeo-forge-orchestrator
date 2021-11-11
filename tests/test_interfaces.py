@@ -79,7 +79,7 @@ def test_bakery_interface_write_access(invalid, github_http_server, bakery_http_
 def test_feedstock_metadata(github_http_server, meta_yaml, invalid, invalid_feedstock_names):
     github_http_base, _, _ = github_http_server
     if not invalid:
-        f = Feedstock(feedstock_id="mock-feedstock@1.0", metadata_url_base=github_http_base)
+        f = Feedstock(feedstock_id="mock-feedstock@1.0", metadata_path_base=github_http_base)
         assert f.meta_dot_yaml == MetaDotYaml(**meta_yaml)
     elif invalid == "metadata_url_base":
         with pytest.raises(FileNotFoundError):
@@ -87,4 +87,4 @@ def test_feedstock_metadata(github_http_server, meta_yaml, invalid, invalid_feed
     elif invalid == "feedstock_name":
         for f_id in invalid_feedstock_names:
             with pytest.raises(ValidationError):
-                Feedstock(feedstock_id=f_id, metadata_url_base=github_http_base)
+                Feedstock(feedstock_id=f_id, metadata_path_base=github_http_base)

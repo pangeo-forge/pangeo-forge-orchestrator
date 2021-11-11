@@ -16,10 +16,9 @@ def test_generate(
     kw = dict(
         bakery_name=bakery_name,
         run_id=0,
-        bakery_database_path=bakery_database_http_path,
-        bakery_stac_relative_path="",
-        feedstock_metadata_url_base=github_http_base,
         to_file=to_file,
+        bakery_kwargs=dict(database_path=bakery_database_http_path, stac_relative_path="",),
+        feedstock_kwargs=dict(metadata_path_base=github_http_base,),
     )
     gen_result = generate(**kw)
     assert gen_result == stac_item_result

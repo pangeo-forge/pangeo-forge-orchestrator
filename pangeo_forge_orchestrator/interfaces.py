@@ -177,8 +177,8 @@ class Feedstock:
 
     feedstock_id: feedstock_name_with_version  # type: ignore
     url_format: str = "https://github.com/pangeo-forge/{name}/tree/v{majv}.{minv}"
-    metadata_url_base: str = "https://raw.githubusercontent.com"
-    metadata_url_format: str = "pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
+    metadata_path_base: str = "https://raw.githubusercontent.com"
+    metadata_path_format: str = "/pangeo-forge/{name}/v{majv}.{minv}/feedstock/meta.yaml"
 
     def __post_init_post_parse__(self):
         # We are using `__post_init_post_parse__`, as opposed to `__post_init__`, so that we can
@@ -189,11 +189,11 @@ class Feedstock:
         majv, minv = version_split[0], version_split[1]
         self.url = self.url_format.format(name=name, majv=majv, minv=minv)
 
-        self.metadata_url = (
-            f"{self.metadata_url_base}/"
-            f"{self.metadata_url_format.format(name=name, majv=majv, minv=minv)}"
+        self.metadata_path = (
+            f"{self.metadata_path_base}"
+            f"{self.metadata_path_format.format(name=name, majv=majv, minv=minv)}"
         )
-        with fsspec.open(self.metadata_url) as f:
+        with fsspec.open(self.metadata_path) as f:
             d = yaml.safe_load(f.read())
             self.meta_dot_yaml = MetaDotYaml(**d)
 

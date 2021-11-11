@@ -11,18 +11,37 @@ app = typer.Typer()
 def make_stac_item(
     bakery_name: str,  # TODO: Provide stricter type from `..meta_types.bakery` here
     run_id: int,
-    # bakery_stac_relative_path: Optional[str] = None,
-    feedstock_metadata_url_base: Optional[str] = None,
     print_result: bool = True,
     to_file: Optional[bool] = False,
+    feedstock_metadata_path_base: Optional[str] = typer.Option(
+        None, envvar="PANGEO_FORGE_FEEDSTOCK_METADATA_PATH_BASE",
+    ),
+    feedstock_metadata_path_format: Optional[str] = typer.Option(
+        None, envvar="PANGEO_FORGE_FEEDSTOCK_METADATA_PATH_FORMAT",
+    ),
     bakery_database_path: Optional[str] = typer.Option(None, envvar="PANGEO_FORGE_BAKERY_DATABASE"),
 ):
     """
     Generate a STAC Item for a `bakery_name` + `run_id` pair.
     """
-    kw = dict(bakery_name=bakery_name, run_id=run_id, print_result=print_result, to_file=to_file,)
-    if bakery_database_path:
-        kw.update(dict(bakery_database_path=bakery_database_path))
-    if feedstock_metadata_url_base:
-        kw.update(dict(feedstock_metadata_url_base=feedstock_metadata_url_base))
+
+    def prune_dict(d):
+        return {k: v for k, v in d.items() if v is not None}
+
+    bakery_kwargs = prune_dict(dict(database_path=bakery_database_path))
+
+    feedstock_kwargs = prune_dict(
+        dict(
+            metadata_path_base=feedstock_metadata_path_base,
+            metadata_path_format=feedstock_metadata_path_format,
+        )
+    )
+    kw = dict(
+        bakery_name=bakery_name,
+        run_id=run_id,
+        print_result=print_result,
+        to_file=to_file,
+        bakery_kwargs=bakery_kwargs,
+        feedstock_kwargs=feedstock_kwargs,
+    )
     generate(**kw)  # type: ignore

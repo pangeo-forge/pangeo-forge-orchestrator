@@ -20,11 +20,10 @@ fmt_kwargs = dict(zarr=dict(consolidated=True))
 def generate(
     bakery_name: str,
     run_id: int,
-    bakery_database_path: Optional[str] = None,
-    bakery_stac_relative_path: Optional[str] = None,
-    feedstock_metadata_url_base: Optional[str] = None,
     print_result: bool = False,
     to_file: bool = False,
+    bakery_kwargs: Optional[dict] = None,
+    feedstock_kwargs: Optional[dict] = None,
 ) -> None:
     """Generate a STAC Item for a Pangeo Forge ARCO dataset.
 
@@ -43,10 +42,9 @@ def generate(
     item_result, feedstock_id, bakery = _make_stac_item(
         bakery_name=bakery_name,
         run_id=run_id,
-        bakery_database_path=bakery_database_path,
-        bakery_stac_relative_path=bakery_stac_relative_path,
-        feedstock_metadata_url_base=feedstock_metadata_url_base,
         write_access=to_file,
+        bakery_kwargs=bakery_kwargs,
+        feedstock_kwargs=feedstock_kwargs,
     )
     if print_result:
         print(item_result)
@@ -66,12 +64,7 @@ def generate(
 
 
 def _make_stac_item(
-    bakery_name,
-    run_id,
-    bakery_database_path,
-    bakery_stac_relative_path,
-    feedstock_metadata_url_base,
-    write_access,
+    bakery_name, run_id, write_access, bakery_kwargs, feedstock_kwargs,
 ):
     """
     Generate a STAC Item for a Pangeo Forge Feedstock
@@ -81,16 +74,14 @@ def _make_stac_item(
         item_template = json.loads(f.read())
 
     bakery_kw = dict(name=bakery_name, write_access=write_access)
-    if bakery_database_path:
-        bakery_kw.update(dict(database_path=bakery_database_path))
-    if bakery_stac_relative_path != None:  # noqa; empty strings don't eval w/ `cond is not None`
-        bakery_kw.update(dict(stac_relative_path=bakery_stac_relative_path))
+    if bakery_kwargs:
+        bakery_kw.update(bakery_kwargs)
     bakery = Bakery(**bakery_kw)
 
     feedstock_id = bakery.build_logs.logs[run_id].feedstock
     fstock_kw = dict(feedstock_id=feedstock_id)
-    if feedstock_metadata_url_base:
-        fstock_kw.update(dict(metadata_url_base=feedstock_metadata_url_base))
+    if feedstock_kwargs:
+        fstock_kw.update(feedstock_kwargs)
     fstock = Feedstock(**fstock_kw)
 
     mapper = bakery.get_dataset_mapper(run_id)

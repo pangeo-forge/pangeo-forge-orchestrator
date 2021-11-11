@@ -7,7 +7,7 @@ cmds_and_responses = [
         (
             "make-stac-item {bakery_name} {run_id} "
             "--bakery-database-path {bakery_database_path} "
-            "--feedstock-metadata-url-base {feedstock_metadata_url_base}"
+            "--feedstock-metadata-path-base {feedstock_metadata_url_base}"
         ),
         "{item_result}",
     ]
