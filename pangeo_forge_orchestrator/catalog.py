@@ -57,7 +57,9 @@ def generate(
         with open(stac_item_filename, mode="w") as outfile:
             json.dump(item_result, outfile)
         # if to_bakery:
-        item_dst_path = f"{bakery.get_stac_path(access='private')}{stac_item_filename}"
+        item_dst_path = (
+            f"{bakery.get_asset_path(asset='stac', access='private')}{stac_item_filename}"
+        )
         bakery.put(stac_item_filename, item_dst_path)
 
         return item_result

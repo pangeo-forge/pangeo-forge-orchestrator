@@ -2,7 +2,7 @@ import copy
 import os
 import re
 from dataclasses import asdict, dataclass
-from typing import Optional
+from typing import List, Optional
 
 import fsspec
 import pandas as pd
@@ -15,6 +15,7 @@ from .meta_types.bakery import (
     BakeryName,
     BuildLogs,
     KnownImplementations,
+    RunRecord,
     StorageOptions,
     Target,
     bakery_database_from_dict,
@@ -48,15 +49,19 @@ class Bakery:
             d = yaml.safe_load(f.read())
             self.bakery_database = bakery_database_from_dict(d)
 
-        with self.default_fs.open(f"{self.get_base_path()}/build-logs.csv") as f:
-            df = pd.read_csv(f)
-            self.build_logs = BuildLogs(logs=df.to_dict(orient="index"))
+        _ = self.build_logs  # ensure build logs confrom to `BuildLogs` spec
 
         if self.write_access:
             if not hasattr(self.target, "private"):
                 raise ValueError("Write access requires target possess `private` attribute.")
             # ensure that all env vars are assigned
             _ = _recursively_replace_env_vars(self.private_storage_options.dict(exclude_none=True))
+
+    @property
+    def build_logs(self) -> BuildLogs:
+        with self.default_fs.open(self.get_asset_path(asset="build_logs")) as f:
+            df = pd.read_csv(f)
+        return BuildLogs(logs=df.to_dict(orient="index"))
 
     @property
     def bakery_name(self) -> BakeryName:
@@ -123,15 +128,16 @@ class Bakery:
         """
         return f"{getattr(self, f'{access}_protocol')}://{getattr(self, f'{access}_prefix')}"
 
-    def get_stac_path(self, access: str = "default"):
-        return f"{self.get_base_path(access=access)}/{self.stac_relative_path}"
+    def get_asset_path(self, asset: str, access: str = "default"):
+        relative_paths = dict(build_logs="build-logs.csv", stac=self.stac_relative_path)
+        return f"{self.get_base_path(access=access)}/{relative_paths[asset]}"
 
-    def get_dataset_path(self, run_id, access: str = "default"):
+    def get_dataset_path(self, run_id: int, access: str = "default"):
         ds_relative_path = self.build_logs.logs[run_id].path
         return f"{self.get_base_path(access=access)}/{ds_relative_path}"
 
     def get_dataset_mapper(self, run_id, access: str = "default"):
-        path = self.get_dataset_path(run_id, access=access)
+        path = self.get_dataset_path(run_id=run_id, access=access)
         return fsspec.get_mapper(path, **self.default_storage_options.dict(exclude_none=True))
 
     def cat(self, path):
@@ -145,6 +151,25 @@ class Bakery:
             headers = {"Content-Length": str(cl)}
             kwargs.update(dict(headers=headers))
         self.credentialed_fs.put(src_path, dst_path, **kwargs)
+
+    def append_run_record(self, record: dict):
+        with self.credentialed_fs.open(
+            self.get_asset_path("build_logs", access="private"), mode="a",
+        ) as f:
+            _ = RunRecord(**record)  # validate input
+            df = pd.DataFrame.from_dict([record])
+            df.to_csv(f, mode="a", index=False, header=False)
+
+    def remove_run_records(self, indices: List[int]):
+        # TODO: Prevent users from accidentally deleting run records.
+        # Don't know if we need this in prod; useful for testing.
+        with self.default_fs.open(self.get_asset_path("build_logs")) as f:
+            df = pd.read_csv(f)
+            df = df.drop(indices)
+        with self.credentialed_fs.open(
+            self.get_asset_path("build_logs", access="private"), mode="w",
+        ) as f:
+            df.to_csv(f, index=False)
 
 
 @pydantic_dataclass
