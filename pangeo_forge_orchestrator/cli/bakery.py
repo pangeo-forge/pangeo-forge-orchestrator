@@ -13,22 +13,22 @@ app = typer.Typer()
 
 @app.command()
 def ls(
-    custom_db: Optional[str] = None,
     bakery_name: Optional[str] = None,
     view: str = "general-info",
     feedstock_id: Optional[str] = None,
+    bakery_database_path: Optional[str] = typer.Option(None, envvar="PANGEO_FORGE_BAKERY_DATABASE"),
 ) -> None:
     """
     List available bakeries and associated build-logs.
     """
-    bakery_database_dict = open_bakery_database_yaml(custom_db)
-    # validate dictionary against `..meta_types.bakery.BakeryDatabase`
+    bakery_database_dict = open_bakery_database_yaml(bakery_database_path)
+    # validate against `..meta_types.bakery.BakeryDatabase`
     _ = bakery_database_from_dict(bakery_database_dict)
 
     if not bakery_name:
         print([name for name in bakery_database_dict.keys()])  # type: ignore
     else:
-        kw = dict(database_path=custom_db) if custom_db else {}
+        kw = dict(database_path=bakery_database_path) if bakery_database_path else {}
         bakery = Bakery(bakery_name, **kw)  # type: ignore
         if view == "general-info":
             print(bakery_database_dict[bakery_name])  # type: ignore
@@ -58,7 +58,7 @@ def _table_from_bakery_logs(logs: dict) -> Table:
         table.add_column(k, style=v)
     rows = [
         [str(k), str(logs[k].timestamp), logs[k].feedstock, logs[k].recipe, logs[k].path]
-        for k in reversed(logs.keys())
+        for k in logs.keys()
     ]
     for r in rows:
         table.add_row(*r)

@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from .check_stdout import check_stdout
@@ -18,13 +20,25 @@ cmds_and_responses = [
 ]
 
 
+@pytest.fixture(scope="session", params=[False, True])
+def database_path_from_env(request):
+    return request.param
+
+
 @pytest.fixture(scope="session", params=[*cmds_and_responses])
-def bakery_subcommand(request, github_http_server, bakery_http_server, drop_chars=("\n", " ")):
-    _, bakery_database_entry, bakery_meta_http_path = github_http_server
+def bakery_subcommand(
+    request, database_path_from_env, github_http_server, bakery_http_server, drop_chars=("\n", " "),
+):
+    _, bakery_database_entry, bakery_database_http_path = github_http_server
     bakery_name = list(bakery_database_entry)[0]
     build_logs_dict = bakery_http_server[-1].to_dict(orient="index")
     run_id = list(build_logs_dict)[0]
-    request.param[0] = request.param[0].replace("ls", f"ls --custom-db {bakery_meta_http_path}")
+    if database_path_from_env:
+        os.environ["PANGEO_FORGE_BAKERY_DATABASE"] = bakery_database_http_path
+    else:
+        request.param[0] = request.param[0].replace(
+            "ls", f"ls --bakery-database-path {bakery_database_http_path}"
+        )
     substitutions = {
         "{bakery_name}": bakery_name,
         "{meta_yaml_dict}": str(bakery_database_entry[bakery_name]),
