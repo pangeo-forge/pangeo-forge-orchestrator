@@ -193,9 +193,7 @@ def _make_stac_item(
     # ---------------------- XSTAC -------------------------------
     if None not in dims.values():
         # we have all necessary dimension names; generate Datacube Extension via `xstac`
-        item = xstac.xarray_to_stac(
-            ds, item_template, via_cf_namespace=True, reference_system=False, **dims
-        )
+        item = xstac.xarray_to_stac(ds, item_template, reference_system=False)
         item_result = item.to_dict(include_self_link=False)
     else:
         # missing at least one required dim name; skip Datacube Extension generation
