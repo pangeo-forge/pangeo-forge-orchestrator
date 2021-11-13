@@ -3,7 +3,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
 
-import cf_xarray  # noqa
+import cf_xarray
+import pandas as pd
 import shapely.geometry
 import xarray as xr
 import xstac
@@ -89,9 +90,35 @@ def _make_stac_item(
     ds_opener, ds_open_kwargs = fmt_openers[fmt], fmt_kwargs[fmt]
     ds = ds_opener(mapper, **ds_open_kwargs)
 
+    # ----------- Move data_vars -> coords if needed -------------
+    # TODO: Prevent this upstream somewhere in `pangeo-forge-recipes`?
+    # └──> Or check for it in (TBD) checks following `/run-recipe-test`?
+    # (Compare following to `cf_xarray.accessor` L1660-L1662)
+    regex = cf_xarray.criteria.regex
+    for varname in ds.data_vars.keys():
+        for _, pattern in regex.items():
+            if pattern.match(varname.lower()):
+                ds = ds.set_coords(varname)
+
     # -------------- Infer axes with `cf_xarray` -----------------
+    # TODO: Upstream extra `ax, coord` loop to `cf_xarray.accessor`?
+    # └──> Is there ever a situation where we *don't* want these assignments?
+    # └──> What happens if `len(ds.cf.coordinates[coord]) > 1`?
+    # └──> What's an example of a valid Pangeo Forge dataset which does *not*
+    #      have T X and Y axes (whether or not cf_xarray can guess them)?
     ds = ds.cf.guess_coord_axis()  # pass `verbose=True` for debugging
-    # TODO: Upstream following loop to `cf_xarray.accessor::ATTRS` dict?
+
+    # ----------- Fix time (temporary patch )----------------------
+    # This is because `xstac` makes time bounds with pandas, but
+    # `cftime` datetimes may be incompatible with pandas, whereas this
+    # module's `_make_time_bounds` function, which uses `str()`, is not.
+    try:
+        _ = pd.to_datetime(ds.cf["T"])
+    except TypeError:
+        # TODO: pass extents explicitly using `_make_time_bounds`
+        # └──> requires PR to `xstac` to allow extent-passing?
+        pass
+
     for ax, coord in zip(("X", "Y"), ("longitude", "latitude")):
         if ax not in ds.cf.axes.keys() and coord in ds.cf.coordinates.keys():
             for c in ds.cf.coordinates[coord]:
