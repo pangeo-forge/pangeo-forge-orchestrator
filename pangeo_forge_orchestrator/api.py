@@ -4,18 +4,23 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlmodel import Session, select
 
 # https://sqlmodel.tiangolo.com/tutorial/code-structure/#order-matters
-from .database import create_db_and_tables, get_session
+from .database import create_db_and_tables, engine
 from .models import Hero, HeroCreate, HeroRead, HeroUpdate
 
-app = FastAPI()
+api = FastAPI()
 
 
-@app.on_event("startup")
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
+@api.on_event("startup")
 def on_startup():
     create_db_and_tables()
 
 
-@app.post("/heroes/", response_model=HeroRead)
+@api.post("/heroes/", response_model=HeroRead)
 def create_hero(*, session: Session = Depends(get_session), hero: HeroCreate):
     db_hero = Hero.from_orm(hero)
     session.add(db_hero)
@@ -24,7 +29,7 @@ def create_hero(*, session: Session = Depends(get_session), hero: HeroCreate):
     return db_hero
 
 
-@app.get("/heroes/", response_model=List[HeroRead])
+@api.get("/heroes/", response_model=List[HeroRead])
 def read_heroes(
     *,
     session: Session = Depends(get_session),
@@ -35,7 +40,7 @@ def read_heroes(
     return heroes
 
 
-@app.get("/heroes/{hero_id}", response_model=HeroRead)
+@api.get("/heroes/{hero_id}", response_model=HeroRead)
 def read_hero(*, session: Session = Depends(get_session), hero_id: int):
     hero = session.get(Hero, hero_id)
     if not hero:
@@ -43,7 +48,7 @@ def read_hero(*, session: Session = Depends(get_session), hero_id: int):
     return hero
 
 
-@app.patch("/heroes/{hero_id}", response_model=HeroRead)
+@api.patch("/heroes/{hero_id}", response_model=HeroRead)
 def update_hero(*, session: Session = Depends(get_session), hero_id: int, hero: HeroUpdate):
     db_hero = session.get(Hero, hero_id)
     if not db_hero:
@@ -57,7 +62,7 @@ def update_hero(*, session: Session = Depends(get_session), hero_id: int, hero: 
     return db_hero
 
 
-@app.delete("/heroes/{hero_id}")
+@api.delete("/heroes/{hero_id}")
 def delete_hero(*, session: Session = Depends(get_session), hero_id: int):
 
     hero = session.get(Hero, hero_id)

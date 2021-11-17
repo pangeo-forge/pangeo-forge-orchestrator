@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-from pangeo_forge_orchestrator.main import Hero, app, get_session
+from pangeo_forge_orchestrator.api import Hero, api, get_session
 
 
 @pytest.fixture(name="session")
@@ -21,10 +21,10 @@ def client_fixture(session: Session):
     def get_session_override():
         return session
 
-    app.dependency_overrides[get_session] = get_session_override
-    client = TestClient(app)
+    api.dependency_overrides[get_session] = get_session_override
+    client = TestClient(api)
     yield client
-    app.dependency_overrides.clear()
+    api.dependency_overrides.clear()
 
 
 def test_create_hero(client: TestClient):
