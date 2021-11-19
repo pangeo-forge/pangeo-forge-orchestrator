@@ -1,25 +1,22 @@
-from typing import Optional
+import json
+import os
 
-# mypy says stubs not installed but they are... hmm...
-import requests  # type: ignore
 import typer
 
+from .client import Client
 from .models import HeroCreate
 
 cli = typer.Typer()
+client = Client(base_url=os.environ["PANGEO_FORGE_DATABASE_URL"])
 
 
 @cli.command()
-def create_hero(
-    name: str = typer.Option(...),
-    secret_name: str = typer.Option(...),
-    age: Optional[int] = None,
-    base_url: str = "http://127.0.0.1:8000",
-):
+def create_hero(hero: str):
     """
+    hero: json string
     """
-    hero = HeroCreate(name=name, secret_name=secret_name, age=age)
-    response = requests.post(f"{base_url}/heroes/", json=hero.dict())
+    hero = HeroCreate(**json.loads(hero))
+    response = client.create_hero(hero=hero)
     typer.echo(response.json())
 
 

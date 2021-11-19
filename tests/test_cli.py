@@ -1,17 +1,13 @@
 import ast
+import json
+import os
 import subprocess
 
 
 def test_create_hero(http_server, create_request):
-    url = http_server
+    os.environ["PANGEO_FORGE_DATABASE_URL"] = http_server
 
-    cmd = [
-        "pangeo-forge",
-        "create-hero",
-        f"--name={create_request['name']}",
-        f"--secret-name={create_request['secret_name']}",
-        f"--base-url={url}",
-    ]
+    cmd = ["pangeo-forge", "create-hero", json.dumps(create_request)]
     stdout = subprocess.check_output(cmd)
     data = ast.literal_eval(stdout.decode("utf-8"))
 
