@@ -1,51 +1,33 @@
-import pytest
+import copy
+
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
-from sqlmodel.pool import StaticPool
+from sqlmodel import Session
 
-from pangeo_forge_orchestrator.api import Hero, api, get_session
-
-
-@pytest.fixture(name="session")
-def session_fixture():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
+from pangeo_forge_orchestrator.api import Hero
 
 
-@pytest.fixture(name="client")
-def client_fixture(session: Session):
-    def get_session_override():
-        return session
-
-    api.dependency_overrides[get_session] = get_session_override
-    client = TestClient(api)
-    yield client
-    api.dependency_overrides.clear()
-
-
-def test_create_hero(client: TestClient):
-    response = client.post("/heroes/", json={"name": "Deadpond", "secret_name": "Dive Wilson"})
+def test_create_hero(client: TestClient, create_request):
+    response = client.post("/heroes/", json=create_request)
     data = response.json()
 
     assert response.status_code == 200
-    assert data["name"] == "Deadpond"
-    assert data["secret_name"] == "Dive Wilson"
+    assert data["name"] == create_request["name"]
+    assert data["secret_name"] == create_request["secret_name"]
     assert data["age"] is None
     assert data["id"] is not None
 
 
-def test_create_hero_incomplete(client: TestClient):
+def test_create_hero_incomplete(client: TestClient, create_request):
     # No secret_name
-    response = client.post("/heroes/", json={"name": "Deadpond"})
+    invalid_request = copy.deepcopy(create_request)
+    del invalid_request["secret_name"]
+    response = client.post("/heroes/", json=invalid_request)
     assert response.status_code == 422
 
 
 def test_create_hero_invalid(client: TestClient):
     # secret_name has an invalid type
+
     response = client.post(
         "/heroes/",
         json={

@@ -8,18 +8,19 @@ from .models import HeroCreate
 
 cli = typer.Typer()
 
-URL = "http://127.0.0.1:8000"
-
 
 @cli.command()
 def create_hero(
-    name: str = typer.Option(...), secret_name: str = typer.Option(...), age: Optional[int] = None,
+    name: str = typer.Option(...),
+    secret_name: str = typer.Option(...),
+    age: Optional[int] = None,
+    base_url: str = "http://127.0.0.1:8000",
 ):
     """
     """
-    h = HeroCreate(name=name, secret_name=secret_name, age=age)
-    r = requests.post(f"{URL}/heroes/", json=h.dict())
-    typer.echo(f"{r.json()}")
+    hero = HeroCreate(name=name, secret_name=secret_name, age=age)
+    response = requests.post(f"{base_url}/heroes/", json=hero.dict())
+    typer.echo(response.json())
 
 
 @cli.command()
