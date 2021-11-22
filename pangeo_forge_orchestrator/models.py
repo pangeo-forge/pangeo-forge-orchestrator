@@ -1,4 +1,5 @@
 import types
+from dataclasses import dataclass
 from typing import Optional, Union
 
 from sqlmodel import Field, SQLModel
@@ -14,7 +15,7 @@ def make_cls_name(base: type, rename_base_to: str) -> str:
     return base.__name__.replace("Base", rename_base_to)
 
 
-def make_creator(base: SQLModel) -> SQLModel:
+def make_creator_cls(base: SQLModel) -> SQLModel:
     """From a base model, make and return a creation model. As described in
     https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-herocreate-data-model,
     the creation model is simply a copy of the base model, with the substring `"Base"` in the
@@ -26,7 +27,7 @@ def make_creator(base: SQLModel) -> SQLModel:
     return type(cls_name, (base,), {})
 
 
-def make_updater(base: SQLModel) -> SQLModel:
+def make_updater_cls(base: SQLModel) -> SQLModel:
     """From a base model, make and return an update model. As described in
     https://sqlmodel.tiangolo.com/tutorial/fastapi/update/#heroupdate-model, the update model
     is the same as the base model, but with all fields annotated as `Optional` and all field
@@ -47,7 +48,7 @@ def make_updater(base: SQLModel) -> SQLModel:
     return type(cls_name, (SQLModel,), attrs)
 
 
-def make_table(base: SQLModel) -> SQLModel:
+def make_table_cls(base: SQLModel) -> SQLModel:
     """From a base model, make and return a table model. As described in
     https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model,
     the table model is the same as the base model, with the addition of the `table=True` class
@@ -66,6 +67,18 @@ def make_table(base: SQLModel) -> SQLModel:
     return types.new_class(cls_name, (base,), dict(table=True), lambda ns: ns.update(attrs))
 
 
+@dataclass
+class MultipleModels:
+    path: str
+    table: SQLModel
+    creation: SQLModel
+    response: SQLModel
+    update: SQLModel
+
+
+# Specific model implementation -----------------------------------------------------------
+
+
 class HeroBase(SQLModel):
     name: str
     secret_name: str
@@ -76,6 +89,12 @@ class HeroRead(HeroBase):
     id: int
 
 
-Hero = make_table(HeroBase)
-HeroCreate = make_creator(HeroBase)
-HeroUpdate = make_updater(HeroBase)
+Hero = make_table_cls(HeroBase)
+HeroCreate = make_creator_cls(HeroBase)
+HeroUpdate = make_updater_cls(HeroBase)
+
+MODELS = {
+    "hero": MultipleModels(
+        path="/heroes/", table=Hero, creation=HeroCreate, response=HeroRead, update=HeroUpdate,
+    )
+}
