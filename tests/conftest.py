@@ -9,7 +9,9 @@ from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 from pangeo_forge_orchestrator.api import api, get_session
-from pangeo_forge_orchestrator.models import Hero
+from pangeo_forge_orchestrator.models import MODELS
+
+Hero = MODELS["hero"].table  # TODO: remove once refactor is complete
 
 # Helpers ---------------------------------------------------------------------------------
 

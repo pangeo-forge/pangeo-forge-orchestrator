@@ -9,7 +9,9 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
 from pangeo_forge_orchestrator.client import Client
-from pangeo_forge_orchestrator.models import Hero
+from pangeo_forge_orchestrator.models import MODELS
+
+Hero = MODELS["hero"].table  # TODO: remove once refactor is complete
 
 
 def get_data_from_cli(database_url, endpoint, request):
