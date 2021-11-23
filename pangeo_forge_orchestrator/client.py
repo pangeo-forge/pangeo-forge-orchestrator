@@ -3,16 +3,14 @@ from dataclasses import dataclass
 # mypy says stubs not installed but they are... hmm...
 import requests  # type: ignore
 
-from .models import HeroCreate
-
 
 @dataclass
 class Client:
 
     base_url: str
 
-    def create_hero(self, hero: HeroCreate):
+    def post(self, endpoint: str, json: dict):
         """
         """
-        response = requests.post(f"{self.base_url}/heroes/", json=hero.dict())
+        response = requests.post(f"{self.base_url}{endpoint}", json=json)
         return response

@@ -1,22 +1,21 @@
-import json
+import ast
 import os
 
 import typer
 
 from .client import Client
-from .models import HeroCreate
 
 cli = typer.Typer()
 client = Client(base_url=os.environ["PANGEO_FORGE_DATABASE_URL"])
 
 
 @cli.command()
-def create_hero(hero: str):
+def post(endpoint: str, json: str):
     """
-    hero: json string
+    :param json: JSON string as returned by passing a valid request dict to ``json.dumps``.
     """
-    hero = HeroCreate(**json.loads(hero))
-    response = client.create_hero(hero=hero)
+    as_dict = ast.literal_eval(json)
+    response = client.post(endpoint=endpoint, json=as_dict)
     typer.echo(response.json())
 
 

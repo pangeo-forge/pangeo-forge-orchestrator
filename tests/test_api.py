@@ -1,79 +1,125 @@
+import ast
 import copy
+import json
+import os
+import subprocess
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, SQLModel
 
-from pangeo_forge_orchestrator.api import Hero
+from pangeo_forge_orchestrator.client import Client
+from pangeo_forge_orchestrator.models import Hero
 
 
-def test_create_hero(client: TestClient, create_request):
-    response = client.post("/heroes/", json=create_request)
-    data = response.json()
+def get_data_from_cli(database_url, endpoint, request):
+    os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
+    cmd = ["pangeo-forge", "post", endpoint, json.dumps(request)]
+    stdout = subprocess.check_output(cmd)
+    data = ast.literal_eval(stdout.decode("utf-8"))
+    return data
 
-    assert response.status_code == 200
-    assert data["name"] == create_request["name"]
-    assert data["secret_name"] == create_request["secret_name"]
-    assert data["age"] is None
+
+# Test create ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("entrypoint", ["api", "client", "cli"])
+def test_create(client, create_request, entrypoint, http_server):
+    endpoint, request, blank_opts = create_request
+    client = client if entrypoint == "api" else Client(base_url=http_server)
+
+    # get response data
+    if entrypoint != "cli":
+        response = client.post(endpoint, json=request)
+        assert response.status_code == 200
+        data = response.json()
+    else:
+        data = get_data_from_cli(http_server, endpoint, request)
+
+    # evaluate data
+    for k in request.keys():
+        assert data[k] == request[k]
+    if blank_opts:
+        for k in blank_opts:
+            assert data[k] is None
     assert data["id"] is not None
 
 
-def test_create_hero_incomplete(client: TestClient, create_request):
-    # No secret_name
-    invalid_request = copy.deepcopy(create_request)
-    del invalid_request["secret_name"]
-    response = client.post("/heroes/", json=invalid_request)
-    assert response.status_code == 422
+@pytest.mark.parametrize("entrypoint", ["api", "client", "cli"])
+def test_create_incomplete(client, create_request, entrypoint, http_server):
+    endpoint, request, _ = create_request
+    client = client if entrypoint == "api" else Client(base_url=http_server)
+    incomplete_request = copy.deepcopy(request)
+    del incomplete_request[list(incomplete_request)[0]]
+
+    if entrypoint != "cli":
+        response = client.post(endpoint, json=incomplete_request)
+        assert response.status_code == 422
+    else:
+        data = get_data_from_cli(http_server, endpoint, incomplete_request)
+        error = data["detail"][0]
+        assert error["msg"] == "field required"
+        assert error["type"] == "value_error.missing"
 
 
-def test_create_hero_invalid(client: TestClient):
-    # secret_name has an invalid type
+@pytest.mark.parametrize("entrypoint", ["api", "client", "cli"])
+def test_create_invalid(client, create_request, entrypoint, http_server):
+    endpoint, request, _ = create_request
+    client = client if entrypoint == "api" else Client(base_url=http_server)
 
-    response = client.post(
-        "/heroes/",
-        json={
-            "name": "Deadpond",
-            "secret_name": {"message": "Do you wanna know my secret identity?"},
-        },
-    )
-    assert response.status_code == 422
+    assert type(request[list(request)[0]]) == str
+    invalid_request = copy.deepcopy(request)
+    invalid_request[list(invalid_request)[0]] = {"message": "Is this wrong?"}
+    assert type(invalid_request[list(invalid_request)[0]]) == dict
+
+    if entrypoint != "cli":
+        response = client.post(endpoint, json=invalid_request)
+        assert response.status_code == 422
+    else:
+        data = get_data_from_cli(http_server, endpoint, invalid_request)
+        error = data["detail"][0]
+        assert error["msg"] == "str type expected"
+        assert error["type"] == "type_error.str"
 
 
-def test_read_heroes(session: Session, client: TestClient):
-    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
-    hero_2 = Hero(name="Rusty-Man", secret_name="Tommy Sharp", age=48)
-    session.add(hero_1)
-    session.add(hero_2)
+# Test read -----------------------------------------------------------------------------
+
+
+def commit_to_session(session: Session, model: SQLModel):
+    session.add(model)
     session.commit()
 
-    response = client.get("/heroes/")
+
+def test_read_range(session: Session, client: TestClient, models_to_read):
+    endpoint, models = models_to_read
+    for m in models:
+        commit_to_session(session, m)
+
+    response = client.get(endpoint)
     data = response.json()
 
     assert response.status_code == 200
 
-    assert len(data) == 2
-    assert data[0]["name"] == hero_1.name
-    assert data[0]["secret_name"] == hero_1.secret_name
-    assert data[0]["age"] == hero_1.age
-    assert data[0]["id"] == hero_1.id
-    assert data[1]["name"] == hero_2.name
-    assert data[1]["secret_name"] == hero_2.secret_name
-    assert data[1]["age"] == hero_2.age
-    assert data[1]["id"] == hero_2.id
+    assert len(data) == len(models)
+    for i, m in enumerate(models):
+        model_dict = m.dict()
+        for k in model_dict.keys():
+            assert data[i][k] == model_dict[k]
 
 
-def test_read_hero(session: Session, client: TestClient):
-    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
-    session.add(hero_1)
-    session.commit()
+def test_read_single(session: Session, client: TestClient, single_model_to_read):
+    endpoint, model = single_model_to_read
 
-    response = client.get(f"/heroes/{hero_1.id}")
+    commit_to_session(session, model)
+
+    response = client.get(f"{endpoint}{model.id}")
     data = response.json()
 
     assert response.status_code == 200
-    assert data["name"] == hero_1.name
-    assert data["secret_name"] == hero_1.secret_name
-    assert data["age"] == hero_1.age
-    assert data["id"] == hero_1.id
+
+    model_dict = model.dict()
+    for k in model_dict.keys():
+        assert data[k] == model_dict[k]
 
 
 def test_update_hero(session: Session, client: TestClient):

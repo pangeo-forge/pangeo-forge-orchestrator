@@ -4,10 +4,14 @@ import time
 
 import pytest
 from fastapi.testclient import TestClient
+from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 from pangeo_forge_orchestrator.api import api, get_session
+from pangeo_forge_orchestrator.models import Hero
+
+# Helpers ---------------------------------------------------------------------------------
 
 
 def get_open_port():
@@ -39,6 +43,9 @@ def start_http_server(path, request):
     return url
 
 
+# General ---------------------------------------------------------------------------------
+
+
 @pytest.fixture(scope="session")
 def http_server(tmp_path_factory, request):
     tempdir = tmp_path_factory.mktemp("test-database")
@@ -67,6 +74,51 @@ def client_fixture(session: Session):
     api.dependency_overrides.clear()
 
 
-@pytest.fixture
-def create_request():
-    return {"name": "Deadpond", "secret_name": "Dive Wilson"}
+# Create --------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def create_hero_request():
+    endpoint = "/heroes/"
+    request = {"name": "Deadpond", "secret_name": "Dive Wilson"}
+    blank_opts = ["age"]
+    return endpoint, request, blank_opts
+
+
+@pytest.fixture(
+    scope="session", params=[lazy_fixture("create_hero_request")],
+)
+def create_request(request):
+    return request.param
+
+
+# Read ----------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def heroes_to_read(scope="session"):
+    endpoint = "/heroes/"
+    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
+    hero_2 = Hero(name="Rusty-Man", secret_name="Tommy Sharp", age=48)
+    return endpoint, (hero_1, hero_2)
+
+
+@pytest.fixture(
+    scope="session", params=[lazy_fixture("heroes_to_read")],
+)
+def models_to_read(request):
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def single_hero_to_read(scope="session"):
+    endpoint = "/heroes/"
+    hero_1 = Hero(name="Loner Hero", secret_name="Hidden Loner")
+    return endpoint, hero_1
+
+
+@pytest.fixture(
+    scope="session", params=[lazy_fixture("single_hero_to_read")],
+)
+def single_model_to_read(request):
+    return request.param
