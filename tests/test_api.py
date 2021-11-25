@@ -9,9 +9,6 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
 from pangeo_forge_orchestrator.client import Client
-from pangeo_forge_orchestrator.models import MODELS
-
-Hero = MODELS["hero"].table  # TODO: remove once refactor is complete
 
 
 def get_data_from_cli(database_url, endpoint, request):
@@ -20,6 +17,11 @@ def get_data_from_cli(database_url, endpoint, request):
     stdout = subprocess.check_output(cmd)
     data = ast.literal_eval(stdout.decode("utf-8"))
     return data
+
+
+def commit_to_session(session: Session, model: SQLModel):
+    session.add(model)
+    session.commit()
 
 
 # Test create ---------------------------------------------------------------------------
@@ -80,16 +82,11 @@ def test_create_invalid(client, create_request, entrypoint, http_server):
     else:
         data = get_data_from_cli(http_server, endpoint, invalid_request)
         error = data["detail"][0]
-        assert error["msg"] == "str type expected"
-        assert error["type"] == "type_error.str"
+        assert error["msg"] == "str type expected"  # TODO: Generalize to all msg types
+        assert error["type"] == "type_error.str"  # TODO: Generalize to all error types
 
 
 # Test read -----------------------------------------------------------------------------
-
-
-def commit_to_session(session: Session, model: SQLModel):
-    session.add(model)
-    session.commit()
 
 
 def test_read_range(session: Session, client: TestClient, models_to_read):
@@ -111,7 +108,6 @@ def test_read_range(session: Session, client: TestClient, models_to_read):
 
 def test_read_single(session: Session, client: TestClient, single_model_to_read):
     endpoint, model = single_model_to_read
-
     commit_to_session(session, model)
 
     response = client.get(f"{endpoint}{model.id}")
@@ -124,30 +120,40 @@ def test_read_single(session: Session, client: TestClient, single_model_to_read)
         assert data[k] == model_dict[k]
 
 
-def test_update_hero(session: Session, client: TestClient):
-    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
-    session.add(hero_1)
-    session.commit()
+# Test update ---------------------------------------------------------------------------
 
-    response = client.patch(f"/heroes/{hero_1.id}", json={"name": "Deadpuddle"})
+
+def test_update(session: Session, client: TestClient, model_to_update):
+    endpoint, model, update_with = model_to_update
+    commit_to_session(session, model)
+
+    response = client.patch(f"{endpoint}{model.id}", json=update_with)
     data = response.json()
 
     assert response.status_code == 200
-    assert data["name"] == "Deadpuddle"
-    assert data["secret_name"] == "Dive Wilson"
-    assert data["age"] is None
-    assert data["id"] == hero_1.id
+    assert data["id"] == model.id
+
+    model_dict = model.dict()
+    for k in model_dict.keys():
+        if k == list(update_with)[0]:
+            assert data[k] == update_with[k]
+        else:
+            assert data[k] == model_dict[k]
 
 
-def test_delete_hero(session: Session, client: TestClient):
-    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
-    session.add(hero_1)
-    session.commit()
+# Test delete ---------------------------------------------------------------------------
 
-    response = client.delete(f"/heroes/{hero_1.id}")
 
-    hero_in_db = session.get(Hero, hero_1.id)
+def test_delete(session: Session, client: TestClient, model_to_delete):
+    models, endpoint, model = model_to_delete
+    commit_to_session(session, model)
 
-    assert response.status_code == 200
+    model_in_db = session.get(models.table, model.id)
+    assert model_in_db is not None
+    assert model_in_db == model
 
-    assert hero_in_db is None
+    delete_response = client.delete(f"{endpoint}{model.id}")
+    model_in_db = session.get(models.table, model.id)
+
+    assert delete_response.status_code == 200
+    assert model_in_db is None

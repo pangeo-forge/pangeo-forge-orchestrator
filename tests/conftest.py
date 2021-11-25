@@ -1,3 +1,4 @@
+import copy
 import socket
 import subprocess
 import time
@@ -10,8 +11,6 @@ from sqlmodel.pool import StaticPool
 
 from pangeo_forge_orchestrator.api import api, get_session
 from pangeo_forge_orchestrator.models import MODELS
-
-Hero = MODELS["hero"].table  # TODO: remove once refactor is complete
 
 # Helpers ---------------------------------------------------------------------------------
 
@@ -76,51 +75,82 @@ def client_fixture(session: Session):
     api.dependency_overrides.clear()
 
 
+# Models --------------------------------------------------------------------------------
+# To test additional models, add a session-scoped fixture here which returns a 4-tuple consisting
+# of the MultipleModel object followed by three kwargs 2-tuples, each of which starts with a dict
+# of kwargs for instantiating the table model, and is followed by either a list of `blank_opts`,
+# i.e. optional table fields left out of the kwargs, or `None`.
+
+
+@pytest.fixture(scope="session")
+def hero_with_kwargs():
+    return (
+        MODELS["hero"],
+        (dict(name="Deadpond", secret_name="Dive Wilson"), ["age"]),
+        (dict(name="Rusty-Man", secret_name="Tommy Sharp", age=48), None),
+        (dict(name="Loner Hero", secret_name="Hidden Loner"), ["age"]),
+    )
+
+
+@pytest.fixture(
+    scope="session", params=[lazy_fixture("hero_with_kwargs")],
+)
+def models_with_kwargs(request):
+    return request.param
+
+
 # Create --------------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
-def create_hero_request():
-    endpoint = "/heroes/"
-    request = {"name": "Deadpond", "secret_name": "Dive Wilson"}
-    blank_opts = ["age"]
+def create_request(models_with_kwargs):
+    model, kw_0, _, _ = models_with_kwargs
+    endpoint = model.path
+    request = kw_0[0]
+    blank_opts = kw_0[1]
     return endpoint, request, blank_opts
-
-
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("create_hero_request")],
-)
-def create_request(request):
-    return request.param
 
 
 # Read ----------------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
-def heroes_to_read(scope="session"):
-    endpoint = "/heroes/"
-    hero_1 = Hero(name="Deadpond", secret_name="Dive Wilson")
-    hero_2 = Hero(name="Rusty-Man", secret_name="Tommy Sharp", age=48)
-    return endpoint, (hero_1, hero_2)
-
-
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("heroes_to_read")],
-)
-def models_to_read(request):
-    return request.param
+def models_to_read(models_with_kwargs):
+    models, kw_0, kw_1, _ = models_with_kwargs
+    endpoint = models.path
+    model_0 = models.table(**kw_0[0])
+    model_1 = models.table(**kw_1[0])
+    return endpoint, (model_0, model_1)
 
 
 @pytest.fixture(scope="session")
-def single_hero_to_read(scope="session"):
-    endpoint = "/heroes/"
-    hero_1 = Hero(name="Loner Hero", secret_name="Hidden Loner")
-    return endpoint, hero_1
+def single_model_to_read(models_with_kwargs):
+    models, _, _, kw_2 = models_with_kwargs
+    endpoint = models.path
+    model = models.table(**kw_2[0])
+    return endpoint, model
 
 
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("single_hero_to_read")],
-)
-def single_model_to_read(request):
-    return request.param
+# Update --------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def model_to_update(models_with_kwargs):
+    models, kw_0, kw_2, _ = models_with_kwargs
+    endpoint = models.path
+    model = models.table(**kw_0[0])
+    different_kws = copy.deepcopy(kw_2[0])
+    key = list(different_kws)[0]
+    update_with = {key: different_kws.pop(key)}
+    return endpoint, model, update_with
+
+
+# Delete --------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def model_to_delete(models_with_kwargs):
+    models, kw_0, _, _ = models_with_kwargs
+    endpoint = models.path
+    model = models.table(**kw_0[0])
+    return models, endpoint, model
