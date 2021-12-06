@@ -15,10 +15,7 @@ ENTRYPOINTS = ["db", "client", "cli"]
 
 
 def get_data_from_cli(
-    request_type: str,
-    database_url: str,
-    endpoint: str,
-    request: Optional[dict] = None,
+    request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
 ):
     os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
     cmd = ["pangeo-forge", request_type, endpoint]

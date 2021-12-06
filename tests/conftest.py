@@ -87,8 +87,7 @@ def hero_with_kwargs():
 
 
 @pytest.fixture(
-    scope="session",
-    params=[lazy_fixture("hero_with_kwargs")],
+    scope="session", params=[lazy_fixture("hero_with_kwargs")],
 )
 def models_with_kwargs(request):
     return request.param
