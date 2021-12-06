@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from sqlmodel import Session
 
-# https://sqlmodel.tiangolo.com/tutorial/code-structure/#order-matters
 from .abstractions import register_endpoints
 from .database import create_db_and_tables, engine
 from .models import MODELS
@@ -16,7 +15,11 @@ def get_session():
 
 @api.on_event("startup")
 def on_startup():
+    # `SQLModel` registration logic requires that we import `models` before creating the database.
+    # This works fine now but leaving this link here to avoid confusion in a future refactor:
+    # https://sqlmodel.tiangolo.com/tutorial/code-structure/#order-matters
     create_db_and_tables()
 
 
-register_endpoints(api, models=MODELS["hero"], get_session=get_session)
+for k in MODELS.keys():
+    register_endpoints(api, models=MODELS[k], get_session=get_session)

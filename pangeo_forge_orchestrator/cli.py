@@ -20,8 +20,25 @@ def post(endpoint: str, json: str):
 
 
 @cli.command()
-def read_hero():
-    pass
+def get(endpoint: str):
+    """ """
+    response = client.get(endpoint=endpoint)
+    typer.echo(response.json())
+
+
+@cli.command()
+def patch(endpoint: str, json: str):
+    """ """
+    as_dict = ast.literal_eval(json)
+    response = client.patch(endpoint=endpoint, json=as_dict)
+    typer.echo(response.json())
+
+
+@cli.command()
+def delete(endpoint: str):
+    """ """
+    response = client.delete(endpoint=endpoint)
+    typer.echo(response.json())
 
 
 if __name__ == "__main__":
