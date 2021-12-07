@@ -19,7 +19,7 @@ def get_data_from_cli(
     request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
 ):
     os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
-    cmd = ["pangeo-forge", request_type, endpoint]
+    cmd = ["pangeo-forge", "database", request_type, endpoint]
     if request is not None:
         cmd.append(json.dumps(request))
     stdout = subprocess.check_output(cmd)
