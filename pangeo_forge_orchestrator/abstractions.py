@@ -151,7 +151,7 @@ class RegisterEndpoints:
 
     def register_create_endpoint(self):
         @self.api.post(self.models.path, response_model=self.models.response)
-        def endpoint(
+        def _create(
             *,
             session: Session = Depends(self.get_session),
             model: self.models.creation,  # type: ignore
@@ -160,7 +160,7 @@ class RegisterEndpoints:
 
     def register_read_range_endpoint(self):
         @self.api.get(self.models.path, response_model=List[self.models.response])
-        def endpoint(
+        def _read_range(
             *,
             session: Session = Depends(self.get_session),
             offset: int = 0,
@@ -172,12 +172,12 @@ class RegisterEndpoints:
 
     def register_read_single_endpoint(self):
         @self.api.get(self.models.path + "{id}", response_model=self.models.response)
-        def endpoint(*, session: Session = Depends(self.get_session), id: int):
+        def _read_single(*, session: Session = Depends(self.get_session), id: int):
             return read_single(session=session, table_cls=self.models.table, id=id)
 
     def register_update_endpoint(self):
         @self.api.patch(self.models.path + "{id}", response_model=self.models.response)
-        def endpoint(
+        def _update(
             *,
             session: Session = Depends(self.get_session),
             id: int,
@@ -187,7 +187,7 @@ class RegisterEndpoints:
 
     def register_delete_endpoint(self):
         @self.api.delete(self.models.path + "{id}")
-        def endpoint(*, session: Session = Depends(self.get_session), id: int):
+        def _delete(*, session: Session = Depends(self.get_session), id: int):
             return delete(session=session, table_cls=self.models.table, id=id)
 
 

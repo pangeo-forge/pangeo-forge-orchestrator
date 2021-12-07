@@ -4,9 +4,11 @@ import json
 import os
 import subprocess
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
+import fastapi
 import pytest
+from fastapi import FastAPI
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
@@ -50,6 +52,54 @@ def add_z(input_string: str):
 def parse_to_datetime(input_string: str):
     input_string = add_z(input_string)
     return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
+
+
+def registered_routes(app: FastAPI):
+    return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
+
+
+# Test endpoint registration ------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "register", [abstractions.RegisterEndpoints, abstractions.register_endpoints]
+)
+def test_registration(session, models_with_kwargs, register):
+    models = models_with_kwargs[0]
+    new_app = FastAPI()
+
+    # assert that this application has no registered routes
+    assert len(registered_routes(new_app)) == 0
+
+    def get_session():
+        yield session
+
+    # register routes for this application
+    register(api=new_app, get_session=get_session, models=models)
+
+    # assert that this application now has five registered routes
+    routes = registered_routes(new_app)
+
+    assert len(routes) == 5
+
+    expected_names = ("_create", "_read_range", "_read_single", "_update", "_delete")
+    # Check names
+    for r in routes:
+        assert r.name in expected_names
+    # Check routes
+    for r in routes:
+        if r.name in ("_create", "_read_range"):
+            assert r.path == models.path
+        elif r.name in ("_read_single", "_update", "_delete"):
+            assert r.path == f"{models.path}{{id}}"
+    # Check response models
+    for r in routes:
+        if r.name in ("_create", "_read_single", "_update"):
+            assert r.response_model == models.response
+        elif r.name == "_read_range":
+            assert r.response_model == List[models.response]
+        elif r.name == "_delete":
+            assert r.response_model is None
 
 
 # Test create ---------------------------------------------------------------------------
