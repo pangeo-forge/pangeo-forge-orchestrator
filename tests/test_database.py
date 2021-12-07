@@ -9,6 +9,7 @@ from typing import List, Optional
 import fastapi
 import pytest
 from fastapi import FastAPI
+from fastapi.exceptions import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
@@ -304,6 +305,32 @@ def test_read_single(session, single_model_to_read, entrypoint, http_server):
             assert r[entrypoint][k] == input_dict[k]
 
 
+@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
+def test_read_nonexistent(session, single_model_to_read, entrypoint, http_server):
+    models, table = single_model_to_read
+    # make sure the database is empty
+    clear_table(session, models.table)
+
+    if entrypoint == "db":
+        model_db = session.get(models.table, table.id)
+        assert model_db is None
+    elif entrypoint == "abstract-funcs":
+        with pytest.raises(HTTPException):
+            _ = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
+    elif entrypoint == "client":
+        client = Client(base_url=http_server)
+        response = client.get(f"{models.path}{table.id}")
+        assert response.status_code == 422
+        error = response.json()["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
+    elif entrypoint == "cli":
+        data = get_data_from_cli("get", http_server, f"{models.path}{table.id}")
+        error = data["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
+
+
 # Test update ---------------------------------------------------------------------------
 
 
@@ -355,6 +382,42 @@ def test_update(session, model_to_update, entrypoint, http_server):
                 assert r[entrypoint][k] == input_dict[k]
 
 
+@pytest.mark.parametrize("entrypoint", [e for e in ENTRYPOINTS if e != "db"])
+def test_update_nonexistent(session, model_to_update, entrypoint, http_server):
+    # Updating via database is a `session.get` followed by changing attrs on the returned
+    # model. This will fail on `get`, which is already covered by `test_read_nonexistent`.
+    # Therefore, "db" is omitted from `entrypoints` param for this test.
+
+    models, table, update_with = model_to_update
+    # make sure the database is empty
+    clear_table(session, models.table)
+
+    if entrypoint == "abstract-funcs":
+        for k, v in update_with.items():
+            # the exception will be raised without this, but including it to represent the user
+            # error of updating attrs on a table which has is not in the database to begin with
+            setattr(table, k, v)
+
+        with pytest.raises(HTTPException):
+            _ = abstractions.update(
+                session=session, table_cls=models.table, id=table.id, model=table
+            )
+
+    elif entrypoint == "client":
+        client = Client(base_url=http_server)
+        response = client.patch(f"{models.path}{table.id}", json=update_with)
+        assert response.status_code == 422
+        error = response.json()["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
+
+    elif entrypoint == "cli":
+        data = get_data_from_cli("patch", http_server, f"{models.path}{table.id}", update_with)
+        error = data["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
+
+
 # Test delete ---------------------------------------------------------------------------
 
 
@@ -371,6 +434,8 @@ def test_delete(session, model_to_delete, entrypoint, http_server):
     assert model_in_db == table
 
     if entrypoint == "db":
+        # TODO: Database deletions based on specific table id (vs. below clear all).
+        # Not urgent because we'll generally be doing this via either the client or cli.
         clear_table(session, models.table)
         model_in_db = session.get(models.table, table.id)
         assert model_in_db is None
@@ -390,3 +455,34 @@ def test_delete(session, model_to_delete, entrypoint, http_server):
         assert delete_response == {"ok": True}  # successfully deleted
         get_response = get_data_from_cli("get", http_server, f"{models.path}{table.id}")
         assert get_response == {"detail": f"{models.table.__name__} not found"}
+
+
+@pytest.mark.parametrize("entrypoint", [e for e in ENTRYPOINTS if e != "db"])
+def test_delete_nonexistent(session, model_to_delete, entrypoint, http_server):
+    # Deleting via the database is a `session.query` followed by `.delete()`. So far, these tests
+    # do not implement id-level queries with the session API (only queries for all items). This is
+    # not generally a problem, as most of our interface will be via the client or the cli. In the
+    # future, we may choose to use id-level queries in the tests (or to use a different SQL API for
+    # direct DELETE without querying first). Until then, there is not an urgency to run this
+    # test for the database entrypoint, so it is omitted here.
+
+    models, table = model_to_delete
+    # make sure the database is empty
+    _ = http_server  # start server
+    clear_table(session, models.table)
+
+    if entrypoint == "abstract-funcs":
+        with pytest.raises(HTTPException):
+            _ = abstractions.delete(session=session, table_cls=models.table, id=table.id)
+    elif entrypoint == "client":
+        client = Client(base_url=http_server)
+        delete_response = client.delete(f"{models.path}{table.id}")
+        assert delete_response.status_code == 422
+        error = delete_response.json()["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
+    elif entrypoint == "cli":
+        delete_response = get_data_from_cli("delete", http_server, f"{models.path}{table.id}")
+        error = delete_response["detail"][0]
+        assert error["msg"] == "value is not a valid integer"
+        assert error["type"] == "type_error.integer"
