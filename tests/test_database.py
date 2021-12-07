@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Optional
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
+import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.client import Client
 
-ENTRYPOINTS = ["db", "client", "cli"]
+ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
 
 
 def get_data_from_cli(
@@ -51,6 +53,7 @@ def parse_to_datetime(input_string: str):
 @pytest.mark.parametrize("entrypoint", ["db"])  # ENTRYPOINTS)
 def test_create(session, model_to_create, entrypoint, http_server):
     models, request, blank_opts = model_to_create
+    table = models.table(**request)
     # make sure the database is empty
     clear_table(session, models.table)
 
@@ -60,10 +63,15 @@ def test_create(session, model_to_create, entrypoint, http_server):
     # (the latter seems like it shouldn't happen, but... it seemed like it might've been?)
     r = dict()
     if entrypoint == "db":
-        model = models.table(**request)
-        commit_to_session(session, model)
+        commit_to_session(session, table)
         # Need to `get` b/c db doesn't return a response
-        model_db = session.get(models.table, model.id)
+        model_db = session.get(models.table, table.id)
+        data = model_db.dict()
+        r.update({entrypoint: data})
+    elif entrypoint == "abstract-funcs":
+        model_db = abstractions.create(
+            session=session, table_cls=models.table, model=models.table(**request)
+        )
         data = model_db.dict()
         r.update({entrypoint: data})
     elif entrypoint == "client":
@@ -97,11 +105,14 @@ def test_create_incomplete(session, model_to_create, entrypoint, http_server):
     incomplete_request = copy.deepcopy(request)
     # Remove a required field
     del incomplete_request[list(incomplete_request)[0]]
+    table = models.table(**incomplete_request)
 
     if entrypoint == "db":
-        model = models.table(**incomplete_request)
         with pytest.raises(IntegrityError):
-            commit_to_session(session, model)
+            commit_to_session(session, table)
+    elif entrypoint == "abstract-funcs":
+        with pytest.raises(ValidationError):
+            _ = abstractions.create(session=session, table_cls=models.table, model=table)
     elif entrypoint == "client":
         client = Client(base_url=http_server)
         response = client.post(models.path, json=incomplete_request)
@@ -123,13 +134,17 @@ def test_create_invalid(session, model_to_create, entrypoint, http_server):
     invalid_request = copy.deepcopy(request)
     invalid_request[list(invalid_request)[0]] = {"message": "Is this wrong?"}
     assert type(invalid_request[list(invalid_request)[0]]) == dict
+    
+    table = models.table(**invalid_request)
 
     if entrypoint == "db":
-        model = models.table(**invalid_request)
         # Passing an invalid field to the table model results in Pydantic silently dropping it.
         # Therefore, "invalid" requests are raised as `Integrity` i.e. missing data errors.
         with pytest.raises(IntegrityError):
-            commit_to_session(session, model)
+            commit_to_session(session, table)
+    elif entrypoint == "abstract-funcs":
+        with pytest.raises(ValidationError):
+            abstractions.create(session=session, table_cls=models.table, model=table)
     elif entrypoint == "client":
         client = Client(base_url=http_server)
         response = client.post(models.path, json=invalid_request)
@@ -156,6 +171,14 @@ def test_read_range(session, models_to_read, entrypoint, http_server):
     r = dict()
     if entrypoint == "db":
         data = session.query(models.table).all()
+        r.update({entrypoint: data})
+    elif entrypoint == "abstract-funcs":
+        data = abstractions.read_range(
+            session=session,
+            table_cls=models.table,
+            offset=0,
+            limit=abstractions.RegisterEndpoints.limit.default,
+        )
         r.update({entrypoint: data})
     elif entrypoint == "client":
         data = session.query(models.table).all()
@@ -196,6 +219,10 @@ def test_read_single(session, single_model_to_read, entrypoint, http_server):
         model_db = session.get(models.table, table.id)
         data = model_db.dict()
         r.update({entrypoint: data})
+    elif entrypoint == "abstract-funcs":
+        model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
+        data = model_db.dict()
+        r.update({entrypoint: data})        
     elif entrypoint == "client":
         client = Client(base_url=http_server)
         response = client.get(f"{models.path}{table.id}")
@@ -233,6 +260,15 @@ def test_update(session, model_to_update, entrypoint, http_server):
         session.commit()
         model_db = session.get(models.table, table.id)
         data = model_db.dict()
+        r.update({entrypoint: data})
+    elif entrypoint == "abstract-funcs":
+        model_db = session.query(models.table).first()
+        for k, v in update_with.items():
+            setattr(model_db, k, v)
+        updated_model = abstractions.update(
+            session=session, table_cls=models.table, id=model_db.id, model=model_db
+        )
+        data = updated_model.dict()
         r.update({entrypoint: data})
     elif entrypoint == "client":
         client = Client(base_url=http_server)
@@ -273,6 +309,11 @@ def test_delete(session, model_to_delete, entrypoint, http_server):
 
     if entrypoint == "db":
         clear_table(session, models.table)
+        model_in_db = session.get(models.table, table.id)
+        assert model_in_db is None
+    elif entrypoint == "abstract-funcs":
+        delete_response = abstractions.delete(session=session, table_cls=models.table, id=table.id)
+        assert delete_response == {"ok": True}  # successfully deleted
         model_in_db = session.get(models.table, table.id)
         assert model_in_db is None
     elif entrypoint == "client":
