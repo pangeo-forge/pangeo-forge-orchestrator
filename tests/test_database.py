@@ -134,7 +134,7 @@ def test_create_invalid(session, model_to_create, entrypoint, http_server):
     invalid_request = copy.deepcopy(request)
     invalid_request[list(invalid_request)[0]] = {"message": "Is this wrong?"}
     assert type(invalid_request[list(invalid_request)[0]]) == dict
-    
+
     table = models.table(**invalid_request)
 
     if entrypoint == "db":
@@ -222,7 +222,7 @@ def test_read_single(session, single_model_to_read, entrypoint, http_server):
     elif entrypoint == "abstract-funcs":
         model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
         data = model_db.dict()
-        r.update({entrypoint: data})        
+        r.update({entrypoint: data})
     elif entrypoint == "client":
         client = Client(base_url=http_server)
         response = client.get(f"{models.path}{table.id}")
