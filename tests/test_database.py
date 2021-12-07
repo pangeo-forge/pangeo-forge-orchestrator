@@ -41,16 +41,21 @@ def clear_table(session: Session, table_model: SQLModel):
     assert len(session.query(table_model).all()) == 0
 
 
-def parse_to_datetime(input_string: str):
+def add_z(input_string: str):
     if not input_string.endswith("Z"):
         input_string += "Z"
+    return input_string
+
+
+def parse_to_datetime(input_string: str):
+    input_string = add_z(input_string)
     return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
 
 
 # Test create ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entrypoint", ["db"])  # ENTRYPOINTS)
+@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
 def test_create(session, model_to_create, entrypoint, http_server):
     models, request, blank_opts = model_to_create
     table = models.table(**request)
@@ -86,8 +91,16 @@ def test_create(session, model_to_create, entrypoint, http_server):
 
     # evaluate data
     for k in request.keys():
-        if type(r[entrypoint][k]) == datetime:
+        if isinstance(r[entrypoint][k], datetime):
             assert r[entrypoint][k] == parse_to_datetime(request[k])
+        elif (
+            # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
+            isinstance(r[entrypoint][k], str)
+            and isinstance(request[k], str)
+            and any([s.endswith("Z") for s in (r[entrypoint][k], request[k])])
+            and not all([s.endswith("Z") for s in (r[entrypoint][k], request[k])])
+        ):
+            assert add_z(r[entrypoint][k]) == add_z(request[k])
         else:
             assert r[entrypoint][k] == request[k]
     if blank_opts:
