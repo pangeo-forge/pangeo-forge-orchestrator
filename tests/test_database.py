@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import subprocess
+from datetime import datetime
 from typing import Optional
 
 import pytest
@@ -38,6 +39,12 @@ def clear_table(session: Session, table_model: SQLModel):
     assert len(session.query(table_model).all()) == 0
 
 
+def parse_to_datetime(input_string: str):
+    if not input_string.endswith("Z"):
+        input_string += "Z"
+    return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
+
+
 # Test create ---------------------------------------------------------------------------
 
 
@@ -71,7 +78,10 @@ def test_create(session, model_to_create, entrypoint, http_server):
 
     # evaluate data
     for k in request.keys():
-        assert r[entrypoint][k] == request[k]
+        if type(r[entrypoint][k]) == datetime:
+            assert r[entrypoint][k] == parse_to_datetime(request[k])
+        else:
+            assert r[entrypoint][k] == request[k]
     if blank_opts:
         for k in blank_opts:
             assert r[entrypoint][k] is None
@@ -167,7 +177,10 @@ def test_read_range(session, models_to_read, entrypoint, http_server):
             r[entrypoint][i].dict() if type(r[entrypoint][i]) != dict else r[entrypoint][i]
         )
         for k in input_data.keys():
-            assert response_data[k] == input_data[k]
+            if type(input_data[k]) == datetime and type(response_data[k]) != datetime:
+                assert parse_to_datetime(response_data[k]) == input_data[k]
+            else:
+                assert response_data[k] == input_data[k]
 
 
 @pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
@@ -195,7 +208,10 @@ def test_read_single(session, single_model_to_read, entrypoint, http_server):
 
     input_dict = table.dict()
     for k in input_dict.keys():
-        assert r[entrypoint][k] == input_dict[k]
+        if type(input_dict[k]) == datetime and type(r[entrypoint][k]) != datetime:
+            assert parse_to_datetime(r[entrypoint][k]) == input_dict[k]
+        else:
+            assert r[entrypoint][k] == input_dict[k]
 
 
 # Test update ---------------------------------------------------------------------------
@@ -234,7 +250,10 @@ def test_update(session, model_to_update, entrypoint, http_server):
         if k == list(update_with)[0]:
             assert r[entrypoint][k] == update_with[k]
         else:
-            assert r[entrypoint][k] == input_dict[k]
+            if not isinstance(r[entrypoint][k], type(input_dict[k])):
+                assert parse_to_datetime(r[entrypoint][k]) == input_dict[k]
+            else:
+                assert r[entrypoint][k] == input_dict[k]
 
 
 # Test delete ---------------------------------------------------------------------------

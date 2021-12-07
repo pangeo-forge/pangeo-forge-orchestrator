@@ -77,17 +77,54 @@ def session(tempdir):
 
 
 @pytest.fixture(scope="session")
-def hero_with_kwargs():
+def recipe_run_with_kwargs():
     return (
-        MODELS["hero"],
-        (dict(name="Deadpond", secret_name="Dive Wilson"), ["age"]),
-        (dict(name="Rusty-Man", secret_name="Tommy Sharp", age=48), None),
-        (dict(name="Loner Hero", secret_name="Hidden Loner"), ["age"]),
+        MODELS["recipe_run"],
+        (
+            dict(
+                recipe_id="test-recipe-0",
+                run_date="2021-01-01T00:00:00Z",
+                bakery_id=0,
+                feedstock_id=0,
+                commit="012345abcdefg",
+                version="1.0",
+                status="complete",
+                path="/path-to-dataset.zarr",
+            ),
+            ["message"],
+        ),
+        (
+            dict(
+                recipe_id="test-recipe-1",
+                run_date="2021-02-02T00:00:00Z",
+                bakery_id=1,
+                feedstock_id=1,
+                commit="012345abcdefg",
+                version="2.0",
+                status="complete",
+                path="/path-to-dataset.zarr",
+                message="hello",
+            ),
+            None,
+        ),
+        (
+            dict(
+                recipe_id="test-recipe-2",
+                run_date="2021-03-03T00:00:00Z",
+                bakery_id=2,
+                feedstock_id=2,
+                commit="012345abcdefg",
+                version="3.0",
+                status="complete",
+                path="/path-to-dataset.zarr",
+            ),
+            ["message"],
+        ),
     )
 
 
 @pytest.fixture(
-    scope="session", params=[lazy_fixture("hero_with_kwargs")],
+    scope="session", params=[lazy_fixture("recipe_run_with_kwargs")],
 )
 def models_with_kwargs(request):
     return request.param
