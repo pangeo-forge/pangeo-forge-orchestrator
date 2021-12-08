@@ -9,4 +9,5 @@ You have found the documentation for for `pangeo-forge-orchestrator`, an unrelea
 ```{toctree}
 :maxdepth: 1
 
+development_guide
 ```
