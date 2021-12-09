@@ -140,9 +140,7 @@ class RegisterEndpoints:
     limit: Query = Query(default=100, lte=100)
 
     def __post_init__(self):
-        self.register_all()
-
-    def register_all(self):
+        # register all endpoints
         self.register_create_endpoint()
         self.register_read_range_endpoint()
         self.register_read_single_endpoint()
