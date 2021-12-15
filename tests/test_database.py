@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import fastapi
 import pytest
@@ -14,7 +14,7 @@ from sqlmodel import Session, SQLModel
 import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.client import Client
 
-from .conftest import _MissingFieldError, _TypeError, get_data_from_cli
+from .conftest import ModelFixture, _MissingFieldError, _TypeError, get_data_from_cli
 
 ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
 
@@ -91,10 +91,23 @@ def test_registration(session, models_with_kwargs):
 
 
 class TestCreate:
+    """Container for tests of database entry creation tests and associated failure modes"""
+
     @staticmethod
-    def get_connection(session, url, name):
+    def get_connection(session: Session, url: str, name: str):
         connection = session if "db" in name or "abstract" in name else url
         return connection
+
+    @staticmethod
+    def get_entrypoint(func: Callable):
+        return func.__name__.split("_create_with_")[1]
+
+    @staticmethod
+    def get_error(name, failure_mode: str):
+        errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
+        cli_error = _MissingFieldError if failure_mode == "incomplete" else _TypeError
+        errors.update(dict(cli=cli_error))
+        return errors[name]
 
     @staticmethod
     def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
@@ -116,70 +129,44 @@ class TestCreate:
                 assert data[k] is None
         assert data["id"] is not None
 
-    def test_create(self, session, model_to_create, http_server, create_func):
+    def test_create(
+        self,
+        session: Session,
+        model_to_create: ModelFixture,
+        http_server: str,
+        create_func: Callable,
+    ):
         models, request, blank_opts = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
         connection = self.get_connection(session, http_server, create_func.__name__)
         data = create_func(connection, models, request)
         self.evaluate_data(request, data, blank_opts)
 
+    @pytest.mark.parametrize("failure_mode", ["incomplete", "invalid"])
+    def test_create_failure(
+        self,
+        session: Session,
+        model_to_create: ModelFixture,
+        http_server: str,
+        create_func: Callable,
+        failure_mode: str,
+    ):
+        models, request, _ = model_to_create
+        clear_table(session, models.table)  # make sure the database is empty
+        connection = self.get_connection(session, http_server, create_func.__name__)
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_create_incomplete(session, model_to_create, entrypoint, http_server):
-    models, request, _ = model_to_create
-    # make sure the database is empty
-    clear_table(session, models.table)
+        failing_request = copy.deepcopy(request)
+        if failure_mode == "incomplete":
+            del failing_request[list(failing_request)[0]]  # Remove a required field
+        else:
+            assert type(request[list(request)[0]]) == str
+            failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
+            assert type(failing_request[list(failing_request)[0]]) == dict
 
-    incomplete_request = copy.deepcopy(request)
-    # Remove a required field
-    del incomplete_request[list(incomplete_request)[0]]
-    table = models.table(**incomplete_request)
-
-    if entrypoint == "db":
-        with pytest.raises(IntegrityError):
-            commit_to_session(session, table)
-    elif entrypoint == "abstract-funcs":
-        with pytest.raises(ValidationError):
-            _ = abstractions.create(session=session, table_cls=models.table, model=table)
-    elif entrypoint == "client":
-        with pytest.raises(HTTPError):
-            client = Client(base_url=http_server)
-            response = client.post(models.path, json=incomplete_request)
-            response.raise_for_status()
-    elif entrypoint == "cli":
-        with pytest.raises(_MissingFieldError):
-            _ = get_data_from_cli("post", http_server, models.path, incomplete_request)
-
-
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_create_invalid(session, model_to_create, entrypoint, http_server):
-    models, request, _ = model_to_create
-    # make sure the database is empty
-    clear_table(session, models.table)
-
-    assert type(request[list(request)[0]]) == str
-    invalid_request = copy.deepcopy(request)
-    invalid_request[list(invalid_request)[0]] = {"message": "Is this wrong?"}
-    assert type(invalid_request[list(invalid_request)[0]]) == dict
-
-    table = models.table(**invalid_request)
-
-    if entrypoint == "db":
-        # Passing an invalid field to the table model results in Pydantic silently dropping it.
-        # Therefore, "invalid" requests are raised as `Integrity` i.e. missing data errors.
-        with pytest.raises(IntegrityError):
-            commit_to_session(session, table)
-    elif entrypoint == "abstract-funcs":
-        with pytest.raises(ValidationError):
-            abstractions.create(session=session, table_cls=models.table, model=table)
-    elif entrypoint == "client":
-        with pytest.raises(HTTPError):
-            client = Client(base_url=http_server)
-            response = client.post(models.path, json=invalid_request)
-            response.raise_for_status()
-    elif entrypoint == "cli":
-        with pytest.raises(_TypeError):
-            _ = get_data_from_cli("post", http_server, models.path, invalid_request)
+        entrypoint = self.get_entrypoint(create_func)
+        error_cls = self.get_error(entrypoint, failure_mode=failure_mode)
+        with pytest.raises(error_cls):
+            _ = create_func(connection, models, failing_request)
 
 
 # Test read -----------------------------------------------------------------------------

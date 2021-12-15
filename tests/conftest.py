@@ -241,7 +241,7 @@ def create_with_client():
     def _create_with_client(base_url, models, json):
         client = Client(base_url)
         response = client.post(models.path, json)
-        assert response.status_code == 200
+        response.raise_for_status()
         data = response.json()
         return data
 
