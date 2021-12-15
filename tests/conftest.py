@@ -54,6 +54,14 @@ def commit_to_session(session: Session, model: SQLModel):
     session.commit()
 
 
+class _MissingFieldError(Exception):
+    pass
+
+
+class _TypeError(Exception):
+    pass
+
+
 def get_data_from_cli(
     request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
 ):
@@ -63,6 +71,13 @@ def get_data_from_cli(
         cmd.append(json.dumps(request))
     stdout = subprocess.check_output(cmd)
     data = ast.literal_eval(stdout.decode("utf-8"))
+    if isinstance(data, dict) and "detail" in data.keys():
+        error = data["detail"][0]
+        if isinstance(error, dict):
+            if error["msg"] == "field required" and error["type"] == "value_error.missing":
+                raise _MissingFieldError
+            elif "type expected" in error["msg"] and "type_error." in error["type"]:
+                raise _TypeError
     return data
 
 

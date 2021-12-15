@@ -1,8 +1,4 @@
-import ast
 import copy
-import json
-import os
-import subprocess
 from datetime import datetime
 from typing import List, Optional
 
@@ -11,25 +7,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from pydantic import ValidationError
+from requests.exceptions import HTTPError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.client import Client
 
+from .conftest import _MissingFieldError, _TypeError, get_data_from_cli
+
 ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
-
-
-def get_data_from_cli(
-    request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
-):
-    os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
-    cmd = ["pangeo-forge", "database", request_type, endpoint]
-    if request is not None:
-        cmd.append(json.dumps(request))
-    stdout = subprocess.check_output(cmd)
-    data = ast.literal_eval(stdout.decode("utf-8"))
-    return data
 
 
 def commit_to_session(session: Session, model: SQLModel):
@@ -103,37 +90,38 @@ def test_registration(session, models_with_kwargs):
 # Test create ---------------------------------------------------------------------------
 
 
-def test_create(session, model_to_create, http_server, create_func):
-    models, request, blank_opts = model_to_create
-    # make sure the database is empty
-    clear_table(session, models.table)
+class TestCreate:
+    @staticmethod
+    def get_connection(session, url, name):
+        connection = session if "db" in name or "abstract" in name else url
+        return connection
 
-    connection = (
-        session
-        if "db" in create_func.__name__ or "abstract" in create_func.__name__
-        else http_server
-    )
+    @staticmethod
+    def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
+        for k in request.keys():
+            if isinstance(data[k], datetime):
+                assert data[k] == parse_to_datetime(request[k])
+            elif (
+                # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
+                isinstance(data[k], str)
+                and isinstance(request[k], str)
+                and any([s.endswith("Z") for s in (data[k], request[k])])
+                and not all([s.endswith("Z") for s in (data[k], request[k])])
+            ):
+                assert add_z(data[k]) == add_z(request[k])
+            else:
+                assert data[k] == request[k]
+        if blank_opts:
+            for k in blank_opts:
+                assert data[k] is None
+        assert data["id"] is not None
 
-    data = create_func(connection, models, request)
-
-    # evaluate data
-    for k in request.keys():
-        if isinstance(data[k], datetime):
-            assert data[k] == parse_to_datetime(request[k])
-        elif (
-            # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
-            isinstance(data[k], str)
-            and isinstance(request[k], str)
-            and any([s.endswith("Z") for s in (data[k], request[k])])
-            and not all([s.endswith("Z") for s in (data[k], request[k])])
-        ):
-            assert add_z(data[k]) == add_z(request[k])
-        else:
-            assert data[k] == request[k]
-    if blank_opts:
-        for k in blank_opts:
-            assert data[k] is None
-    assert data["id"] is not None
+    def test_create(self, session, model_to_create, http_server, create_func):
+        models, request, blank_opts = model_to_create
+        clear_table(session, models.table)  # make sure the database is empty
+        connection = self.get_connection(session, http_server, create_func.__name__)
+        data = create_func(connection, models, request)
+        self.evaluate_data(request, data, blank_opts)
 
 
 @pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
@@ -154,14 +142,13 @@ def test_create_incomplete(session, model_to_create, entrypoint, http_server):
         with pytest.raises(ValidationError):
             _ = abstractions.create(session=session, table_cls=models.table, model=table)
     elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.post(models.path, json=incomplete_request)
-        assert response.status_code == 422
+        with pytest.raises(HTTPError):
+            client = Client(base_url=http_server)
+            response = client.post(models.path, json=incomplete_request)
+            response.raise_for_status()
     elif entrypoint == "cli":
-        data = get_data_from_cli("post", http_server, models.path, incomplete_request)
-        error = data["detail"][0]
-        assert error["msg"] == "field required"
-        assert error["type"] == "value_error.missing"
+        with pytest.raises(_MissingFieldError):
+            _ = get_data_from_cli("post", http_server, models.path, incomplete_request)
 
 
 @pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
@@ -186,14 +173,13 @@ def test_create_invalid(session, model_to_create, entrypoint, http_server):
         with pytest.raises(ValidationError):
             abstractions.create(session=session, table_cls=models.table, model=table)
     elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.post(models.path, json=invalid_request)
-        assert response.status_code == 422
+        with pytest.raises(HTTPError):
+            client = Client(base_url=http_server)
+            response = client.post(models.path, json=invalid_request)
+            response.raise_for_status()
     elif entrypoint == "cli":
-        data = get_data_from_cli("post", http_server, models.path, invalid_request)
-        error = data["detail"][0]
-        assert error["msg"] == "str type expected"  # TODO: Generalize to all msg types
-        assert error["type"] == "type_error.str"  # TODO: Generalize to all error types
+        with pytest.raises(_TypeError):
+            _ = get_data_from_cli("post", http_server, models.path, invalid_request)
 
 
 # Test read -----------------------------------------------------------------------------
