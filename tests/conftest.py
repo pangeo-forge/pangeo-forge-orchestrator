@@ -1,15 +1,20 @@
+import ast
 import copy
+import json
+import os
 import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, SQLModel, create_engine
 
+import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.abstractions import MultipleModels
+from pangeo_forge_orchestrator.client import Client
 from pangeo_forge_orchestrator.models import MODELS
 
 # Helpers ---------------------------------------------------------------------------------
@@ -42,6 +47,23 @@ def start_http_server(path, request):
     request.addfinalizer(teardown)
 
     return url
+
+
+def commit_to_session(session: Session, model: SQLModel):
+    session.add(model)
+    session.commit()
+
+
+def get_data_from_cli(
+    request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
+):
+    os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
+    cmd = ["pangeo-forge", "database", request_type, endpoint]
+    if request is not None:
+        cmd.append(json.dumps(request))
+    stdout = subprocess.check_output(cmd)
+    data = ast.literal_eval(stdout.decode("utf-8"))
+    return data
 
 
 # General ---------------------------------------------------------------------------------
@@ -173,6 +195,64 @@ def models_with_kwargs(request):
 def model_to_create(models_with_kwargs):
     kw_0, _, _ = models_with_kwargs.kwargs
     return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
+
+
+@pytest.fixture(scope="session")
+def create_with_db():
+    def _create_with_db(session, models, request):
+        table = models.table(**request)
+        commit_to_session(session, table)
+        # Need to `get` b/c db doesn't return a response
+        model_db = session.get(models.table, table.id)
+        data = model_db.dict()
+        return data
+
+    return _create_with_db
+
+
+@pytest.fixture(scope="session")
+def create_with_abstraction():
+    def _create_with_abstraction(session, models, request):
+        table = models.table(**request)
+        model_db = abstractions.create(session=session, table_cls=models.table, model=table,)
+        data = model_db.dict()
+        return data
+
+    return _create_with_abstraction
+
+
+@pytest.fixture(scope="session")
+def create_with_client():
+    def _create_with_client(base_url, models, json):
+        client = Client(base_url)
+        response = client.post(models.path, json)
+        assert response.status_code == 200
+        data = response.json()
+        return data
+
+    return _create_with_client
+
+
+@pytest.fixture(scope="session")
+def create_with_cli():
+    def _create_with_cli(base_url, models, request):
+        data = get_data_from_cli("post", base_url, models.path, request)
+        return data
+
+    return _create_with_cli
+
+
+@pytest.fixture(
+    scope="session",
+    params=[
+        lazy_fixture("create_with_db"),
+        lazy_fixture("create_with_abstraction"),
+        lazy_fixture("create_with_client"),
+        lazy_fixture("create_with_cli"),
+    ],
+)
+def create_func(request):
+    return request.param
 
 
 # Read ----------------------------------------------------------------------------------

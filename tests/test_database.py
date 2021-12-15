@@ -103,58 +103,37 @@ def test_registration(session, models_with_kwargs):
 # Test create ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_create(session, model_to_create, entrypoint, http_server):
+def test_create(session, model_to_create, http_server, create_func):
     models, request, blank_opts = model_to_create
-    table = models.table(**request)
     # make sure the database is empty
     clear_table(session, models.table)
 
-    # get response data
-    # write respones to dict to make sure `data` is in fact collected
-    # from a specific endpoint, as opposed to carried over from a previous test call
-    # (the latter seems like it shouldn't happen, but... it seemed like it might've been?)
-    r = dict()
-    if entrypoint == "db":
-        commit_to_session(session, table)
-        # Need to `get` b/c db doesn't return a response
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "abstract-funcs":
-        model_db = abstractions.create(
-            session=session, table_cls=models.table, model=models.table(**request)
-        )
-        data = model_db.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.post(models.path, json=request)
-        assert response.status_code == 200
-        data = response.json()
-        r.update({entrypoint: data})
-    elif entrypoint == "cli":
-        data = get_data_from_cli("post", http_server, models.path, request)
-        r.update({entrypoint: data})
+    connection = (
+        session
+        if "db" in create_func.__name__ or "abstract" in create_func.__name__
+        else http_server
+    )
+
+    data = create_func(connection, models, request)
 
     # evaluate data
     for k in request.keys():
-        if isinstance(r[entrypoint][k], datetime):
-            assert r[entrypoint][k] == parse_to_datetime(request[k])
+        if isinstance(data[k], datetime):
+            assert data[k] == parse_to_datetime(request[k])
         elif (
             # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
-            isinstance(r[entrypoint][k], str)
+            isinstance(data[k], str)
             and isinstance(request[k], str)
-            and any([s.endswith("Z") for s in (r[entrypoint][k], request[k])])
-            and not all([s.endswith("Z") for s in (r[entrypoint][k], request[k])])
+            and any([s.endswith("Z") for s in (data[k], request[k])])
+            and not all([s.endswith("Z") for s in (data[k], request[k])])
         ):
-            assert add_z(r[entrypoint][k]) == add_z(request[k])
+            assert add_z(data[k]) == add_z(request[k])
         else:
-            assert r[entrypoint][k] == request[k]
+            assert data[k] == request[k]
     if blank_opts:
         for k in blank_opts:
-            assert r[entrypoint][k] is None
-    assert r[entrypoint]["id"] is not None
+            assert data[k] is None
+    assert data["id"] is not None
 
 
 @pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
