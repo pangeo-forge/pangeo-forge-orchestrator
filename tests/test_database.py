@@ -62,10 +62,7 @@ def registered_routes(app: FastAPI):
 # Test endpoint registration ------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "register", [abstractions.RegisterEndpoints, abstractions.register_endpoints]
-)
-def test_registration(session, models_with_kwargs, register):
+def test_registration(session, models_with_kwargs):
     models = models_with_kwargs[0]
     new_app = FastAPI()
 
@@ -76,7 +73,7 @@ def test_registration(session, models_with_kwargs, register):
         yield session
 
     # register routes for this application
-    register(api=new_app, get_session=get_session, models=models)
+    abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
 
     # assert that this application now has five registered routes
     routes = registered_routes(new_app)
@@ -241,7 +238,7 @@ def test_read_range(session, models_to_read, entrypoint, http_server):
             session=session,
             table_cls=models.table,
             offset=0,
-            limit=abstractions.RegisterEndpoints.limit.default,
+            limit=abstractions.QUERY_LIMIT.default,
         )
         r.update({entrypoint: data})
     elif entrypoint == "client":

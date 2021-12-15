@@ -5,6 +5,9 @@ from typing import Callable, List, Union
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlmodel import Field, Session, SQLModel, select
 
+QUERY_LIMIT = Query(default=100, lte=100)
+
+
 # Model generator + container -------------------------------------------------------------
 
 
@@ -125,7 +128,7 @@ def delete(*, session: Session, table_cls: SQLModel, id: int) -> dict:
 
 
 @dataclass
-class RegisterEndpoints:
+class _RegisterEndpoints:
     """From a ``MultipleModels`` object, register create, read, update, delete (CRUD) API endpoints.
 
     :param api: The ``FastAPI`` instance.
@@ -137,7 +140,7 @@ class RegisterEndpoints:
     api: FastAPI
     get_session: Callable
     models: MultipleModels
-    limit: Query = Query(default=100, lte=100)
+    limit: Query = QUERY_LIMIT
 
     def __post_init__(self):
         # register all endpoints
@@ -190,9 +193,6 @@ class RegisterEndpoints:
 
 
 def register_endpoints(
-    api: FastAPI,
-    get_session: Callable,
-    models: MultipleModels,
-    limit: Query = Query(default=100, lte=100),
+    api: FastAPI, get_session: Callable, models: MultipleModels, limit: Query = QUERY_LIMIT,
 ):
-    _ = RegisterEndpoints(api, get_session, models, limit)
+    _ = _RegisterEndpoints(api, get_session, models, limit)
