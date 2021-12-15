@@ -63,7 +63,7 @@ def registered_routes(app: FastAPI):
 
 
 def test_registration(session, models_with_kwargs):
-    models = models_with_kwargs[0]
+    models = models_with_kwargs.models
     new_app = FastAPI()
 
     # assert that this application has no registered routes
