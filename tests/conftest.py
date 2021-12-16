@@ -93,7 +93,7 @@ class ModelKwargs:
 @dataclass
 class ModelFixture:
     """Container for a ``MultipleModels`` object (itself containing ``SQLModel`` objects) with
-    kwargs which can be used to instiate the models within it.
+    kwargs which can be used to instantiate the models within it.
 
     :param models: A ``MultipleModels`` object.
     :param kwargs: A list of three ``ModelKwargs`` objects matched to the ``models``.
