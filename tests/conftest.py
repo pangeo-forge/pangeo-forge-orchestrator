@@ -290,6 +290,63 @@ def single_model_to_read(models_with_kwargs):
     return models, table
 
 
+@pytest.fixture(scope="session")
+def read_range_with_db():
+    def _read_range_with_db(session, models):
+        data = session.query(models.table).all()
+        return data
+
+    return _read_range_with_db
+
+
+@pytest.fixture(scope="session")
+def read_range_with_abstraction():
+    def _read_range_with_abstraction(session, models):
+        data = abstractions.read_range(
+            session=session,
+            table_cls=models.table,
+            offset=0,
+            limit=abstractions.QUERY_LIMIT.default,
+        )
+        return data
+
+    return _read_range_with_abstraction
+
+
+@pytest.fixture(scope="session")
+def read_range_with_client():
+    def _read_range_with_client(base_url, models):
+        client = Client(base_url)
+        response = client.get(models.path)
+        assert response.status_code == 200
+        data = response.json()
+        return data
+
+    return _read_range_with_client
+
+
+@pytest.fixture(scope="session")
+def read_range_with_cli():
+    def _read_range_with_cli(base_url, models):
+        data = get_data_from_cli("get", base_url, models.path)
+        return data
+
+    return _read_range_with_cli
+
+
+@pytest.fixture(
+    scope="session",
+    params=[
+        lazy_fixture("read_range_with_db"),
+        lazy_fixture("read_range_with_abstraction"),
+        lazy_fixture("read_range_with_client"),
+        lazy_fixture("read_range_with_cli"),
+    ],
+)
+def read_range_func(request):
+    return request.param
+
+
 # Update --------------------------------------------------------------------------------
 
 

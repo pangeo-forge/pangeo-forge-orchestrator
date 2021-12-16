@@ -46,6 +46,11 @@ def registered_routes(app: FastAPI):
     return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
 
 
+def get_connection(session: Session, url: str, name: str):
+    connection = session if "db" in name or "abstract" in name else url
+    return connection
+
+
 # Test endpoint registration ------------------------------------------------------------
 
 
@@ -91,12 +96,7 @@ def test_registration(session, models_with_kwargs):
 
 
 class TestCreate:
-    """Container for tests of database entry creation tests and associated failure modes"""
-
-    @staticmethod
-    def get_connection(session: Session, url: str, name: str):
-        connection = session if "db" in name or "abstract" in name else url
-        return connection
+    """Container for tests of database entry creation and associated failure modes"""
 
     @staticmethod
     def get_entrypoint(func: Callable):
@@ -138,7 +138,7 @@ class TestCreate:
     ):
         models, request, blank_opts = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = self.get_connection(session, http_server, create_func.__name__)
+        connection = get_connection(session, http_server, create_func.__name__)
         data = create_func(connection, models, request)
         self.evaluate_data(request, data, blank_opts)
 
@@ -153,7 +153,7 @@ class TestCreate:
     ):
         models, request, _ = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = self.get_connection(session, http_server, create_func.__name__)
+        connection = get_connection(session, http_server, create_func.__name__)
 
         failing_request = copy.deepcopy(request)
         if failure_mode == "incomplete":
@@ -172,51 +172,31 @@ class TestCreate:
 # Test read -----------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_read_range(session, models_to_read, entrypoint, http_server):
-    models, tables = models_to_read
-    # make sure the database is empty
-    clear_table(session, models.table)
-    # add entries for this test
-    for t in tables:
-        commit_to_session(session, t)
+class TestReadRange:
+    """Container for tests of ranged reads from database"""
 
-    r = dict()
-    if entrypoint == "db":
-        data = session.query(models.table).all()
-        r.update({entrypoint: data})
-    elif entrypoint == "abstract-funcs":
-        data = abstractions.read_range(
-            session=session,
-            table_cls=models.table,
-            offset=0,
-            limit=abstractions.QUERY_LIMIT.default,
-        )
-        r.update({entrypoint: data})
-    elif entrypoint == "client":
-        data = session.query(models.table).all()
-        client = Client(base_url=http_server)
-        response = client.get(models.path)
-        assert response.status_code == 200
-        data = response.json()
-        r.update({entrypoint: data})
-    elif entrypoint == "cli":
-        data = get_data_from_cli("get", http_server, models.path)
-        r.update({entrypoint: data})
+    @staticmethod
+    def evaluate_data(data, tables):
+        assert len(data) == len(tables)
+        for i, t in enumerate(tables):
+            input_data = t.dict()
+            # `session.query` returns a list of `SQLModel` table instances
+            # ... but `client.get` returns a list of `dict`s, so:
+            response_data = data[i].dict() if type(data[i]) != dict else data[i]
+            for k in input_data.keys():
+                if type(input_data[k]) == datetime and type(response_data[k]) != datetime:
+                    assert parse_to_datetime(response_data[k]) == input_data[k]
+                else:
+                    assert response_data[k] == input_data[k]
 
-    assert len(r[entrypoint]) == len(tables)
-    for i, t in enumerate(tables):
-        input_data = t.dict()
-        # `session.query` returns a list of `SQLModel` table instances
-        # ... but `client.get` returns a list of `dict`s, so:
-        response_data = (
-            r[entrypoint][i].dict() if type(r[entrypoint][i]) != dict else r[entrypoint][i]
-        )
-        for k in input_data.keys():
-            if type(input_data[k]) == datetime and type(response_data[k]) != datetime:
-                assert parse_to_datetime(response_data[k]) == input_data[k]
-            else:
-                assert response_data[k] == input_data[k]
+    def test_read_range(self, session, models_to_read, http_server, read_range_func):
+        models, tables = models_to_read
+        clear_table(session, models.table)  # make sure the database is empty
+        for t in tables:
+            commit_to_session(session, t)  # add entries for this test
+        connection = get_connection(session, http_server, read_range_func.__name__)
+        data = read_range_func(connection, models)
+        self.evaluate_data(data, tables)
 
 
 @pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
