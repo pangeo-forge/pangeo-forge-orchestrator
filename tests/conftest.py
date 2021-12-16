@@ -58,7 +58,15 @@ class _MissingFieldError(Exception):
     pass
 
 
-class _TypeError(Exception):
+class _StrTypeError(Exception):
+    pass
+
+
+class _IntTypeError(Exception):
+    pass
+
+
+class _NonexistentTableError(Exception):
     pass
 
 
@@ -74,10 +82,12 @@ def get_data_from_cli(
     if isinstance(data, dict) and "detail" in data.keys():
         error = data["detail"][0]
         if isinstance(error, dict):
-            if error["msg"] == "field required" and error["type"] == "value_error.missing":
+            if error["type"] == "value_error.missing":
                 raise _MissingFieldError
-            elif "type expected" in error["msg"] and "type_error." in error["type"]:
-                raise _TypeError
+            elif error["type"] == "type_error.str":
+                raise _StrTypeError
+            elif error["type"] == "type_error.integer":
+                raise _IntTypeError
     return data
 
 
@@ -207,12 +217,6 @@ def models_with_kwargs(request):
 
 
 @pytest.fixture(scope="session")
-def model_to_create(models_with_kwargs):
-    kw_0, _, _ = models_with_kwargs.kwargs
-    return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
-
-
-@pytest.fixture(scope="session")
 def create_with_db():
     def _create_with_db(session, models, request):
         table = models.table(**request)
@@ -274,23 +278,6 @@ def create_func(request):
 
 
 @pytest.fixture(scope="session")
-def models_to_read(models_with_kwargs):
-    models = models_with_kwargs.models
-    kw_0, kw_1, _ = models_with_kwargs.kwargs
-    model_0 = models.table(**kw_0.request)
-    model_1 = models.table(**kw_1.request)
-    return models, (model_0, model_1)
-
-
-@pytest.fixture(scope="session")
-def single_model_to_read(models_with_kwargs):
-    models = models_with_kwargs.models
-    _, _, kw_2 = models_with_kwargs.kwargs
-    table = models.table(**kw_2.request)
-    return models, table
-
-
-@pytest.fixture(scope="session")
 def read_range_with_db():
     def _read_range_with_db(session, models):
         data = session.query(models.table).all()
@@ -344,6 +331,62 @@ def read_range_with_cli():
     ],
 )
 def read_range_func(request):
+    return request.param
+
+
+@pytest.fixture(scope="session")
+def read_single_with_db():
+    def _read_single_with_db(session, models, table):
+        model_db = session.get(models.table, table.id)
+        if model_db is None:
+            raise _NonexistentTableError
+        data = model_db.dict()
+        return data
+
+    return _read_single_with_db
+
+
+@pytest.fixture(scope="session")
+def read_single_with_abstraction():
+    def _read_single_with_abstraction(session, models, table):
+        model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
+        data = model_db.dict()
+        return data
+
+    return _read_single_with_abstraction
+
+
+@pytest.fixture(scope="session")
+def read_single_with_client():
+    def _read_single_with_client(base_url, models, table):
+        client = Client(base_url)
+        response = client.get(f"{models.path}{table.id}")
+        response.raise_for_status()
+        data = response.json()
+        return data
+
+    return _read_single_with_client
+
+
+@pytest.fixture(scope="session")
+def read_single_with_cli():
+    def _read_single_with_cli(base_url, models, table):
+        data = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
+        return data
+
+    return _read_single_with_cli
+
+
+@pytest.fixture(
+    scope="session",
+    params=[
+        lazy_fixture("read_single_with_db"),
+        lazy_fixture("read_single_with_abstraction"),
+        lazy_fixture("read_single_with_client"),
+        lazy_fixture("read_single_with_cli"),
+    ],
+)
+def read_single_func(request):
     return request.param
 
 

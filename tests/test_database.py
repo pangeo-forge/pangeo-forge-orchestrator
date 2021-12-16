@@ -14,7 +14,14 @@ from sqlmodel import Session, SQLModel
 import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.client import Client
 
-from .conftest import ModelFixture, _MissingFieldError, _TypeError, get_data_from_cli
+from .conftest import (
+    ModelFixture,
+    _IntTypeError,
+    _MissingFieldError,
+    _NonexistentTableError,
+    _StrTypeError,
+    get_data_from_cli,
+)
 
 ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
 
@@ -46,8 +53,19 @@ def registered_routes(app: FastAPI):
     return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
 
 
-def get_connection(session: Session, url: str, name: str):
-    connection = session if "db" in name or "abstract" in name else url
+def get_entrypoint(func: Callable):
+    # This function returns the entrypoint name from its associated callable
+    # (i.e. it returns "db" from "create_with_db", etc.)
+    return func.__name__.split("_with_")[1]
+
+
+def get_connection(session: Session, url: str, func: Callable):
+    # Different fixtures require different connection points to the database.
+    # `db` and `abstraction` entrypoints use a `session` connection, whereas
+    # `client` and `cli` entrypoints connect via the http URL. This function
+    # finds the appropriate connection point based on the entrypoint.
+    entrypoint = get_entrypoint(func)
+    connection = session if "db" in entrypoint or "abstract" in entrypoint else url
     return connection
 
 
@@ -98,16 +116,18 @@ def test_registration(session, models_with_kwargs):
 class TestCreate:
     """Container for tests of database entry creation and associated failure modes"""
 
-    @staticmethod
-    def get_entrypoint(func: Callable):
-        return func.__name__.split("_create_with_")[1]
+    @pytest.fixture
+    def model_to_create(self, models_with_kwargs):
+        kw_0, _, _ = models_with_kwargs.kwargs
+        return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
 
     @staticmethod
-    def get_error(name, failure_mode: str):
+    def get_error(func: Callable, failure_mode: str):
+        entrypoint = get_entrypoint(func)
         errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
-        cli_error = _MissingFieldError if failure_mode == "incomplete" else _TypeError
+        cli_error = _MissingFieldError if failure_mode == "incomplete" else _StrTypeError
         errors.update(dict(cli=cli_error))
-        return errors[name]
+        return errors[entrypoint]
 
     @staticmethod
     def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
@@ -138,7 +158,7 @@ class TestCreate:
     ):
         models, request, blank_opts = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = get_connection(session, http_server, create_func.__name__)
+        connection = get_connection(session, http_server, create_func)
         data = create_func(connection, models, request)
         self.evaluate_data(request, data, blank_opts)
 
@@ -153,7 +173,7 @@ class TestCreate:
     ):
         models, request, _ = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = get_connection(session, http_server, create_func.__name__)
+        connection = get_connection(session, http_server, create_func)
 
         failing_request = copy.deepcopy(request)
         if failure_mode == "incomplete":
@@ -163,8 +183,7 @@ class TestCreate:
             failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
             assert type(failing_request[list(failing_request)[0]]) == dict
 
-        entrypoint = self.get_entrypoint(create_func)
-        error_cls = self.get_error(entrypoint, failure_mode=failure_mode)
+        error_cls = self.get_error(create_func, failure_mode=failure_mode)
         with pytest.raises(error_cls):
             _ = create_func(connection, models, failing_request)
 
@@ -172,11 +191,37 @@ class TestCreate:
 # Test read -----------------------------------------------------------------------------
 
 
-class TestReadRange:
-    """Container for tests of ranged reads from database"""
+class TestRead:
+    """Container for tests of reading from database"""
+
+    @pytest.fixture
+    def models_to_read(self, models_with_kwargs: ModelFixture):
+        models = models_with_kwargs.models
+        kw_0, kw_1, _ = models_with_kwargs.kwargs
+        model_0 = models.table(**kw_0.request)
+        model_1 = models.table(**kw_1.request)
+        return models, (model_0, model_1)
+
+    @pytest.fixture
+    def single_model_to_read(self, models_with_kwargs: ModelFixture):
+        models = models_with_kwargs.models
+        _, _, kw_2 = models_with_kwargs.kwargs
+        table = models.table(**kw_2.request)
+        return models, table
 
     @staticmethod
-    def evaluate_data(data, tables):
+    def get_error(func: Callable):
+        entrypoint = get_entrypoint(func)
+        errors = dict(
+            db=_NonexistentTableError,
+            abstraction=HTTPException,
+            client=HTTPError,
+            cli=_IntTypeError,
+        )
+        return errors[entrypoint]
+
+    @staticmethod
+    def evaluate_read_range_data(data, tables):
         assert len(data) == len(tables)
         for i, t in enumerate(tables):
             input_data = t.dict()
@@ -189,75 +234,40 @@ class TestReadRange:
                 else:
                     assert response_data[k] == input_data[k]
 
+    @staticmethod
+    def evaluate_read_single_data(data, table):
+        input_dict = table.dict()
+        for k in input_dict.keys():
+            if type(input_dict[k]) == datetime and type(data[k]) != datetime:
+                assert parse_to_datetime(data[k]) == input_dict[k]
+            else:
+                assert data[k] == input_dict[k]
+
     def test_read_range(self, session, models_to_read, http_server, read_range_func):
         models, tables = models_to_read
         clear_table(session, models.table)  # make sure the database is empty
         for t in tables:
             commit_to_session(session, t)  # add entries for this test
-        connection = get_connection(session, http_server, read_range_func.__name__)
+        connection = get_connection(session, http_server, read_range_func)
         data = read_range_func(connection, models)
-        self.evaluate_data(data, tables)
+        self.evaluate_read_range_data(data, tables)
 
+    def test_read_single(self, session, single_model_to_read, http_server, read_single_func):
+        models, table = single_model_to_read
+        clear_table(session, models.table)  # make sure the database is empty
+        commit_to_session(session, table)  # add entries for this test
+        connection = get_connection(session, http_server, read_single_func)
+        data = read_single_func(connection, models, table)
+        self.evaluate_read_single_data(data, table)
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_read_single(session, single_model_to_read, entrypoint, http_server):
-    models, table = single_model_to_read
-    # make sure the database is empty
-    clear_table(session, models.table)
-
-    commit_to_session(session, table)
-
-    r = dict()
-    if entrypoint == "db":
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "abstract-funcs":
-        model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
-        data = model_db.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.get(f"{models.path}{table.id}")
-        assert response.status_code == 200
-        data = response.json()
-        r.update({entrypoint: data})
-    elif entrypoint == "cli":
-        data = get_data_from_cli("get", http_server, f"{models.path}{table.id}")
-        r.update({entrypoint: data})
-
-    input_dict = table.dict()
-    for k in input_dict.keys():
-        if type(input_dict[k]) == datetime and type(r[entrypoint][k]) != datetime:
-            assert parse_to_datetime(r[entrypoint][k]) == input_dict[k]
-        else:
-            assert r[entrypoint][k] == input_dict[k]
-
-
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_read_nonexistent(session, single_model_to_read, entrypoint, http_server):
-    models, table = single_model_to_read
-    # make sure the database is empty
-    clear_table(session, models.table)
-
-    if entrypoint == "db":
-        model_db = session.get(models.table, table.id)
-        assert model_db is None
-    elif entrypoint == "abstract-funcs":
-        with pytest.raises(HTTPException):
-            _ = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.get(f"{models.path}{table.id}")
-        assert response.status_code == 422
-        error = response.json()["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
-    elif entrypoint == "cli":
-        data = get_data_from_cli("get", http_server, f"{models.path}{table.id}")
-        error = data["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
+    def test_read_nonexistent(self, session, single_model_to_read, http_server, read_single_func):
+        models, table = single_model_to_read
+        clear_table(session, models.table)  # make sure the database is empty
+        # don't add any entries for this test
+        connection = get_connection(session, http_server, read_single_func)
+        error_cls = self.get_error(read_single_func)
+        with pytest.raises(error_cls):
+            _ = read_single_func(connection, models, table)
 
 
 # Test update ---------------------------------------------------------------------------
