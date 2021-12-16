@@ -12,15 +12,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
-from pangeo_forge_orchestrator.client import Client
 
 from .conftest import (
+    CreateFixtures,
+    DeleteFixtures,
     ModelFixture,
+    ReadFixtures,
+    UpdateFixtures,
     _IntTypeError,
     _MissingFieldError,
     _NonexistentTableError,
     _StrTypeError,
-    get_data_from_cli,
+    clear_table,
 )
 
 ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
@@ -29,13 +32,6 @@ ENTRYPOINTS = ["db", "abstract-funcs", "client", "cli"]
 def commit_to_session(session: Session, model: SQLModel):
     session.add(model)
     session.commit()
-
-
-def clear_table(session: Session, table_model: SQLModel):
-    session.query(table_model).delete()
-    session.commit()
-    # make sure the database is empty
-    assert len(session.query(table_model).all()) == 0
 
 
 def add_z(input_string: str):
@@ -113,7 +109,7 @@ def test_registration(session, models_with_kwargs):
 # Test create ---------------------------------------------------------------------------
 
 
-class TestCreate:
+class TestCreate(CreateFixtures):
     """Container for tests of database entry creation and associated failure modes"""
 
     @pytest.fixture
@@ -191,7 +187,7 @@ class TestCreate:
 # Test read -----------------------------------------------------------------------------
 
 
-class TestRead:
+class TestRead(ReadFixtures):
     """Container for tests of reading from database"""
 
     @pytest.fixture
@@ -273,155 +269,108 @@ class TestRead:
 # Test update ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_update(session, model_to_update, entrypoint, http_server):
-    models, table, update_with = model_to_update
-    # make sure the database is empty
-    clear_table(session, models.table)
-    # add entries for this test
-    commit_to_session(session, table)
+class TestUpdate(UpdateFixtures):
+    """Container for tests of updating existing entries in database"""
 
-    r = dict()
-    if entrypoint == "db":
-        model_db = session.query(models.table).first()
-        for k, v in update_with.items():
-            setattr(model_db, k, v)
-        session.commit()
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "abstract-funcs":
-        model_db = session.query(models.table).first()
-        for k, v in update_with.items():
-            setattr(model_db, k, v)
-        updated_model = abstractions.update(
-            session=session, table_cls=models.table, id=model_db.id, model=model_db
+    @pytest.fixture(scope="session")
+    def model_to_update(self, models_with_kwargs):
+        models = models_with_kwargs.models
+        kw_0, kw_1, _ = models_with_kwargs.kwargs
+        table = models.table(**kw_0.request)
+        different_kws = copy.deepcopy(kw_1.request)
+        key = list(different_kws)[0]
+        update_with = {key: different_kws.pop(key)}
+        return models, table, update_with
+
+    @staticmethod
+    def get_error(func: Callable):
+        entrypoint = get_entrypoint(func)
+        errors = dict(
+            db=_NonexistentTableError,
+            abstraction=_NonexistentTableError,
+            client=HTTPError,
+            cli=_IntTypeError,
         )
-        data = updated_model.dict()
-        r.update({entrypoint: data})
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.patch(f"{models.path}{table.id}", json=update_with)
-        assert response.status_code == 200
-        data = response.json()
-        r.update({entrypoint: data})
-    elif entrypoint == "cli":
-        data = get_data_from_cli("patch", http_server, f"{models.path}{table.id}", update_with)
-        r.update({entrypoint: data})
+        return errors[entrypoint]
 
-    assert r[entrypoint]["id"] == table.id
-    input_dict = table.dict()
-    for k in input_dict.keys():
-        if k == list(update_with)[0]:
-            assert r[entrypoint][k] == update_with[k]
-        else:
-            if not isinstance(r[entrypoint][k], type(input_dict[k])):
-                assert parse_to_datetime(r[entrypoint][k]) == input_dict[k]
+    @staticmethod
+    def evaluate_data(data, table, update_with):
+        assert data["id"] == table.id
+        input_dict = table.dict()
+        for k in input_dict.keys():
+            if k == list(update_with)[0]:
+                assert data[k] == update_with[k]
             else:
-                assert r[entrypoint][k] == input_dict[k]
+                if not isinstance(data[k], type(input_dict[k])):
+                    assert parse_to_datetime(data[k]) == input_dict[k]
+                else:
+                    assert data[k] == input_dict[k]
 
+    def test_update(self, session, model_to_update, http_server, update_func):
+        models, table, update_with = model_to_update
+        clear_table(session, models.table)  # make sure the database is empty
+        commit_to_session(session, table)  # add entry for this test
+        connection = get_connection(session, http_server, update_func)
+        data = update_func(connection, models, table, update_with)
+        self.evaluate_data(data, table, update_with)
 
-@pytest.mark.parametrize("entrypoint", [e for e in ENTRYPOINTS if e != "db"])
-def test_update_nonexistent(session, model_to_update, entrypoint, http_server):
-    # Updating via database is a `session.get` followed by changing attrs on the returned
-    # model. This will fail on `get`, which is already covered by `test_read_nonexistent`.
-    # Therefore, "db" is omitted from `entrypoints` param for this test.
-
-    models, table, update_with = model_to_update
-    # make sure the database is empty
-    clear_table(session, models.table)
-
-    if entrypoint == "abstract-funcs":
-        for k, v in update_with.items():
-            # the exception will be raised without this, but including it to represent the user
-            # error of updating attrs on a table which has is not in the database to begin with
-            setattr(table, k, v)
-
-        with pytest.raises(HTTPException):
-            _ = abstractions.update(
-                session=session, table_cls=models.table, id=table.id, model=table
-            )
-
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        response = client.patch(f"{models.path}{table.id}", json=update_with)
-        assert response.status_code == 422
-        error = response.json()["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
-
-    elif entrypoint == "cli":
-        data = get_data_from_cli("patch", http_server, f"{models.path}{table.id}", update_with)
-        error = data["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
+    def test_update_nonexistent(self, session, model_to_update, http_server, update_func):
+        models, table, update_with = model_to_update
+        clear_table(session, models.table)  # make sure the database is empty
+        # don't add any entries for this test
+        connection = get_connection(session, http_server, update_func)
+        error_cls = self.get_error(update_func)
+        with pytest.raises(error_cls):
+            _ = update_func(connection, models, table, update_with)
 
 
 # Test delete ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entrypoint", ENTRYPOINTS)
-def test_delete(session, model_to_delete, entrypoint, http_server):
-    models, table = model_to_delete
-    # make sure the database is empty
-    clear_table(session, models.table)
-    # add entries for this test
-    commit_to_session(session, table)
+class TestDelete(DeleteFixtures):
+    """Container for tests of deleting existing entries in database"""
 
-    model_in_db = session.get(models.table, table.id)
-    assert model_in_db is not None
-    assert model_in_db == table
+    @pytest.fixture
+    def model_to_delete(self, models_with_kwargs):
+        models = models_with_kwargs.models
+        kw_0, _, _ = models_with_kwargs.kwargs
+        table = models.table(**kw_0.request)
+        return models, table
 
-    if entrypoint == "db":
-        # TODO: Database deletions based on specific table id (vs. below clear all).
-        # Not urgent because we'll generally be doing this via either the client or cli.
-        clear_table(session, models.table)
+    @staticmethod
+    def get_error(func: Callable):
+        entrypoint = get_entrypoint(func)
+        errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
+        return errors[entrypoint]
+
+    def test_delete(self, session, model_to_delete, http_server, delete_func):
+        models, table = model_to_delete
+        clear_table(session, models.table)  # make sure the database is empty
+        commit_to_session(session, table)  # add entries for this test
+
         model_in_db = session.get(models.table, table.id)
-        assert model_in_db is None
-    elif entrypoint == "abstract-funcs":
-        delete_response = abstractions.delete(session=session, table_cls=models.table, id=table.id)
-        assert delete_response == {"ok": True}  # successfully deleted
-        model_in_db = session.get(models.table, table.id)
-        assert model_in_db is None
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        delete_response = client.delete(f"{models.path}{table.id}")
-        assert delete_response.status_code == 200  # successfully deleted
-        get_response = client.get(f"{models.path}{table.id}")
-        assert get_response.status_code == 404  # not found, b/c deleted
-    elif entrypoint == "cli":
-        delete_response = get_data_from_cli("delete", http_server, f"{models.path}{table.id}")
-        assert delete_response == {"ok": True}  # successfully deleted
-        get_response = get_data_from_cli("get", http_server, f"{models.path}{table.id}")
-        assert get_response == {"detail": f"{models.table.__name__} not found"}
+        assert model_in_db is not None
+        assert model_in_db == table
 
+        connection = get_connection(session, http_server, delete_func)
+        delete_func(connection, models, table)
 
-@pytest.mark.parametrize("entrypoint", [e for e in ENTRYPOINTS if e != "db"])
-def test_delete_nonexistent(session, model_to_delete, entrypoint, http_server):
-    # Deleting via the database is a `session.query` followed by `.delete()`. So far, these tests
-    # do not implement id-level queries with the session API (only queries for all items). This is
-    # not generally a problem, as most of our interface will be via the client or the cli. In the
-    # future, we may choose to use id-level queries in the tests (or to use a different SQL API for
-    # direct DELETE without querying first). Until then, there is not an urgency to run this
-    # test for the database entrypoint, so it is omitted here.
+    def test_delete_nonexistent(self, session, model_to_delete, http_server, delete_func):
+        models, table = model_to_delete
+        clear_table(session, models.table)  # make sure the database is empty
+        connection = get_connection(session, http_server, delete_func)
 
-    models, table = model_to_delete
-    # make sure the database is empty
-    _ = http_server  # start server
-    clear_table(session, models.table)
-
-    if entrypoint == "abstract-funcs":
-        with pytest.raises(HTTPException):
-            _ = abstractions.delete(session=session, table_cls=models.table, id=table.id)
-    elif entrypoint == "client":
-        client = Client(base_url=http_server)
-        delete_response = client.delete(f"{models.path}{table.id}")
-        assert delete_response.status_code == 422
-        error = delete_response.json()["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
-    elif entrypoint == "cli":
-        delete_response = get_data_from_cli("delete", http_server, f"{models.path}{table.id}")
-        error = delete_response["detail"][0]
-        assert error["msg"] == "value is not a valid integer"
-        assert error["type"] == "type_error.integer"
+        if get_entrypoint(delete_func) == "db":
+            pytest.skip(
+                "Deleting via the database is a `session.query` followed by `.delete()`. So far, "
+                "these tests do not implement id-level queries with the session API (only queries "
+                "for all items). This is not generally a problem, as most of our interface will be "
+                "via the client or the cli. In the future, we may choose to use id-level queries "
+                "in the tests (or to use a different SQL API for direct DELETE without querying "
+                "first). Until then, there is not an urgency to run this test for the database "
+                "entrypoint, so it is omitted here."
+            )
+        else:
+            error_cls = self.get_error(delete_func)
+            with pytest.raises(error_cls):
+                _ = delete_func(connection, models, table)

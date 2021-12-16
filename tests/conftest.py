@@ -1,12 +1,11 @@
 import ast
-import copy
 import json
 import os
 import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
@@ -16,6 +15,25 @@ import pangeo_forge_orchestrator.abstractions as abstractions
 from pangeo_forge_orchestrator.abstractions import MultipleModels
 from pangeo_forge_orchestrator.client import Client
 from pangeo_forge_orchestrator.models import MODELS
+
+# Exceptions ------------------------------------------------------------------------------
+
+
+class _MissingFieldError(Exception):
+    pass
+
+
+class _StrTypeError(Exception):
+    pass
+
+
+class _IntTypeError(Exception):
+    pass
+
+
+class _NonexistentTableError(Exception):
+    pass
+
 
 # Helpers ---------------------------------------------------------------------------------
 
@@ -49,30 +67,20 @@ def start_http_server(path, request):
     return url
 
 
-def commit_to_session(session: Session, model: SQLModel):
+def commit_to_session(session: Session, model: SQLModel) -> None:
     session.add(model)
     session.commit()
 
 
-class _MissingFieldError(Exception):
-    pass
-
-
-class _StrTypeError(Exception):
-    pass
-
-
-class _IntTypeError(Exception):
-    pass
-
-
-class _NonexistentTableError(Exception):
-    pass
+def clear_table(session: Session, table_model: SQLModel):
+    session.query(table_model).delete()
+    session.commit()
+    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
 def get_data_from_cli(
     request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
-):
+) -> dict:
     os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
     cmd = ["pangeo-forge", "database", request_type, endpoint]
     if request is not None:
@@ -91,7 +99,7 @@ def get_data_from_cli(
     return data
 
 
-# General ---------------------------------------------------------------------------------
+# General fixtures ------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session")
@@ -213,203 +221,321 @@ def models_with_kwargs(request):
     return request.param
 
 
-# Create --------------------------------------------------------------------------------
+# CRUD function fixtures ------------------------------------------------------------------
+
+# Create ----------------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def create_with_db():
-    def _create_with_db(session, models, request):
-        table = models.table(**request)
-        commit_to_session(session, table)
-        # Need to `get` b/c db doesn't return a response
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        return data
+class CreateFixtures:
+    """Fixtures for ``TestCreate``"""
 
-    return _create_with_db
+    @pytest.fixture
+    def create_with_db(self) -> Callable:
+        def _create_with_db(session: Session, models: MultipleModels, request: dict) -> dict:
+            table = models.table(**request)
+            commit_to_session(session, table)
+            # Need to `get` b/c db doesn't return a response
+            model_db = session.get(models.table, table.id)
+            data = model_db.dict()
+            return data
 
+        return _create_with_db
 
-@pytest.fixture(scope="session")
-def create_with_abstraction():
-    def _create_with_abstraction(session, models, request):
-        table = models.table(**request)
-        model_db = abstractions.create(session=session, table_cls=models.table, model=table,)
-        data = model_db.dict()
-        return data
+    @pytest.fixture
+    def create_with_abstraction(self) -> Callable:
+        def _create_with_abstraction(
+            session: Session, models: MultipleModels, request: dict
+        ) -> dict:
+            table = models.table(**request)
+            model_db = abstractions.create(session=session, table_cls=models.table, model=table,)
+            data = model_db.dict()
+            return data
 
-    return _create_with_abstraction
+        return _create_with_abstraction
 
+    @pytest.fixture
+    def create_with_client(self) -> Callable:
+        def _create_with_client(base_url: str, models: MultipleModels, json: dict) -> dict:
+            client = Client(base_url)
+            response = client.post(models.path, json)
+            response.raise_for_status()
+            data = response.json()
+            return data
 
-@pytest.fixture(scope="session")
-def create_with_client():
-    def _create_with_client(base_url, models, json):
-        client = Client(base_url)
-        response = client.post(models.path, json)
-        response.raise_for_status()
-        data = response.json()
-        return data
+        return _create_with_client
 
-    return _create_with_client
+    @pytest.fixture
+    def create_with_cli(self) -> Callable:
+        def _create_with_cli(base_url: str, models: MultipleModels, request: dict) -> dict:
+            data = get_data_from_cli("post", base_url, models.path, request)
+            return data
 
+        return _create_with_cli
 
-@pytest.fixture(scope="session")
-def create_with_cli():
-    def _create_with_cli(base_url, models, request):
-        data = get_data_from_cli("post", base_url, models.path, request)
-        return data
-
-    return _create_with_cli
-
-
-@pytest.fixture(
-    scope="session",
-    params=[
-        lazy_fixture("create_with_db"),
-        lazy_fixture("create_with_abstraction"),
-        lazy_fixture("create_with_client"),
-        lazy_fixture("create_with_cli"),
-    ],
-)
-def create_func(request):
-    return request.param
-
-
-# Read ----------------------------------------------------------------------------------
+    @pytest.fixture(
+        params=[
+            lazy_fixture("create_with_db"),
+            lazy_fixture("create_with_abstraction"),
+            lazy_fixture("create_with_client"),
+            lazy_fixture("create_with_cli"),
+        ],
+    )
+    def create_func(self, request):
+        return request.param
 
 
-@pytest.fixture(scope="session")
-def read_range_with_db():
-    def _read_range_with_db(session, models):
-        data = session.query(models.table).all()
-        return data
-
-    return _read_range_with_db
+# Read ------------------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def read_range_with_abstraction():
-    def _read_range_with_abstraction(session, models):
-        data = abstractions.read_range(
-            session=session,
-            table_cls=models.table,
-            offset=0,
-            limit=abstractions.QUERY_LIMIT.default,
-        )
-        return data
+class ReadFixtures:
+    """Fixtures for ``TestRead``"""
 
-    return _read_range_with_abstraction
+    @pytest.fixture
+    def read_range_with_db(self) -> Callable:
+        def _read_range_with_db(session: Session, models: MultipleModels) -> dict:
+            data = session.query(models.table).all()
+            return data
 
+        return _read_range_with_db
 
-@pytest.fixture(scope="session")
-def read_range_with_client():
-    def _read_range_with_client(base_url, models):
-        client = Client(base_url)
-        response = client.get(models.path)
-        assert response.status_code == 200
-        data = response.json()
-        return data
+    @pytest.fixture
+    def read_range_with_abstraction(self) -> Callable:
+        def _read_range_with_abstraction(session: Session, models: MultipleModels) -> dict:
+            data = abstractions.read_range(
+                session=session,
+                table_cls=models.table,
+                offset=0,
+                limit=abstractions.QUERY_LIMIT.default,
+            )
+            return data
 
-    return _read_range_with_client
+        return _read_range_with_abstraction
 
+    @pytest.fixture
+    def read_range_with_client(self) -> Callable:
+        def _read_range_with_client(base_url: str, models: MultipleModels) -> dict:
+            client = Client(base_url)
+            response = client.get(models.path)
+            assert response.status_code == 200
+            data = response.json()
+            return data
 
-@pytest.fixture(scope="session")
-def read_range_with_cli():
-    def _read_range_with_cli(base_url, models):
-        data = get_data_from_cli("get", base_url, models.path)
-        return data
+        return _read_range_with_client
 
-    return _read_range_with_cli
+    @pytest.fixture
+    def read_range_with_cli(self) -> Callable:
+        def _read_range_with_cli(base_url: str, models: MultipleModels) -> dict:
+            data = get_data_from_cli("get", base_url, models.path)
+            return data
 
+        return _read_range_with_cli
 
-@pytest.fixture(
-    scope="session",
-    params=[
-        lazy_fixture("read_range_with_db"),
-        lazy_fixture("read_range_with_abstraction"),
-        lazy_fixture("read_range_with_client"),
-        lazy_fixture("read_range_with_cli"),
-    ],
-)
-def read_range_func(request):
-    return request.param
+    @pytest.fixture(
+        params=[
+            lazy_fixture("read_range_with_db"),
+            lazy_fixture("read_range_with_abstraction"),
+            lazy_fixture("read_range_with_client"),
+            lazy_fixture("read_range_with_cli"),
+        ],
+    )
+    def read_range_func(self, request):
+        return request.param
 
+    @pytest.fixture
+    def read_single_with_db(self) -> Callable:
+        def _read_single_with_db(session: Session, models: MultipleModels, table: SQLModel) -> dict:
+            model_db = session.get(models.table, table.id)
+            if model_db is None:
+                raise _NonexistentTableError
+            data = model_db.dict()
+            return data
 
-@pytest.fixture(scope="session")
-def read_single_with_db():
-    def _read_single_with_db(session, models, table):
-        model_db = session.get(models.table, table.id)
-        if model_db is None:
-            raise _NonexistentTableError
-        data = model_db.dict()
-        return data
+        return _read_single_with_db
 
-    return _read_single_with_db
+    @pytest.fixture
+    def read_single_with_abstraction(self) -> Callable:
+        def _read_single_with_abstraction(
+            session: Session, models: MultipleModels, table: SQLModel
+        ) -> dict:
+            model_db = abstractions.read_single(
+                session=session, table_cls=models.table, id=table.id
+            )
+            data = model_db.dict()
+            return data
 
+        return _read_single_with_abstraction
 
-@pytest.fixture(scope="session")
-def read_single_with_abstraction():
-    def _read_single_with_abstraction(session, models, table):
-        model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
-        data = model_db.dict()
-        return data
+    @pytest.fixture
+    def read_single_with_client(self) -> Callable:
+        def _read_single_with_client(
+            base_url: str, models: MultipleModels, table: SQLModel
+        ) -> dict:
+            client = Client(base_url)
+            response = client.get(f"{models.path}{table.id}")
+            response.raise_for_status()
+            data = response.json()
+            return data
 
-    return _read_single_with_abstraction
+        return _read_single_with_client
 
+    @pytest.fixture
+    def read_single_with_cli(self) -> Callable:
+        def _read_single_with_cli(base_url: str, models: MultipleModels, table: SQLModel) -> dict:
+            data = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
+            return data
 
-@pytest.fixture(scope="session")
-def read_single_with_client():
-    def _read_single_with_client(base_url, models, table):
-        client = Client(base_url)
-        response = client.get(f"{models.path}{table.id}")
-        response.raise_for_status()
-        data = response.json()
-        return data
+        return _read_single_with_cli
 
-    return _read_single_with_client
-
-
-@pytest.fixture(scope="session")
-def read_single_with_cli():
-    def _read_single_with_cli(base_url, models, table):
-        data = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
-        return data
-
-    return _read_single_with_cli
-
-
-@pytest.fixture(
-    scope="session",
-    params=[
-        lazy_fixture("read_single_with_db"),
-        lazy_fixture("read_single_with_abstraction"),
-        lazy_fixture("read_single_with_client"),
-        lazy_fixture("read_single_with_cli"),
-    ],
-)
-def read_single_func(request):
-    return request.param
+    @pytest.fixture(
+        params=[
+            lazy_fixture("read_single_with_db"),
+            lazy_fixture("read_single_with_abstraction"),
+            lazy_fixture("read_single_with_client"),
+            lazy_fixture("read_single_with_cli"),
+        ],
+    )
+    def read_single_func(self, request):
+        return request.param
 
 
 # Update --------------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def model_to_update(models_with_kwargs):
-    models = models_with_kwargs.models
-    kw_0, kw_1, _ = models_with_kwargs.kwargs
-    table = models.table(**kw_0.request)
-    different_kws = copy.deepcopy(kw_1.request)
-    key = list(different_kws)[0]
-    update_with = {key: different_kws.pop(key)}
-    return models, table, update_with
+class UpdateFixtures:
+    """Fixtures for ``TestUpdate``"""
+
+    @pytest.fixture
+    def update_with_db(self) -> Callable:
+        def _update_with_db(
+            session: Session, models: MultipleModels, table: SQLModel, update_with: dict,
+        ) -> dict:
+            model_db = session.query(models.table).first()
+            if model_db is None:
+                raise _NonexistentTableError
+            for k, v in update_with.items():
+                setattr(model_db, k, v)
+            session.commit()
+            model_db = session.get(models.table, table.id)
+            data = model_db.dict()
+            return data
+
+        return _update_with_db
+
+    @pytest.fixture
+    def update_with_abstraction(self) -> Callable:
+        def _update_with_abstraction(
+            session: Session, models: MultipleModels, table: SQLModel, update_with: dict,
+        ) -> dict:
+            model_db = session.query(models.table).first()
+            if model_db is None:
+                raise _NonexistentTableError
+            for k, v in update_with.items():
+                setattr(model_db, k, v)
+            updated_model = abstractions.update(
+                session=session, table_cls=models.table, id=model_db.id, model=model_db
+            )
+            data = updated_model.dict()
+            return data
+
+        return _update_with_abstraction
+
+    @pytest.fixture
+    def update_with_client(self) -> Callable:
+        def _update_with_client(
+            base_url: str, models: MultipleModels, table: SQLModel, update_with: dict,
+        ) -> dict:
+            client = Client(base_url)
+            response = client.patch(f"{models.path}{table.id}", json=update_with)
+            response.raise_for_status()
+            data = response.json()
+            return data
+
+        return _update_with_client
+
+    @pytest.fixture
+    def update_with_cli(self) -> Callable:
+        def _update_with_cli(
+            base_url: str, models: MultipleModels, table: SQLModel, update_with: dict,
+        ) -> dict:
+            data = get_data_from_cli("patch", base_url, f"{models.path}{table.id}", update_with)
+            return data
+
+        return _update_with_cli
+
+    @pytest.fixture(
+        params=[
+            lazy_fixture("update_with_db"),
+            lazy_fixture("update_with_abstraction"),
+            lazy_fixture("update_with_client"),
+            lazy_fixture("update_with_cli"),
+        ],
+    )
+    def update_func(self, request):
+        return request.param
 
 
 # Delete --------------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
-def model_to_delete(models_with_kwargs):
-    models = models_with_kwargs.models
-    kw_0, _, _ = models_with_kwargs.kwargs
-    table = models.table(**kw_0.request)
-    return models, table
+class DeleteFixtures:
+    """Fixtures for ``TestDelete``"""
+
+    @pytest.fixture
+    def delete_with_db(self) -> Callable:
+        def _delete_with_db(session: Session, models: MultipleModels, table: SQLModel) -> None:
+            # TODO: Database deletions based on specific table id (vs. below clear all).
+            # Not urgent because we'll generally be doing this via either the client or cli.
+            clear_table(session, models.table)
+            model_in_db = session.get(models.table, table.id)
+            assert model_in_db is None
+
+        return _delete_with_db
+
+    @pytest.fixture
+    def delete_with_abstraction(self) -> Callable:
+        def _delete_with_abstraction(
+            session: Session, models: MultipleModels, table: SQLModel
+        ) -> None:
+            delete_response = abstractions.delete(
+                session=session, table_cls=models.table, id=table.id
+            )
+            assert delete_response == {"ok": True}  # successfully deleted
+            model_in_db = session.get(models.table, table.id)
+            assert model_in_db is None
+
+        return _delete_with_abstraction
+
+    @pytest.fixture
+    def delete_with_client(self) -> Callable:
+        def _delete_with_client(base_url: str, models: MultipleModels, table: SQLModel) -> None:
+            client = Client(base_url)
+            delete_response = client.delete(f"{models.path}{table.id}")
+            # `assert delete_response.status_code == 200`, indicating successful deletion,
+            # is commented out in favor of `raise_for_status`, for compatibility with the
+            # `TestDelete.test_delete_nonexistent`
+            delete_response.raise_for_status()
+            get_response = client.get(f"{models.path}{table.id}")
+            assert get_response.status_code == 404  # not found, b/c deleted
+
+        return _delete_with_client
+
+    @pytest.fixture
+    def delete_with_cli(self) -> Callable:
+        def _delete_with_cli(base_url: str, models: MultipleModels, table: SQLModel) -> None:
+            delete_response = get_data_from_cli("delete", base_url, f"{models.path}{table.id}")
+            assert delete_response == {"ok": True}  # successfully deleted
+            get_response = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
+            assert get_response == {"detail": f"{models.table.__name__} not found"}
+
+        return _delete_with_cli
+
+    @pytest.fixture(
+        params=[
+            lazy_fixture("delete_with_db"),
+            lazy_fixture("delete_with_abstraction"),
+            lazy_fixture("delete_with_client"),
+            lazy_fixture("delete_with_cli"),
+        ],
+    )
+    def delete_func(self, request):
+        return request.param
