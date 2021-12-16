@@ -13,6 +13,31 @@ QUERY_LIMIT = Query(default=100, lte=100)
 
 @dataclass
 class MultipleModels:
+    """For any given API endpoint, a distinct Python object is required to manage each of type of
+    interaction that a user has with the database. Typically, these interaction types will be one
+    of the create, read, update, and delete (CRUD) operations. Rather than writing a distinct class
+    for each of these four interaction types, ``SQLModel``'s multiple models with inheritance
+    (https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#multiple-models-with-inheritance)
+    design pattern allows us to use Python class inheritance to avoid repetition. In this style,
+    we define a base model from which all other models can be deterministically derived. This
+    class, ``MultipleModels``, provides a container for generating and holding a grouping of these
+    objects, and is used to implement ``SQLModel``'s multiple models with inheritance design pattern
+    more reliably and with less code repetition than is currently supported by ``SQLModel`` alone.
+
+    :param path: The relative path (a.k.a. route or endpoint) of the API which the objects contained
+      in this class will be used to interact with. For example, ``"/my_database_table/"``.
+    :param base: The base model. This object must inherit from ``sqlmodel.SQLModel`` and contain
+      type-annotated fields for each of the columns in the database table. Its name must be of
+      the format ``<TableName>Base``.
+    :param response: The response class. This object inherits from the base model and defines just
+      one additional required field, ``id``, with type ``int``. Its name must be of the format
+      ``<TableName>Read``. Note that while this object can theoretically be deterministically
+      generated from the base model, in practical terms it is difficult to succinctly generate with
+      either Python's built-in ``type()`` or ``types.new_class()`` function, therefore the most
+      robust option is simply for the user to define and pass it to ``MultipleModels`` manually.
+      (Note also that "id" as used here is just another way of saying "primary key".)
+    """
+
     path: str
     base: SQLModel
     response: SQLModel
@@ -26,6 +51,7 @@ class MultipleModels:
     def make_cls_name(base: type, rename_base_to: str) -> str:
         """For a class name of format ``"ClassBase"``, return a modified name in which
         the substring ``"Base"`` is replaced with the string passed to ``rename_base_to``.
+
         :param base: The base model. It's name must end with the substring ``"Base"``.
         :param rename_base_to: String to replace `"Base"` with.
         """
@@ -36,7 +62,6 @@ class MultipleModels:
         https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-herocreate-data-model,
         the creation model is simply a copy of the base model, with the substring ``"Base"`` in the
         class name replaced by the substring ``"Create"``.
-        :param base: The base model.
         """
         cls_name = self.make_cls_name(self.base, "Create")
         return type(cls_name, (self.base,), {})
@@ -45,10 +70,10 @@ class MultipleModels:
         """From a base model, make and return an update model. As described in
         https://sqlmodel.tiangolo.com/tutorial/fastapi/update/#heroupdate-model, the update model
         is the same as the base model, but with all fields annotated as ``Optional`` and all field
-        defaults set to ``None``.
-        :param base: The base model. Note that unlike in ``make_creator``, this is not the base for
-        inheritance (all updaters inherit directly from ``SQLModel``) but rather is used to derive
-        the output class name, attributes, and type annotations.
+        defaults set to ``None``. Note that unlike in ``make_creator``, the class returned from this
+        method does not inherit from the base model, but rather inherits directly from ``SQLModel``.
+        In this method, the base model is used to derive the returned class's name, attributes, and
+        type annotations.
         """
         cls_name = self.make_cls_name(self.base, "Update")
         sig = self.base.__signature__
@@ -66,7 +91,6 @@ class MultipleModels:
         the table model is the same as the base model, with the addition of the ``table=True`` class
         creation keyword and an ``id`` attribute of type ``Optional[int]`` set to a default value of
         ``Field(default=None, primary_key=True)``.
-        :param base: The base model.
         """
         cls_name = self.make_cls_name(self.base, "")
         attrs = dict(id=Field(default=None, primary_key=True))
@@ -84,6 +108,17 @@ class MultipleModels:
 
 
 def create(*, session: Session, table_cls: SQLModel, model: SQLModel) -> SQLModel:
+    """Create an entry in the database with ``SQLModel``.
+
+    :param session: A ``sqlmodel.Session`` object connected to the database.
+    :param table_cls: An uninstantiated table model as described in
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model.
+      If using a ``MultipleModels`` container, this is accessed via the ``.table`` attribute of
+      the ``MultipleModels`` instance.
+    :param model: The instantied table model to add to the database. If using a ``MultipleModels``
+      container, this is created by passing the desired kwargs to ``.table`` attribute of the
+      ``MultipleModels`` instance.
+    """
     db_model = table_cls.from_orm(model)
     session.add(db_model)
     session.commit()
@@ -92,10 +127,33 @@ def create(*, session: Session, table_cls: SQLModel, model: SQLModel) -> SQLMode
 
 
 def read_range(*, session: Session, table_cls: SQLModel, offset: int, limit: int) -> List:
+    """Read all entries within a range for in a given database table with ``SQLModel``.
+
+    :param session: A ``sqlmodel.Session`` object connected to the database.
+    :param table_cls: An uninstantiated table model as described in
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model.
+      If using a ``MultipleModels`` container, this is accessed via the ``.table`` attribute of
+      the ``MultipleModels`` instance.
+    :param offset: The integer offset from which to begin the read. ``offset=0`` will start from
+      the beginning of the table.
+    :param limit: The maximum number of entries to read. Useful for tables with large numbers of
+      entries to avoid returning unmanageably large lists. If your table doesn't have many entries,
+      and you'd like to read them all, you can pass ``limit=<INT>`` where ``<INT>`` is any integer
+      larger than the number of entries in your table.
+    """
     return session.exec(select(table_cls).offset(offset).limit(limit)).all()
 
 
 def read_single(*, session: Session, table_cls: SQLModel, id: int):
+    """Read a single entry from the database with ``SQLModel``.
+
+    :param session: A ``sqlmodel.Session`` object connected to the database.
+    :param table_cls: An uninstantiated table model as described in
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model.
+      If using a ``MultipleModels`` container, this is accessed via the ``.table`` attribute of
+      the ``MultipleModels`` instance.
+    :param id: The integer id (a.k.a. primary key) of the entry to read.
+    """
     db_model = session.get(table_cls, id)
     if not db_model:
         raise HTTPException(status_code=404, detail=f"{table_cls.__name__} not found")
@@ -103,6 +161,18 @@ def read_single(*, session: Session, table_cls: SQLModel, id: int):
 
 
 def update(*, session: Session, table_cls: SQLModel, id: int, model: SQLModel) -> SQLModel:
+    """Update a database entry using ``SQLModel``.
+
+    :param session: A ``sqlmodel.Session`` object connected to the database.
+    :param table_cls: An uninstantiated table model as described in
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model.
+      If using a ``MultipleModels`` container, this is accessed via the ``.table`` attribute of
+      the ``MultipleModels`` instance.
+    :param id: The integer id (a.k.a. primary key) of the entry to update.
+    :param model: The instantied update model to use for update. If using a ``MultipleModels``
+      container, this is created by passing any fields to update as kwargs to the ``.update``
+      attribute of the ``MultipleModels`` instance.
+    """
     db_model = session.get(table_cls, id)
     if not db_model:
         raise HTTPException(status_code=404, detail=f"{table_cls.__name__} not found")
@@ -116,6 +186,15 @@ def update(*, session: Session, table_cls: SQLModel, id: int, model: SQLModel) -
 
 
 def delete(*, session: Session, table_cls: SQLModel, id: int) -> dict:
+    """Delete a model in the database with ``SQLModel``.
+
+    param session: A ``sqlmodel.Session`` object connected to the database.
+    :param table_cls: An uninstantiated table model as described in
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model.
+      If using a ``MultipleModels`` container, this is accessed via the ``.table`` attribute of
+      the ``MultipleModels`` instance.
+    :param id: The integer id (a.k.a. primary key) of the entry to delete.
+    """
     db_model = session.get(table_cls, id)
     if not db_model:
         raise HTTPException(status_code=404, detail=f"{table_cls.__name__} not found")
