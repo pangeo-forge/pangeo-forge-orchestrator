@@ -48,7 +48,7 @@ For any given API endpoint (i.e., route) described in the documentation, you wil
 
 ## Interfaces
 
-To perform any of the create, read, update, and delete (CRUD) operations on our database, we can choose whether to interface via the command line interface (CLI) or the Python client. Both of these entrypoints provide the same functionality and cooresponding functions have the same name in both interfaces.
+To perform any of the create, read, update, and delete (CRUD) operations on our database, we can choose whether to interface via the command line interface (CLI) or the Python client. Both of these interfaces provide the same functionality and cooresponding functions have the same name in both interfaces.
 
 ### Client basics
 

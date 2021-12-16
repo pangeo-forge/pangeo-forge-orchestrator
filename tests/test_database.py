@@ -14,7 +14,7 @@ from sqlmodel import Session, SQLModel
 import pangeo_forge_orchestrator.abstractions as abstractions
 
 from .conftest import CreateFixtures, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
-from .entrypoints import (
+from .interfaces import (
     _IntTypeError,
     _MissingFieldError,
     _NonexistentTableError,
@@ -43,19 +43,19 @@ def registered_routes(app: FastAPI):
     return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
 
 
-def get_entrypoint(func: Callable):
-    # This function returns the entrypoint name from its associated callable
+def get_interface(func: Callable):
+    # This function returns the interface name from its associated callable
     # (i.e. it returns "db" from "create_with_db", etc.)
     return func.__name__.split("_with_")[1]
 
 
 def get_connection(session: Session, url: str, func: Callable):
     # Different fixtures require different connection points to the database.
-    # `db` and `abstraction` entrypoints use a `session` connection, whereas
-    # `client` and `cli` entrypoints connect via the http URL. This function
-    # finds the appropriate connection point based on the entrypoint.
-    entrypoint = get_entrypoint(func)
-    connection = session if "db" in entrypoint or "abstract" in entrypoint else url
+    # `db` and `abstraction` interfaces use a `session` connection, whereas
+    # `client` and `cli` interfaces connect via the http URL. This function
+    # finds the appropriate connection point based on the interface.
+    interface = get_interface(func)
+    connection = session if "db" in interface or "abstract" in interface else url
     return connection
 
 
@@ -108,11 +108,11 @@ class TestCreate(CreateFixtures):
 
     @staticmethod
     def get_error(func: Callable, failure_mode: str):
-        entrypoint = get_entrypoint(func)
+        interface = get_interface(func)
         errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
         cli_error = _MissingFieldError if failure_mode == "incomplete" else _StrTypeError
         errors.update(dict(cli=cli_error))
-        return errors[entrypoint]
+        return errors[interface]
 
     @staticmethod
     def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
@@ -181,14 +181,14 @@ class TestRead(ReadFixtures):
 
     @staticmethod
     def get_error(func: Callable):
-        entrypoint = get_entrypoint(func)
+        interface = get_interface(func)
         errors = dict(
             db=_NonexistentTableError,
             abstraction=HTTPException,
             client=HTTPError,
             cli=_IntTypeError,
         )
-        return errors[entrypoint]
+        return errors[interface]
 
     @staticmethod
     def evaluate_read_range_data(data, tables):
@@ -248,14 +248,14 @@ class TestUpdate(UpdateFixtures):
 
     @staticmethod
     def get_error(func: Callable):
-        entrypoint = get_entrypoint(func)
+        interface = get_interface(func)
         errors = dict(
             db=_NonexistentTableError,
             abstraction=_NonexistentTableError,
             client=HTTPError,
             cli=_IntTypeError,
         )
-        return errors[entrypoint]
+        return errors[interface]
 
     @staticmethod
     def evaluate_data(data, table, update_with):
@@ -296,9 +296,9 @@ class TestDelete(DeleteFixtures):
 
     @staticmethod
     def get_error(func: Callable):
-        entrypoint = get_entrypoint(func)
+        interface = get_interface(func)
         errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
-        return errors[entrypoint]
+        return errors[interface]
 
     def test_delete(self, session, model_to_delete, http_server, delete_func):
         models, table = model_to_delete
@@ -317,7 +317,7 @@ class TestDelete(DeleteFixtures):
         clear_table(session, models.table)  # make sure the database is empty
         connection = get_connection(session, http_server, delete_func)
 
-        if get_entrypoint(delete_func) == "db":
+        if get_interface(delete_func) == "db":
             pytest.skip(
                 "Deleting via the database is a `session.query` followed by `.delete()`. So far, "
                 "these tests do not implement id-level queries with the session API (only queries "
@@ -325,7 +325,7 @@ class TestDelete(DeleteFixtures):
                 "via the client or the cli. In the future, we may choose to use id-level queries "
                 "in the tests (or to use a different SQL API for direct DELETE without querying "
                 "first). Until then, there is not an urgency to run this test for the database "
-                "entrypoint, so it is omitted here."
+                "interface, so it is omitted here."
             )
         else:
             error_cls = self.get_error(delete_func)

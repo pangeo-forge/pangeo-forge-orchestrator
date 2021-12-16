@@ -12,7 +12,7 @@ from sqlmodel import Session, create_engine
 from pangeo_forge_orchestrator.abstractions import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
 
-from .entrypoints import AbstractionCRUD, ClientCRUD, CommandLineCRUD, DatabaseCRUD
+from .interfaces import AbstractionCRUD, ClientCRUD, CommandLineCRUD, DatabaseCRUD
 
 # Helpers ---------------------------------------------------------------------------------
 

@@ -68,7 +68,7 @@ def get_data_from_cli(
 
 
 class DatabaseCRUD:
-    """Database entrypoint CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+    """Database interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
     def create_with_db(session: Session, models: MultipleModels, request: dict) -> dict:
         table = models.table(**request)
@@ -111,7 +111,7 @@ class DatabaseCRUD:
 
 
 class AbstractionCRUD:
-    """Abstraction entrypoint CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+    """Abstraction interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
     def create_with_abstraction(session: Session, models: MultipleModels, request: dict) -> dict:
         table = models.table(**request)
@@ -157,7 +157,7 @@ class AbstractionCRUD:
 
 
 class ClientCRUD:
-    """Client entrypoint CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+    """Client interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
     def create_with_client(base_url: str, models: MultipleModels, json: dict) -> dict:
         client = Client(base_url)
@@ -201,7 +201,7 @@ class ClientCRUD:
 
 
 class CommandLineCRUD:
-    """CLI entrypoint CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+    """CLI interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
     def create_with_cli(base_url: str, models: MultipleModels, request: dict) -> dict:
         data = get_data_from_cli("post", base_url, models.path, request)
