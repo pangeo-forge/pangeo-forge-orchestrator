@@ -112,7 +112,7 @@ class ModelFixture:
 #      be `model_key_with_kwargs`, where `model_key` is the name of the key mapping for the
 #      associated `MultipleModels` object in the `pangeo_forge_orchestrator.models::MODELS` dict.
 #   2. Add `lazy_fixture("model_key_with_kwargs")` to the param list of the `models_with_kwargs`
-#      fixture. (Where `"model_key_with_kwargs"` is the name of the fixture you created un steo 1.)
+#      fixture. (Where `"model_key_with_kwargs"` is the name of the fixture you created in step 1.)
 
 
 @pytest.fixture(scope="session")
