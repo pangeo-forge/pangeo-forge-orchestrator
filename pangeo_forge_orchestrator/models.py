@@ -19,12 +19,14 @@ class RecipeRunBase(SQLModel):
 
 
 class RecipeRunRead(RecipeRunBase):
-    # A container used to hold the responses to GET requests to the API; a.k.a. a "response model".
-    # As defined in the SQLModel docs linked below, "This ... declares that the id field is
-    # required when reading a [table] from the API, because a [table] read from the API will
-    # come from the database, and in the database it will always have an ID." For more, see:
-    # https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-heroread-data-model.
-    # (Note that "id" is just another way of saying "primary key".)
+    """A container used to hold the responses to GET requests to the API; a.k.a. a "response
+    model". As defined in the SQLModel docs linked below, "This ... declares that the id field is
+    required when reading a [table] from the API, because a [table] read from the API will come
+    from the database, and in the database it will always have an ID." For more, see:
+    https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-heroread-data-model. (Note
+    that "id" is just another way of saying "primary key".)
+    """
+
     id: int
 
 
