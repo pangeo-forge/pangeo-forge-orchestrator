@@ -3,7 +3,7 @@ import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
@@ -111,15 +111,18 @@ class ModelFixture:
     kwargs which can be used to instantiate the models within it.
 
     :param models: A ``MultipleModels`` object.
-    :param kwargs: A list of three ``ModelKwargs`` objects matched to the ``models``.
+    :param kwargs: A 2-tuple consisting of two ``ModelKwargs`` objects matched to the ``models``.
+      Note that two sets of kwargs are required because: (1) the ``read_range`` test requires
+      that more than one entry is populated into the databse; and (2) the ``update`` test requires
+      that we have have an additional set of kwargs with which to update a database entry.
     """
 
     models: MultipleModels
-    kwargs: List[ModelKwargs]
+    kwargs: Tuple[ModelKwargs, ModelKwargs]
 
     def __post_init__(self):
-        if len(self.kwargs) != 3:
-            raise ValueError("``len(self.kwargs)`` must equal 3.")
+        if len(self.kwargs) != 2:
+            raise ValueError("``len(self.kwargs)`` must equal 2.")
 
 
 # To test additional models:
@@ -159,19 +162,6 @@ def recipe_run_with_kwargs():
                 message="hello",
             ),
         ),
-        ModelKwargs(
-            request=dict(
-                recipe_id="test-recipe-2",
-                run_date="2021-03-03T00:00:00Z",
-                bakery_id=2,
-                feedstock_id=2,
-                commit="012345abcdefg",
-                version="3.0",
-                status="complete",
-                path="/path-to-dataset.zarr",
-            ),
-            blank_opts=["message"],
-        ),
     ]
     return ModelFixture(MODELS["recipe_run"], kws)
 
@@ -193,7 +183,7 @@ class CreateFixtures:
 
     @pytest.fixture
     def model_to_create(self, models_with_kwargs):
-        kw_0, _, _ = models_with_kwargs.kwargs
+        kw_0, _ = models_with_kwargs.kwargs
         return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
 
 
@@ -206,7 +196,7 @@ class ReadFixtures:
     @pytest.fixture
     def models_to_read(self, models_with_kwargs: ModelFixture):
         models = models_with_kwargs.models
-        kw_0, kw_1, _ = models_with_kwargs.kwargs
+        kw_0, kw_1 = models_with_kwargs.kwargs
         model_0 = models.table(**kw_0.request)
         model_1 = models.table(**kw_1.request)
         return models, (model_0, model_1)
@@ -214,8 +204,8 @@ class ReadFixtures:
     @pytest.fixture
     def single_model_to_read(self, models_with_kwargs: ModelFixture):
         models = models_with_kwargs.models
-        _, _, kw_2 = models_with_kwargs.kwargs
-        table = models.table(**kw_2.request)
+        _, kw_1 = models_with_kwargs.kwargs
+        table = models.table(**kw_1.request)
         return models, table
 
 
@@ -228,7 +218,7 @@ class UpdateFixtures:
     @pytest.fixture(scope="session")
     def model_to_update(self, models_with_kwargs):
         models = models_with_kwargs.models
-        kw_0, kw_1, _ = models_with_kwargs.kwargs
+        kw_0, kw_1 = models_with_kwargs.kwargs
         table = models.table(**kw_0.request)
         different_kws = copy.deepcopy(kw_1.request)
         key = list(different_kws)[0]
@@ -245,6 +235,6 @@ class DeleteFixtures:
     @pytest.fixture
     def model_to_delete(self, models_with_kwargs):
         models = models_with_kwargs.models
-        kw_0, _, _ = models_with_kwargs.kwargs
+        kw_0, _ = models_with_kwargs.kwargs
         table = models.table(**kw_0.request)
         return models, table
