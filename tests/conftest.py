@@ -12,6 +12,8 @@ from sqlmodel import Session, create_engine
 from pangeo_forge_orchestrator.abstractions import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
 
+from .interfaces import clear_table
+
 # Helpers ---------------------------------------------------------------------------------
 
 
@@ -53,13 +55,13 @@ def tempdir(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def http_server(tempdir, request):
+def http_server_url(tempdir, request):
     url = start_http_server(tempdir, request=request)
     return url
 
 
 @pytest.fixture
-def session(tempdir):
+def uncleared_session(tempdir):
     # Cf. `pangeo_forge_orchestrator.database` & `pangeo_forge_orchestrator.api`
     # Here we are creating a session for the database file which exists in the tempdir.
     # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
@@ -70,6 +72,21 @@ def session(tempdir):
     engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture
+def session(uncleared_session):
+    with uncleared_session as session:
+        for k in MODELS.keys():
+            clear_table(session, MODELS[k].table)  # make sure the database is empty
+        yield session
+
+
+@pytest.fixture
+def http_server(http_server_url, session):
+    for k in MODELS.keys():
+        clear_table(session, MODELS[k].table)  # make sure the database is empty
+    return http_server_url
 
 
 # Models --------------------------------------------------------------------------------

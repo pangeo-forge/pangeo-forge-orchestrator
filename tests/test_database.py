@@ -23,7 +23,6 @@ from .interfaces import (
     _MissingFieldError,
     _NonexistentTableError,
     _StrTypeError,
-    clear_table,
 )
 
 
@@ -50,7 +49,7 @@ def registered_routes(app: FastAPI):
 # Test endpoint registration ------------------------------------------------------------
 
 
-def test_registration(session, models_with_kwargs):
+def test_registration(uncleared_session, models_with_kwargs):
     models = models_with_kwargs.models
     new_app = FastAPI()
 
@@ -58,7 +57,7 @@ def test_registration(session, models_with_kwargs):
     assert len(registered_routes(new_app)) == 0
 
     def get_session():
-        yield session
+        yield uncleared_session
 
     # register routes for this application
     abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
@@ -138,7 +137,6 @@ class CreateLogic(BaseLogic, CreateFixtures):
         self, session: Session, model_to_create: ModelFixture, http_server: str,
     ):
         models, request, blank_opts = model_to_create
-        clear_table(session, models.table)  # make sure the database is empty
         connection = self.get_connection(session, http_server)
         data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
@@ -148,7 +146,6 @@ class CreateLogic(BaseLogic, CreateFixtures):
         self, session: Session, model_to_create: ModelFixture, http_server: str, failure_mode: str,
     ):
         models, request, _ = model_to_create
-        clear_table(session, models.table)  # make sure the database is empty
         connection = self.get_connection(session, http_server)
 
         failing_request = copy.deepcopy(request)
@@ -220,7 +217,6 @@ class ReadLogic(BaseLogic, ReadFixtures):
 
     def test_read_range(self, session, models_to_read, http_server):
         models, tables = models_to_read
-        clear_table(session, models.table)  # make sure the database is empty
         for t in tables:
             commit_to_session(session, t)  # add entries for this test
         connection = self.get_connection(session, http_server)
@@ -229,7 +225,6 @@ class ReadLogic(BaseLogic, ReadFixtures):
 
     def test_read_single(self, session, single_model_to_read, http_server):
         models, table = single_model_to_read
-        clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entries for this test
         connection = self.get_connection(session, http_server)
         data = self.read_single(connection, models, table)
@@ -237,7 +232,6 @@ class ReadLogic(BaseLogic, ReadFixtures):
 
     def test_read_nonexistent(self, session, single_model_to_read, http_server):
         models, table = single_model_to_read
-        clear_table(session, models.table)  # make sure the database is empty
         # don't add any entries for this test
         connection = self.get_connection(session, http_server)
         error_cls = self.get_error()
@@ -291,7 +285,6 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
 
     def test_update(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
-        clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entry for this test
         connection = self.get_connection(session, http_server)
         data = self.update(connection, models, table, update_with)
@@ -299,7 +292,6 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
 
     def test_update_nonexistent(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
-        clear_table(session, models.table)  # make sure the database is empty
         # don't add any entries for this test
         connection = self.get_connection(session, http_server)
         error_cls = self.get_error()
@@ -335,7 +327,6 @@ class DeleteLogic(BaseLogic, DeleteFixtures):
 
     def test_delete(self, session, model_to_delete, http_server):
         models, table = model_to_delete
-        clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entries for this test
 
         model_in_db = session.get(models.table, table.id)
@@ -347,7 +338,6 @@ class DeleteLogic(BaseLogic, DeleteFixtures):
 
     def test_delete_nonexistent(self, session, model_to_delete, http_server):
         models, table = model_to_delete
-        clear_table(session, models.table)  # make sure the database is empty
         connection = self.get_connection(session, http_server)
 
         if self.interface == "db":
