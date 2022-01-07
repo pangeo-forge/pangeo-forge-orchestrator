@@ -66,7 +66,7 @@ def uncleared_session(tempdir):
     # Here we are creating a session for the database file which exists in the tempdir.
     # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
     # the session returned by that function resolves the database path via `os.getcwd()`, but
-    # our tests are run from a different workind directory than the one where the database resides.
+    # our tests are run from a different working directory than the one where the database resides.
     sqlite_file_path = f"sqlite:////{tempdir}/database.db"
     connect_args = {"check_same_thread": False}
     engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
@@ -113,7 +113,7 @@ class ModelFixture:
     :param models: A ``MultipleModels`` object.
     :param kwargs: A 2-tuple consisting of two ``ModelKwargs`` objects matched to the ``models``.
       Note that two sets of kwargs are required because: (1) the ``read_range`` test requires
-      that more than one entry is populated into the databse; and (2) the ``update`` test requires
+      that more than one entry is populated into the database; and (2) the ``update`` test requires
       that we have have an additional set of kwargs with which to update a database entry.
     """
 
