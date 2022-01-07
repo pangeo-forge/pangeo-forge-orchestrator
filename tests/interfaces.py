@@ -11,21 +11,47 @@ from pangeo_forge_orchestrator.abstractions import MultipleModels
 from pangeo_forge_orchestrator.client import Client
 
 # Exceptions ------------------------------------------------------------------------------
+# The exceptions defined here provide specific Python errors to raise when certain failure
+# modes are encountered which would not otherwise raise Python errors. It is useful to have
+# Python errors to raise for these otherwise silent error conditions, because it allows us
+# to test failure modes in a standardized manner with `pytest.raises`. Note that the errors
+# we are accomodating here may *not* be silent from a human user perspective, but are rather
+# silent from a programmatic perspective (i.e., they would not otherwise raise a Python error).
+#
+# The primary scenario we are working around here is the fact that JSON responses are returned by
+# the command line interface as plain text. Therefore, unlike responses returned by the client
+# interface, e.g., we cannot call `response.raise_for_status` to raise Python errors from them. The
+# `_MissingFieldError`, `_StrTypeError`, and `_IntTypeError` are all for use in this context;
+# i.e., they are exceptions to raise if specific error text is present in a CLI JSON response.
+#
+# The one other silent error covered by these exceptions is the case of a query to a the database
+# that returns `None`. From the database standpoint, this is not an error per se, but we may want
+# to treat it as such from the perspective of testing.
 
 
 class _MissingFieldError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"value_error.missing"`.
+    """
+
     pass
 
 
 class _StrTypeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"type_error.str"`."""
+
     pass
 
 
 class _IntTypeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"type_error.integer"`.
+    """
+
     pass
 
 
 class _NonexistentTableError(Exception):
+    """Execption to raise if a database query returns `None`."""
+
     pass
 
 
