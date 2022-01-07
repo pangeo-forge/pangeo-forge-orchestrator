@@ -3,7 +3,7 @@ import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
-from typing import Callable, List
+from typing import List
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
@@ -11,8 +11,6 @@ from sqlmodel import Session, create_engine
 
 from pangeo_forge_orchestrator.abstractions import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
-
-from .interfaces import AbstractionCRUD, ClientCRUD, CommandLineCRUD, DatabaseCRUD
 
 # Helpers ---------------------------------------------------------------------------------
 
@@ -181,33 +179,6 @@ class CreateFixtures:
         kw_0, _, _ = models_with_kwargs.kwargs
         return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
 
-    @pytest.fixture
-    def create_with_db(self) -> Callable:
-        return DatabaseCRUD.create_with_db
-
-    @pytest.fixture
-    def create_with_abstraction(self) -> Callable:
-        return AbstractionCRUD.create_with_abstraction
-
-    @pytest.fixture
-    def create_with_client(self) -> Callable:
-        return ClientCRUD.create_with_client
-
-    @pytest.fixture
-    def create_with_cli(self) -> Callable:
-        return CommandLineCRUD.create_with_cli
-
-    @pytest.fixture(
-        params=[
-            lazy_fixture("create_with_db"),
-            lazy_fixture("create_with_abstraction"),
-            lazy_fixture("create_with_client"),
-            lazy_fixture("create_with_cli"),
-        ],
-    )
-    def create_func(self, request):
-        return request.param
-
 
 # Read ------------------------------------------------------------------------------------
 
@@ -230,60 +201,6 @@ class ReadFixtures:
         table = models.table(**kw_2.request)
         return models, table
 
-    @pytest.fixture
-    def read_range_with_db(self) -> Callable:
-        return DatabaseCRUD.read_range_with_db
-
-    @pytest.fixture
-    def read_range_with_abstraction(self) -> Callable:
-        return AbstractionCRUD.read_range_with_abstraction
-
-    @pytest.fixture
-    def read_range_with_client(self) -> Callable:
-        return ClientCRUD.read_range_with_client
-
-    @pytest.fixture
-    def read_range_with_cli(self) -> Callable:
-        return CommandLineCRUD.read_range_with_cli
-
-    @pytest.fixture(
-        params=[
-            lazy_fixture("read_range_with_db"),
-            lazy_fixture("read_range_with_abstraction"),
-            lazy_fixture("read_range_with_client"),
-            lazy_fixture("read_range_with_cli"),
-        ],
-    )
-    def read_range_func(self, request):
-        return request.param
-
-    @pytest.fixture
-    def read_single_with_db(self) -> Callable:
-        return DatabaseCRUD.read_single_with_db
-
-    @pytest.fixture
-    def read_single_with_abstraction(self) -> Callable:
-        return AbstractionCRUD.read_single_with_abstraction
-
-    @pytest.fixture
-    def read_single_with_client(self) -> Callable:
-        return ClientCRUD.read_single_with_client
-
-    @pytest.fixture
-    def read_single_with_cli(self) -> Callable:
-        return CommandLineCRUD.read_single_with_cli
-
-    @pytest.fixture(
-        params=[
-            lazy_fixture("read_single_with_db"),
-            lazy_fixture("read_single_with_abstraction"),
-            lazy_fixture("read_single_with_client"),
-            lazy_fixture("read_single_with_cli"),
-        ],
-    )
-    def read_single_func(self, request):
-        return request.param
-
 
 # Update --------------------------------------------------------------------------------
 
@@ -301,33 +218,6 @@ class UpdateFixtures:
         update_with = {key: different_kws.pop(key)}
         return models, table, update_with
 
-    @pytest.fixture
-    def update_with_db(self) -> Callable:
-        return DatabaseCRUD.update_with_db
-
-    @pytest.fixture
-    def update_with_abstraction(self) -> Callable:
-        return AbstractionCRUD.update_with_abstraction
-
-    @pytest.fixture
-    def update_with_client(self) -> Callable:
-        return ClientCRUD.update_with_client
-
-    @pytest.fixture
-    def update_with_cli(self) -> Callable:
-        return CommandLineCRUD.update_with_cli
-
-    @pytest.fixture(
-        params=[
-            lazy_fixture("update_with_db"),
-            lazy_fixture("update_with_abstraction"),
-            lazy_fixture("update_with_client"),
-            lazy_fixture("update_with_cli"),
-        ],
-    )
-    def update_func(self, request):
-        return request.param
-
 
 # Delete --------------------------------------------------------------------------------
 
@@ -341,30 +231,3 @@ class DeleteFixtures:
         kw_0, _, _ = models_with_kwargs.kwargs
         table = models.table(**kw_0.request)
         return models, table
-
-    @pytest.fixture
-    def delete_with_db(self) -> Callable:
-        return DatabaseCRUD.delete_with_db
-
-    @pytest.fixture
-    def delete_with_abstraction(self) -> Callable:
-        return AbstractionCRUD.delete_with_abstraction
-
-    @pytest.fixture
-    def delete_with_client(self) -> Callable:
-        return ClientCRUD.delete_with_client
-
-    @pytest.fixture
-    def delete_with_cli(self) -> Callable:
-        return CommandLineCRUD.delete_with_cli
-
-    @pytest.fixture(
-        params=[
-            lazy_fixture("delete_with_db"),
-            lazy_fixture("delete_with_abstraction"),
-            lazy_fixture("delete_with_client"),
-            lazy_fixture("delete_with_cli"),
-        ],
-    )
-    def delete_func(self, request):
-        return request.param

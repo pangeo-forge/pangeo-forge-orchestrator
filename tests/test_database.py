@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 import fastapi
 import pytest
@@ -15,6 +15,10 @@ import pangeo_forge_orchestrator.abstractions as abstractions
 
 from .conftest import CreateFixtures, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
 from .interfaces import (
+    AbstractionCRUD,
+    ClientCRUD,
+    CommandLineCRUD,
+    DatabaseCRUD,
     _IntTypeError,
     _MissingFieldError,
     _NonexistentTableError,
@@ -41,22 +45,6 @@ def parse_to_datetime(input_string: str):
 
 def registered_routes(app: FastAPI):
     return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
-
-
-def get_interface(func: Callable):
-    # This function returns the interface name from its associated callable
-    # (i.e. it returns "db" from "create_with_db", etc.)
-    return func.__name__.split("_with_")[1]
-
-
-def get_connection(session: Session, url: str, func: Callable):
-    # Different fixtures require different connection points to the database.
-    # `db` and `abstraction` interfaces use a `session` connection, whereas
-    # `client` and `cli` interfaces connect via the http URL. This function
-    # finds the appropriate connection point based on the interface.
-    interface = get_interface(func)
-    connection = session if "db" in interface or "abstract" in interface else url
-    return connection
 
 
 # Test endpoint registration ------------------------------------------------------------
@@ -100,19 +88,31 @@ def test_registration(session, models_with_kwargs):
             assert r.response_model is None
 
 
+# Base logic ----------------------------------------------------------------------------
+
+
+class BaseLogic:
+    def get_connection(self, session: Session, url: str):
+        """Different fixtures require different connection points to the database. `db` and
+        `abstraction` interfaces use a `session` connection, whereas `client` and `cli`
+        interfaces connect via the http URL. This function finds the appropriate connection
+        point based on the interface.
+        """
+        connection = session if "db" in self.interface or "abstract" in self.interface else url
+        return connection
+
+
 # Test create ---------------------------------------------------------------------------
 
 
-class TestCreate(CreateFixtures):
+class CreateLogic(BaseLogic, CreateFixtures):
     """Container for tests of database entry creation and associated failure modes"""
 
-    @staticmethod
-    def get_error(func: Callable, failure_mode: str):
-        interface = get_interface(func)
+    def get_error(self, failure_mode: str):
         errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
         cli_error = _MissingFieldError if failure_mode == "incomplete" else _StrTypeError
         errors.update(dict(cli=cli_error))
-        return errors[interface]
+        return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
     @staticmethod
     def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
@@ -135,30 +135,21 @@ class TestCreate(CreateFixtures):
         assert data["id"] is not None
 
     def test_create(
-        self,
-        session: Session,
-        model_to_create: ModelFixture,
-        http_server: str,
-        create_func: Callable,
+        self, session: Session, model_to_create: ModelFixture, http_server: str,
     ):
         models, request, blank_opts = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = get_connection(session, http_server, create_func)
-        data = create_func(connection, models, request)
+        connection = self.get_connection(session, http_server)
+        data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
 
     @pytest.mark.parametrize("failure_mode", ["incomplete", "invalid"])
     def test_create_failure(
-        self,
-        session: Session,
-        model_to_create: ModelFixture,
-        http_server: str,
-        create_func: Callable,
-        failure_mode: str,
+        self, session: Session, model_to_create: ModelFixture, http_server: str, failure_mode: str,
     ):
         models, request, _ = model_to_create
         clear_table(session, models.table)  # make sure the database is empty
-        connection = get_connection(session, http_server, create_func)
+        connection = self.get_connection(session, http_server)
 
         failing_request = copy.deepcopy(request)
         if failure_mode == "incomplete":
@@ -168,27 +159,41 @@ class TestCreate(CreateFixtures):
             failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
             assert type(failing_request[list(failing_request)[0]]) == dict
 
-        error_cls = self.get_error(create_func, failure_mode=failure_mode)
+        error_cls = self.get_error(failure_mode)
         with pytest.raises(error_cls):
-            _ = create_func(connection, models, failing_request)
+            _ = self.create(connection, models, failing_request)
+
+
+class TestCreateDatabase(CreateLogic, DatabaseCRUD):
+    pass
+
+
+class TestCreateAbstraction(CreateLogic, AbstractionCRUD):
+    pass
+
+
+class TestCreateClient(CreateLogic, ClientCRUD):
+    pass
+
+
+class TestCreateCommandLine(CreateLogic, CommandLineCRUD):
+    pass
 
 
 # Test read -----------------------------------------------------------------------------
 
 
-class TestRead(ReadFixtures):
+class ReadLogic(BaseLogic, ReadFixtures):
     """Container for tests of reading from database"""
 
-    @staticmethod
-    def get_error(func: Callable):
-        interface = get_interface(func)
+    def get_error(self):
         errors = dict(
             db=_NonexistentTableError,
             abstraction=HTTPException,
             client=HTTPError,
             cli=_IntTypeError,
         )
-        return errors[interface]
+        return errors[self.interface]
 
     @staticmethod
     def evaluate_read_range_data(data, tables):
@@ -213,49 +218,63 @@ class TestRead(ReadFixtures):
             else:
                 assert data[k] == input_dict[k]
 
-    def test_read_range(self, session, models_to_read, http_server, read_range_func):
+    def test_read_range(self, session, models_to_read, http_server):
         models, tables = models_to_read
         clear_table(session, models.table)  # make sure the database is empty
         for t in tables:
             commit_to_session(session, t)  # add entries for this test
-        connection = get_connection(session, http_server, read_range_func)
-        data = read_range_func(connection, models)
+        connection = self.get_connection(session, http_server)
+        data = self.read_range(connection, models)
         self.evaluate_read_range_data(data, tables)
 
-    def test_read_single(self, session, single_model_to_read, http_server, read_single_func):
+    def test_read_single(self, session, single_model_to_read, http_server):
         models, table = single_model_to_read
         clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entries for this test
-        connection = get_connection(session, http_server, read_single_func)
-        data = read_single_func(connection, models, table)
+        connection = self.get_connection(session, http_server)
+        data = self.read_single(connection, models, table)
         self.evaluate_read_single_data(data, table)
 
-    def test_read_nonexistent(self, session, single_model_to_read, http_server, read_single_func):
+    def test_read_nonexistent(self, session, single_model_to_read, http_server):
         models, table = single_model_to_read
         clear_table(session, models.table)  # make sure the database is empty
         # don't add any entries for this test
-        connection = get_connection(session, http_server, read_single_func)
-        error_cls = self.get_error(read_single_func)
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_error()
         with pytest.raises(error_cls):
-            _ = read_single_func(connection, models, table)
+            _ = self.read_single(connection, models, table)
+
+
+class TestReadDatabase(ReadLogic, DatabaseCRUD):
+    pass
+
+
+class TestReadAbstraction(ReadLogic, AbstractionCRUD):
+    pass
+
+
+class TestReadClient(ReadLogic, ClientCRUD):
+    pass
+
+
+class TestReadCommandLine(ReadLogic, CommandLineCRUD):
+    pass
 
 
 # Test update ---------------------------------------------------------------------------
 
 
-class TestUpdate(UpdateFixtures):
+class UpdateLogic(BaseLogic, UpdateFixtures):
     """Container for tests of updating existing entries in database"""
 
-    @staticmethod
-    def get_error(func: Callable):
-        interface = get_interface(func)
+    def get_error(self):
         errors = dict(
             db=_NonexistentTableError,
             abstraction=_NonexistentTableError,
             client=HTTPError,
             cli=_IntTypeError,
         )
-        return errors[interface]
+        return errors[self.interface]
 
     @staticmethod
     def evaluate_data(data, table, update_with):
@@ -270,37 +289,51 @@ class TestUpdate(UpdateFixtures):
                 else:
                     assert data[k] == input_dict[k]
 
-    def test_update(self, session, model_to_update, http_server, update_func):
+    def test_update(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
         clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entry for this test
-        connection = get_connection(session, http_server, update_func)
-        data = update_func(connection, models, table, update_with)
+        connection = self.get_connection(session, http_server)
+        data = self.update(connection, models, table, update_with)
         self.evaluate_data(data, table, update_with)
 
-    def test_update_nonexistent(self, session, model_to_update, http_server, update_func):
+    def test_update_nonexistent(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
         clear_table(session, models.table)  # make sure the database is empty
         # don't add any entries for this test
-        connection = get_connection(session, http_server, update_func)
-        error_cls = self.get_error(update_func)
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_error()
         with pytest.raises(error_cls):
-            _ = update_func(connection, models, table, update_with)
+            _ = self.update(connection, models, table, update_with)
+
+
+class TestUpdateDatabase(UpdateLogic, DatabaseCRUD):
+    pass
+
+
+class TestUpdateAbstraction(UpdateLogic, AbstractionCRUD):
+    pass
+
+
+class TestUpdateClient(UpdateLogic, ClientCRUD):
+    pass
+
+
+class TestUpdateCommandLine(UpdateLogic, CommandLineCRUD):
+    pass
 
 
 # Test delete ---------------------------------------------------------------------------
 
 
-class TestDelete(DeleteFixtures):
+class DeleteLogic(BaseLogic, DeleteFixtures):
     """Container for tests of deleting existing entries in database"""
 
-    @staticmethod
-    def get_error(func: Callable):
-        interface = get_interface(func)
+    def get_error(self):
         errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
-        return errors[interface]
+        return errors[self.interface]
 
-    def test_delete(self, session, model_to_delete, http_server, delete_func):
+    def test_delete(self, session, model_to_delete, http_server):
         models, table = model_to_delete
         clear_table(session, models.table)  # make sure the database is empty
         commit_to_session(session, table)  # add entries for this test
@@ -309,15 +342,15 @@ class TestDelete(DeleteFixtures):
         assert model_in_db is not None
         assert model_in_db == table
 
-        connection = get_connection(session, http_server, delete_func)
-        delete_func(connection, models, table)
+        connection = self.get_connection(session, http_server)
+        self.delete(connection, models, table)
 
-    def test_delete_nonexistent(self, session, model_to_delete, http_server, delete_func):
+    def test_delete_nonexistent(self, session, model_to_delete, http_server):
         models, table = model_to_delete
         clear_table(session, models.table)  # make sure the database is empty
-        connection = get_connection(session, http_server, delete_func)
+        connection = self.get_connection(session, http_server)
 
-        if get_interface(delete_func) == "db":
+        if self.interface == "db":
             pytest.skip(
                 "Deleting via the database is a `session.query` followed by `.delete()`. So far, "
                 "these tests do not implement id-level queries with the session API (only queries "
@@ -328,6 +361,22 @@ class TestDelete(DeleteFixtures):
                 "interface, so it is omitted here."
             )
         else:
-            error_cls = self.get_error(delete_func)
+            error_cls = self.get_error()
             with pytest.raises(error_cls):
-                _ = delete_func(connection, models, table)
+                _ = self.delete(connection, models, table)
+
+
+class TestDeleteDatabase(DeleteLogic, DatabaseCRUD):
+    pass
+
+
+class TestDeleteAbstraction(DeleteLogic, AbstractionCRUD):
+    pass
+
+
+class TestDeleteClient(DeleteLogic, ClientCRUD):
+    pass
+
+
+class TestDeleteCommandLine(DeleteLogic, CommandLineCRUD):
+    pass
