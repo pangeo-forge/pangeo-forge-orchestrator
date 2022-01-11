@@ -21,7 +21,7 @@ from pangeo_forge_orchestrator.client import Client
 # The primary scenario we are working around here is the fact that JSON responses are returned by
 # the command line interface as plain text. Therefore, unlike responses returned by the client
 # interface, e.g., we cannot call `response.raise_for_status` to raise Python errors from them. The
-# `_MissingFieldError`, `_StrTypeError`, and `_IntTypeError` are all for use in this context;
+# `_MissingFieldError`, `_StrTypeError`, `_IntTypeError`, and `_EnumTypeError` are used for this;
 # i.e., they are exceptions to raise if specific error text is present in a CLI JSON response.
 #
 # The one other silent error covered by these exceptions is the case of a query to a the database
@@ -44,6 +44,13 @@ class _StrTypeError(Exception):
 
 class _IntTypeError(Exception):
     """Exception to raise if JSON returned by CLI indicates error of type `"type_error.integer"`.
+    """
+
+    pass
+
+
+class _EnumTypeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"type_error.enum"`.
     """
 
     pass
@@ -87,6 +94,8 @@ def get_data_from_cli(
                 raise _StrTypeError
             elif error["type"] == "type_error.integer":
                 raise _IntTypeError
+            elif error["type"] == "type_error.enum":
+                raise _EnumTypeError
     return data
 
 
