@@ -392,6 +392,7 @@ class TestDeleteCommandLine(DeleteLogic, CommandLineCRUD):
 # Test specific type constraints --------------------------------------------------------
 
 # RecipeRunStatus -----------------------------------------------------------------------
+# TODO: Add update tests.
 
 
 class CreateRecipeRunStatus(CreateLogic, RecipeRunStatusFixtures):
@@ -417,6 +418,7 @@ class TestCreateCommandLineRecipeRunStatus(CreateRecipeRunStatus, CommandLineCRU
 
 
 # RecipeRunConclusion -------------------------------------------------------------------
+# TODO: Add update tests.
 
 
 class CreateRecipeRunConclusion(CreateLogic, RecipeRunConclusionFixtures):
