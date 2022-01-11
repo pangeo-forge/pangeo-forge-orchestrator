@@ -1,6 +1,5 @@
-import copy
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import fastapi
 import pytest
@@ -12,13 +11,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
+from pangeo_forge_orchestrator.abstractions import MultipleModels
 
-from .conftest import CreateFixtures, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
+from .conftest import (
+    CreateFixtures,
+    DeleteFixtures,
+    ReadFixtures,
+    RecipeRunConclusionFixtures,
+    RecipeRunStatusFixtures,
+    UpdateFixtures,
+)
 from .interfaces import (
     AbstractionCRUD,
     ClientCRUD,
     CommandLineCRUD,
     DatabaseCRUD,
+    _EnumTypeError,
     _IntTypeError,
     _MissingFieldError,
     _NonexistentTableError,
@@ -104,13 +112,15 @@ class BaseLogic:
 # Test create ---------------------------------------------------------------------------
 
 
-class CreateLogic(BaseLogic, CreateFixtures):
+class CreateLogic(BaseLogic):
     """Container for tests of database entry creation and associated failure modes"""
 
     def get_error(self, failure_mode: str):
         errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
-        cli_error = _MissingFieldError if failure_mode == "incomplete" else _StrTypeError
-        errors.update(dict(cli=cli_error))
+        cli_errors = dict(
+            incomplete=_MissingFieldError, invalid=_StrTypeError, enum=_EnumTypeError,
+        )
+        errors.update(dict(cli=cli_errors[failure_mode]))
         return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
     @staticmethod
@@ -134,46 +144,53 @@ class CreateLogic(BaseLogic, CreateFixtures):
         assert data["id"] is not None
 
     def test_create(
-        self, session: Session, model_to_create: ModelFixture, http_server: str,
+        self,
+        session: Session,
+        model_to_create: Tuple[MultipleModels, dict, list],
+        http_server: str,
     ):
         models, request, blank_opts = model_to_create
         connection = self.get_connection(session, http_server)
         data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
 
-    @pytest.mark.parametrize("failure_mode", ["incomplete", "invalid"])
     def test_create_failure(
-        self, session: Session, model_to_create: ModelFixture, http_server: str, failure_mode: str,
+        self,
+        session: Session,
+        failing_model_to_create: Tuple[MultipleModels, dict, str],
+        http_server: str,
     ):
-        models, request, _ = model_to_create
+        models, failing_request, failure_mode = failing_model_to_create
         connection = self.get_connection(session, http_server)
-
-        failing_request = copy.deepcopy(request)
-        if failure_mode == "incomplete":
-            del failing_request[list(failing_request)[0]]  # Remove a required field
-        else:
-            assert type(request[list(request)[0]]) == str
-            failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
-            assert type(failing_request[list(failing_request)[0]]) == dict
-
         error_cls = self.get_error(failure_mode)
-        with pytest.raises(error_cls):
-            _ = self.create(connection, models, failing_request)
+        if self.interface == "db" and failure_mode == "enum":
+            pytest.xfail(
+                "SQLModel/Pydantic enum type validation is not enforced at the database level."
+            )
+        else:
+            with pytest.raises(error_cls):
+                _ = self.create(connection, models, failing_request)
 
 
-class TestCreateDatabase(CreateLogic, DatabaseCRUD):
+class CreateGeneral(CreateLogic, CreateFixtures):
+    """Logic and fixtures for general create tests."""
+
     pass
 
 
-class TestCreateAbstraction(CreateLogic, AbstractionCRUD):
+class TestCreateDatabase(CreateGeneral, DatabaseCRUD):
     pass
 
 
-class TestCreateClient(CreateLogic, ClientCRUD):
+class TestCreateAbstraction(CreateGeneral, AbstractionCRUD):
     pass
 
 
-class TestCreateCommandLine(CreateLogic, CommandLineCRUD):
+class TestCreateClient(CreateGeneral, ClientCRUD):
+    pass
+
+
+class TestCreateCommandLine(CreateGeneral, CommandLineCRUD):
     pass
 
 
@@ -369,4 +386,56 @@ class TestDeleteClient(DeleteLogic, ClientCRUD):
 
 
 class TestDeleteCommandLine(DeleteLogic, CommandLineCRUD):
+    pass
+
+
+# Test specific type constraints --------------------------------------------------------
+
+# RecipeRunStatus -----------------------------------------------------------------------
+
+
+class CreateRecipeRunStatus(CreateLogic, RecipeRunStatusFixtures):
+    """Logic and fixtures for create tests specific to ``RecipeRunStatus``"""
+
+    pass
+
+
+class TestCreateDatabaseRecipeRunStatus(CreateRecipeRunStatus, DatabaseCRUD):
+    pass
+
+
+class TestCreateAbstractionRecipeRunStatus(CreateRecipeRunStatus, AbstractionCRUD):
+    pass
+
+
+class TestCreateClientRecipeRunStatus(CreateRecipeRunStatus, ClientCRUD):
+    pass
+
+
+class TestCreateCommandLineRecipeRunStatus(CreateRecipeRunStatus, CommandLineCRUD):
+    pass
+
+
+# RecipeRunConclusion -------------------------------------------------------------------
+
+
+class CreateRecipeRunConclusion(CreateLogic, RecipeRunConclusionFixtures):
+    """Logic and fixtures for create tests specific to ``RecipeRunConclusion``"""
+
+    pass
+
+
+class TestCreateDatabaseRecipeRunConclusion(CreateRecipeRunConclusion, DatabaseCRUD):
+    pass
+
+
+class TestCreateAbstractionRecipeRunConclusion(CreateRecipeRunConclusion, AbstractionCRUD):
+    pass
+
+
+class TestCreateClientRecipeRunConclusion(CreateRecipeRunConclusion, ClientCRUD):
+    pass
+
+
+class TestCreateCommandLineRecipeRunConclusion(CreateRecipeRunConclusion, CommandLineCRUD):
     pass
