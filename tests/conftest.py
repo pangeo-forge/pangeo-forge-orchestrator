@@ -10,7 +10,7 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, create_engine
 
 from pangeo_forge_orchestrator.abstractions import MultipleModels
-from pangeo_forge_orchestrator.models import MODELS
+from pangeo_forge_orchestrator.models import MODELS, RecipeRunConclusion, RecipeRunStatus
 
 from .interfaces import clear_table
 
@@ -139,26 +139,30 @@ def recipe_run_with_kwargs():
         ModelKwargs(
             request=dict(
                 recipe_id="test-recipe-0",
-                run_date="2021-01-01T00:00:00Z",
                 bakery_id=0,
                 feedstock_id=0,
-                commit="012345abcdefg",
+                head_sha="012345abcdefg",
                 version="1.0",
-                status="complete",
                 path="/path-to-dataset.zarr",
+                started_at="2021-01-01T00:00:00Z",
+                completed_at="2021-01-01T01:01:01Z",
+                conclusion="success",
+                status="queued",
             ),
             blank_opts=["message"],
         ),
         ModelKwargs(
             request=dict(
                 recipe_id="test-recipe-1",
-                run_date="2021-02-02T00:00:00Z",
                 bakery_id=1,
                 feedstock_id=1,
-                commit="012345abcdefg",
+                head_sha="012345abcdefg",
                 version="2.0",
-                status="complete",
                 path="/path-to-dataset.zarr",
+                started_at="2021-02-02T00:00:00Z",
+                completed_at="2021-02-02T02:02:02Z",
+                conclusion="success",
+                status="queued",
                 message="hello",
             ),
         ),
@@ -182,9 +186,24 @@ class CreateFixtures:
     """Fixtures for ``TestCreate``"""
 
     @pytest.fixture
-    def model_to_create(self, models_with_kwargs):
+    def model_to_create(self, models_with_kwargs: ModelFixture):
         kw_0, _ = models_with_kwargs.kwargs
         return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
+
+    @pytest.fixture(params=["incomplete", "invalid"])
+    def failing_model_to_create(self, model_to_create: ModelFixture, request):
+        failure_mode = request.param
+        models, request, _ = model_to_create
+        failing_request = copy.deepcopy(request)
+
+        if failure_mode == "incomplete":
+            del failing_request[list(failing_request)[0]]  # Remove a required field
+        elif failure_mode == "invalid":
+            assert type(request[list(request)[0]]) == str
+            failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
+            assert type(failing_request[list(failing_request)[0]]) == dict
+
+        return models, failing_request, failure_mode
 
 
 # Read ------------------------------------------------------------------------------------
@@ -238,3 +257,79 @@ class DeleteFixtures:
         kw_0, _ = models_with_kwargs.kwargs
         table = models.table(**kw_0.request)
         return models, table
+
+
+# Specific constrained types ------------------------------------------------------------
+
+
+class EnumFixtureFactory:
+    """A mixin of fixture definition methods. In subclasses, these methods are used to define
+    fixtures for testing type validation of (``enum``-based) categorical database fields.
+    """
+
+    failure_mode = "enum"  # Used to select error class in `test_database.CreateLogic.get_error`
+
+    def make_model_to_create(
+        self, model_fixture: ModelFixture, request,
+    ) -> Tuple[MultipleModels, dict, list]:
+        """Make a fixture for use with ``test_database.CreateLogic.test_create``.
+
+        :param model_fixture: The ``ModelFixture`` object. Note that the generic fixtures (defined
+          in ``CreateFixtures``) use a lazy fixture (``models_with_kwargs``) which represents a
+          parametrization of all models in the ``pangeo_forge_orchestrator.models.MODELS`` dict.
+          By contrast, fixture classes which inherit from this mixin will pass only the single,
+          specific ``ModelFixture`` representing the database model in which the targeted
+          categorical field exists.
+        :param request: The pytest request object containing a parametrization of all valid options
+          for the categorical field. E.g.: ``@pytest.fixture(params=[opt.value for opt in Obj])``,
+          where ``Obj`` is the ``enum`` object that defines the categorical options to test.
+        """
+
+        kw_0, _ = model_fixture.kwargs
+        kw_0.request[self.field_name] = request.param
+        return model_fixture.models, kw_0.request, kw_0.blank_opts
+
+    def make_failing_model_to_create(
+        self, model_fixture: ModelFixture
+    ) -> Tuple[MultipleModels, dict, str]:
+        """Make a fixture for use with ``test_database.CreateLogic.test_create_failure``.
+
+        :param model_fixture: The ``ModelFixture`` object. See docstring for
+          ``make_model_to_create`` method on this class for full description.
+        """
+        kw_0, _ = model_fixture.kwargs
+        failing_request = copy.deepcopy(kw_0.request)
+        failing_request[self.field_name] = self.invalid_value
+        return model_fixture.models, failing_request, self.failure_mode
+
+
+class RecipeRunStatusFixtures(EnumFixtureFactory):
+    """Fixtures for testing validation of values passed to recipe run table's `status` field.
+    """
+
+    field_name = "status"
+    invalid_value = "invalid_status"
+
+    @pytest.fixture(params=[opt.value for opt in RecipeRunStatus])
+    def model_to_create(self, recipe_run_with_kwargs: ModelFixture, request):
+        return self.make_model_to_create(recipe_run_with_kwargs, request)
+
+    @pytest.fixture
+    def failing_model_to_create(self, recipe_run_with_kwargs: ModelFixture):
+        return self.make_failing_model_to_create(recipe_run_with_kwargs)
+
+
+class RecipeRunConclusionFixtures(EnumFixtureFactory):
+    """Fixtures for testing validation of values passed to recipe run table's `conclusion` field.
+    """
+
+    field_name = "conclusion"
+    invalid_value = "invalid_conclusion"
+
+    @pytest.fixture(params=[opt.value for opt in RecipeRunConclusion])
+    def model_to_create(self, recipe_run_with_kwargs: ModelFixture, request):
+        return self.make_model_to_create(recipe_run_with_kwargs, request)
+
+    @pytest.fixture
+    def failing_model_to_create(self, recipe_run_with_kwargs: ModelFixture):
+        return self.make_failing_model_to_create(recipe_run_with_kwargs)
