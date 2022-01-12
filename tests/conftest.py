@@ -197,7 +197,7 @@ class CreateFixtures:
         failing_request = copy.deepcopy(request)
 
         if failure_mode == "incomplete":
-            del failing_request[list(failing_request)[0]]  # Remove a required field
+            del failing_request[next(iter(failing_request))]  # Remove a required field
         elif failure_mode == "invalid":
             assert type(request[list(request)[0]]) == str
             failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
