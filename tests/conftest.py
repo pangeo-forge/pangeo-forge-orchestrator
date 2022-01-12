@@ -199,9 +199,9 @@ class CreateFixtures:
         if failure_mode == "incomplete":
             del failing_request[next(iter(failing_request))]  # Remove a required field
         elif failure_mode == "invalid":
-            assert type(request[list(request)[0]]) == str
-            failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
-            assert type(failing_request[list(failing_request)[0]]) == dict
+            assert type(request[next(iter(request))]) == str
+            failing_request[next(iter(failing_request))] = {"message": "Is this wrong?"}
+            assert type(failing_request[next(iter(failing_request))]) == dict
 
         return models, failing_request, failure_mode
 
@@ -240,7 +240,7 @@ class UpdateFixtures:
         kw_0, kw_1 = models_with_kwargs.kwargs
         table = models.table(**kw_0.request)
         different_kws = copy.deepcopy(kw_1.request)
-        key = list(different_kws)[0]
+        key = next(iter(different_kws))
         update_with = {key: different_kws.pop(key)}
         return models, table, update_with
 
