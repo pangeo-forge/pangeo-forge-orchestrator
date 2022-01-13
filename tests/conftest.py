@@ -106,8 +106,11 @@ class APIErrors(str, Enum):
 
 @dataclass
 class SuccessKwargs:
-    """
+    """Container to hold kwargs for instantiating ``SQLModel`` table model.
 
+    :param success: The kwargs for instantatiting a table model. Can be passed to a model object
+    in the Python context, or sent as JSON to the database API.
+    :param failure:
     """
 
     all: dict
@@ -138,19 +141,6 @@ class FailingKwargs:
 
 
 @dataclass
-class ModelKwargs:
-    """Container to hold kwargs for instantiating ``SQLModel`` table model.
-
-    :param success: The kwargs for instantatiting a table model. Can be passed to a model object
-    in the Python context, or sent as JSON to the database API.
-    :param failure:
-    """
-
-    success: SuccessKwargs
-    failure: Optional[FailingKwargs] = None
-
-
-@dataclass
 class ModelFixture:
     """Container for a ``MultipleModels`` object (itself containing ``SQLModel`` objects) with
     kwargs which can be used to instantiate the models within it.
@@ -164,7 +154,8 @@ class ModelFixture:
     """
 
     models: MultipleModels
-    kwargs: ModelKwargs
+    kwargs: SuccessKwargs
+    failing_kwargs: Optional[FailingKwargs] = None
 
 
 def add_failing_kwargs(model_fixture: ModelFixture, failing_kwargs: FailingKwargs):
@@ -172,7 +163,7 @@ def add_failing_kwargs(model_fixture: ModelFixture, failing_kwargs: FailingKwarg
 
     """
     model_fixture_copy = copy.deepcopy(model_fixture)
-    model_fixture_copy.kwargs.failure = failing_kwargs
+    model_fixture_copy.failing_kwargs = failing_kwargs
     return model_fixture_copy
 
 
@@ -240,9 +231,7 @@ def recipe_run_with_kwargs() -> ModelFixture:
             status="queued",
         ),
     )
-    return ModelFixture(
-        MODELS["recipe_run"], ModelKwargs(success_kwargs)
-    )  # recipe_run_failing_kwargs))
+    return ModelFixture(MODELS["recipe_run"], success_kwargs)
 
 
 @pytest.fixture

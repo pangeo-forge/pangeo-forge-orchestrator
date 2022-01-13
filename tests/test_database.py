@@ -132,12 +132,8 @@ class CreateSuccess(BaseLogic):
         self, session: Session, models_with_kwargs: ModelFixture, http_server: str, fields: str,
     ):
         models, kws = models_with_kwargs.models, models_with_kwargs.kwargs
-        request = kws.success.all if fields == "all_fields" else kws.success.reqs_only
-        blank_opts = (
-            None
-            if fields == "all_fields"
-            else list(set(kws.success.all) - set(kws.success.reqs_only))
-        )
+        request = kws.all if fields == "all_fields" else kws.reqs_only
+        blank_opts = None if fields == "all_fields" else list(set(kws.all) - set(kws.reqs_only))
         connection = self.get_connection(session, http_server)
         data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
@@ -161,36 +157,35 @@ class CreateFailure(CreateSuccess):
         errors.update(dict(cli=cli_errors[failure_mode]))
         return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
-    def do_actual_error_test(
-        self,
-        models: abstractions.MultipleModels,
-        failing_request: dict,
-        error_cls: Exception,
-        session: Session,
-        http_server: str,
-    ):
-        connection = self.get_connection(session, http_server)
-        error_cls = self.get_error(APIErrors.missing)
-        with pytest.raises(error_cls):
-            _ = self.create(connection, models, failing_request)
-
     def test_create_incomplete_request(
         self, session: Session, models_with_kwargs: ModelFixture, http_server: str,
     ):
         models, kws = models_with_kwargs.models, models_with_kwargs.kwargs
-        incomplete_kwargs = copy.deepcopy(kws.success.reqs_only)  # NOTE: Use of `reqs_only`
+        incomplete_kwargs = copy.deepcopy(kws.reqs_only)  # NOTE: Use of `reqs_only`
         del incomplete_kwargs[next(iter(incomplete_kwargs))]  # Remove a required field
-        self.do_actual_error_test(
-            models, incomplete_kwargs, APIErrors.missing, session, http_server
-        )
+
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_error(APIErrors.missing)
+        with pytest.raises(error_cls):
+            _ = self.create(connection, models, incomplete_kwargs)
 
     def test_create_failing_request(
         self, session: Session, models_with_failing_kwargs: ModelFixture, http_server: str,
     ):
-        models, kws = models_with_failing_kwargs.models, models_with_failing_kwargs.kwargs
-        failing_request = copy.deepcopy(kws.success.all)  # NOTE: Use of `all`
-        failing_request.update(kws.failure.update_with)
-        self.do_actual_error_test(models, failing_request, APIErrors.missing, session, http_server)
+        models, kws, failing_kwargs = (
+            models_with_failing_kwargs.models,
+            models_with_failing_kwargs.kwargs,
+            models_with_failing_kwargs.failing_kwargs,
+        )
+        # TODO: Disambiguate naming of failing_kwargs and failing_request
+        failing_request = copy.deepcopy(kws.all)  # NOTE: Use of `all`
+        failing_request.update(failing_kwargs.update_with)
+        error_cls = self.get_error(failing_kwargs.raises)
+
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_error(failing_kwargs.raises)
+        with pytest.raises(error_cls):
+            _ = self.create(connection, models, failing_request)
 
 
 class TestCreateDatabase(CreateSuccess, DatabaseCRUD):
