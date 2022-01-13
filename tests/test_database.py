@@ -190,11 +190,7 @@ class CreateFailure(CreateSuccess):
         models, kws = models_with_failing_kwargs.models, models_with_failing_kwargs.kwargs
         failing_request = copy.deepcopy(kws.success.all)  # NOTE: Use of `all`
         failing_request.update(kws.failure.update_with)
-        connection = self.get_connection(session, http_server)
-        error_cls = self.get_error(kws.failure.raises)
-
-        with pytest.raises(error_cls):
-            _ = self.create(connection, models, failing_request)
+        self.do_actual_error_test(models, failing_request, APIErrors.missing, session, http_server)
 
 
 class TestCreateDatabase(CreateSuccess, DatabaseCRUD):
