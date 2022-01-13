@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import validator
+# from pydantic import validator
 from sqlmodel import SQLModel
 
 from .abstractions import MultipleModels
@@ -76,16 +76,17 @@ class RecipeRunBase(SQLModel):
     # TODO: Replace `message` field with GitHub check runs `object`.
     # TODO: Validate `completed_at` field if provided.
 
-    @validator("conclusion")
-    def validate_conclusion_if_provided(cls, v):
-        """Pydantic does not validate fields typed as `Optional` by default. To validate optional
-        fields when they are provided, a custom `@validator` method is required. This method
-        ensures that conclusion values outside those enumerated in `RecipeRunConclusion` will raise
-        validation errors. (For more, see: https://github.com/samuelcolvin/pydantic/issues/1223.)
-        """
-        valid_opts = [opt.value for opt in RecipeRunConclusion]
-        assert v in valid_opts
-        return v
+    # @validator("conclusion")
+    # def validate_conclusion_if_provided(cls, v):
+    #    """Pydantic does not validate fields typed as `Optional` by default. To validate optional
+    #    fields when they are provided, a custom `@validator` method is required. This method
+    #    ensures that conclusion values outside those enumerated in `RecipeRunConclusion` will raise
+    #    validation errors. (For more, see: https://github.com/samuelcolvin/pydantic/issues/1223.)
+    #    """
+    #     valid_opts = [opt.value for opt in RecipeRunConclusion]
+    #    if v is not None:
+    #        assert v in valid_opts
+    #    return v
 
 
 class RecipeRunRead(RecipeRunBase):

@@ -56,6 +56,13 @@ class _EnumTypeError(Exception):
     pass
 
 
+class _DatetimeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"value_error.datetime"`.
+    """
+
+    pass
+
+
 class _NonexistentTableError(Exception):
     """Execption to raise if a database query returns `None`."""
 
@@ -96,6 +103,8 @@ def get_data_from_cli(
                 raise _IntTypeError
             elif error["type"] == "type_error.enum":
                 raise _EnumTypeError
+            elif error["type"] == "value_error.datetime":
+                raise _DatetimeError
     return data
 
 
