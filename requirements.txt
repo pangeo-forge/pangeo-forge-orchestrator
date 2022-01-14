@@ -9,4 +9,5 @@ gunicorn==20.1.0
 uvicorn==0.17.0
 
 # install the pangeo-forge-orchestrator package
--e .
+# -e .
+# actually not necessary
