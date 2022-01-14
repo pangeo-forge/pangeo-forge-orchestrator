@@ -25,32 +25,20 @@ from .interfaces import (
     _StrTypeError,
 )
 
-
-def add_z(input_string: str):
-    if not input_string.endswith("Z"):
-        input_string += "Z"
-    return input_string
-
-
-def parse_to_datetime(input_string: str):
-    input_string = add_z(input_string)
-    return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
-
-
-def registered_routes(app: FastAPI):
-    return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
-
-
 # Test endpoint registration ------------------------------------------------------------
 
 
 class TestRegistration(ModelFixtures):
-    def test_registration(uncleared_session: Session, success_only_models: ModelFixture):
+    @staticmethod
+    def registered_routes(app: FastAPI):
+        return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
+
+    def test_registration(self, uncleared_session: Session, success_only_models: ModelFixture):
         models = success_only_models.models
         new_app = FastAPI()
 
         # assert that this application has no registered routes
-        assert len(registered_routes(new_app)) == 0
+        assert len(self.registered_routes(new_app)) == 0
 
         def get_session():
             yield uncleared_session
@@ -59,7 +47,7 @@ class TestRegistration(ModelFixtures):
         abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
 
         # assert that this application now has five registered routes
-        routes = registered_routes(new_app)
+        routes = self.registered_routes(new_app)
 
         assert len(routes) == 5
 
@@ -110,6 +98,20 @@ class BaseLogic:
             session.commit()
         return models, tables
 
+    @staticmethod
+    def add_z(input_string: str):
+        """
+        """
+        if not input_string.endswith("Z"):
+            input_string += "Z"
+        return input_string
+
+    def parse_to_datetime(self, input_string: str):
+        """
+        """
+        input_string = self.add_z(input_string)
+        return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
+
 
 # Test create ---------------------------------------------------------------------------
 
@@ -117,11 +119,10 @@ class BaseLogic:
 class CreateSuccessOnly(BaseLogic, ModelFixtures):
     """Container for tests of successful database entry creation"""
 
-    @staticmethod
-    def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
+    def evaluate_data(self, request: dict, data: dict, blank_opts: Optional[List] = None):
         for k in request.keys():
             if isinstance(data[k], datetime):
-                assert data[k] == parse_to_datetime(request[k])
+                assert data[k] == self.parse_to_datetime(request[k])
             elif (
                 # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
                 isinstance(data[k], str)
@@ -129,7 +130,7 @@ class CreateSuccessOnly(BaseLogic, ModelFixtures):
                 and any([s.endswith("Z") for s in (data[k], request[k])])
                 and not all([s.endswith("Z") for s in (data[k], request[k])])
             ):
-                assert add_z(data[k]) == add_z(request[k])
+                assert self.add_z(data[k]) == self.add_z(request[k])
             else:
                 assert data[k] == request[k]
         if blank_opts:
@@ -251,8 +252,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
         )
         return errors[self.interface]
 
-    @staticmethod
-    def evaluate_read_range_data(data, tables):
+    def evaluate_read_range_data(self, data, tables):
         assert len(data) == len(tables)
         for i, t in enumerate(tables):
             input_data = t.dict()
@@ -261,16 +261,15 @@ class ReadLogic(BaseLogic, ModelFixtures):
             response_data = data[i].dict() if type(data[i]) != dict else data[i]
             for k in input_data.keys():
                 if type(input_data[k]) == datetime and type(response_data[k]) != datetime:
-                    assert parse_to_datetime(response_data[k]) == input_data[k]
+                    assert self.parse_to_datetime(response_data[k]) == input_data[k]
                 else:
                     assert response_data[k] == input_data[k]
 
-    @staticmethod
-    def evaluate_read_single_data(data, table):
+    def evaluate_read_single_data(self, data, table):
         input_dict = table.dict()
         for k in input_dict.keys():
             if type(input_dict[k]) == datetime and type(data[k]) != datetime:
-                assert parse_to_datetime(data[k]) == input_dict[k]
+                assert self.parse_to_datetime(data[k]) == input_dict[k]
             else:
                 assert data[k] == input_dict[k]
 
@@ -333,8 +332,7 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
         )
         return errors[self.interface]
 
-    @staticmethod
-    def evaluate_data(data, table, update_with):
+    def evaluate_data(self, data, table, update_with):
         assert data["id"] == table.id
         input_dict = table.dict()
         for k in input_dict.keys():
@@ -342,7 +340,7 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
                 assert data[k] == update_with[k]
             else:
                 if not isinstance(data[k], type(input_dict[k])):
-                    assert parse_to_datetime(data[k]) == input_dict[k]
+                    assert self.parse_to_datetime(data[k]) == input_dict[k]
                 else:
                     assert data[k] == input_dict[k]
 
