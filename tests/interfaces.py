@@ -7,8 +7,8 @@ from typing import Optional
 from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.model_builders as model_builders
-from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.client import Client
+from pangeo_forge_orchestrator.model_builders import MultipleModels
 
 # Exceptions ------------------------------------------------------------------------------
 # The exceptions defined here provide specific Python errors to raise when certain failure
@@ -178,7 +178,9 @@ class AbstractionCRUD:
         return data
 
     def delete(self, session: Session, models: MultipleModels, table: SQLModel) -> None:
-        delete_response = model_builders.delete(session=session, table_cls=models.table, id=table.id)
+        delete_response = model_builders.delete(
+            session=session, table_cls=models.table, id=table.id
+        )
         assert delete_response == {"ok": True}  # successfully deleted
         model_in_db = session.get(models.table, table.id)
         assert model_in_db is None

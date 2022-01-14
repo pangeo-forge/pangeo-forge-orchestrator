@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from sqlmodel import Session
 
-from .model_builders import register_endpoints
 from .database import create_db_and_tables, engine
+from .model_builders import register_endpoints
 from .models import MODELS
 
 api = FastAPI()
