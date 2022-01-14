@@ -11,7 +11,14 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
 
-from .conftest import APIErrors, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
+from .conftest import (
+    APIErrors,
+    DeleteFixtures,
+    ModelFixture,
+    ModelFixtures,
+    ReadFixtures,
+    UpdateFixtures,
+)
 from .interfaces import (
     AbstractionCRUD,
     ClientCRUD,
@@ -104,7 +111,7 @@ class BaseLogic:
 # Test create ---------------------------------------------------------------------------
 
 
-class CreateSuccess(BaseLogic):
+class CreateSuccessOnly(BaseLogic, ModelFixtures):
     """Container for tests of successful database entry creation"""
 
     @staticmethod
@@ -129,17 +136,18 @@ class CreateSuccess(BaseLogic):
 
     @pytest.mark.parametrize("fields", ["all_fields", "req_only"])
     def test_create(
-        self, session: Session, models_with_kwargs: ModelFixture, http_server: str, fields: str,
+        self, fields: str, success_only_models: ModelFixture, session: Session, http_server: str,
     ):
-        models, kws = models_with_kwargs.models, models_with_kwargs.kwargs
+        models, kws = success_only_models.models, success_only_models.success_kws
         request = kws.all if fields == "all_fields" else kws.reqs_only
+        # TODO: Explain blank_opts.
         blank_opts = None if fields == "all_fields" else list(set(kws.all) - set(kws.reqs_only))
         connection = self.get_connection(session, http_server)
         data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
 
 
-class CreateFailure(CreateSuccess):
+class CreateComplete(CreateSuccessOnly):
     """Container for tests of both successful _and_ failing database entry creation
 
     Note this is used for public interfaces: client and command line.
@@ -158,9 +166,13 @@ class CreateFailure(CreateSuccess):
         return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
     def test_create_incomplete_request(
-        self, session: Session, models_with_kwargs: ModelFixture, http_server: str,
+        self, success_only_models: ModelFixture, session: Session, http_server: str,
     ):
-        models, kws = models_with_kwargs.models, models_with_kwargs.kwargs
+        """Even though this is a failure test, we use success_only_models, because the failure mode
+        is incomplete.
+
+        """
+        models, kws = success_only_models.models, success_only_models.success_kws
         incomplete_kwargs = copy.deepcopy(kws.reqs_only)  # NOTE: Use of `reqs_only`
         del incomplete_kwargs[next(iter(incomplete_kwargs))]  # Remove a required field
 
@@ -170,25 +182,24 @@ class CreateFailure(CreateSuccess):
             _ = self.create(connection, models, incomplete_kwargs)
 
     def test_create_failing_request(
-        self, session: Session, models_with_failing_kwargs: ModelFixture, http_server: str,
+        self, complete_models: ModelFixture, session: Session, http_server: str,
     ):
-        models, kws, failing_kwargs = (
-            models_with_failing_kwargs.models,
-            models_with_failing_kwargs.kwargs,
-            models_with_failing_kwargs.failing_kwargs,
+        models, success_kws, failure_kws = (
+            complete_models.models,
+            complete_models.success_kws,
+            complete_models.failure_kws,
         )
-        # TODO: Disambiguate naming of failing_kwargs and failing_request
-        failing_request = copy.deepcopy(kws.all)  # NOTE: Use of `all`
-        failing_request.update(failing_kwargs.update_with)
-        error_cls = self.get_error(failing_kwargs.raises)
+        failing_request = copy.deepcopy(success_kws.all)  # NOTE: Use of `all`
+        failing_request.update(failure_kws.update_with)
+        error_cls = self.get_error(failure_kws.raises)
 
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error(failing_kwargs.raises)
+        error_cls = self.get_error(failure_kws.raises)
         with pytest.raises(error_cls):
             _ = self.create(connection, models, failing_request)
 
 
-class TestCreateDatabase(CreateSuccess, DatabaseCRUD):
+class TestCreateDatabase(CreateSuccessOnly, DatabaseCRUD):
     """
 
     Note only tested for success.
@@ -197,7 +208,7 @@ class TestCreateDatabase(CreateSuccess, DatabaseCRUD):
     pass
 
 
-class TestCreateAbstraction(CreateSuccess, AbstractionCRUD):
+class TestCreateAbstraction(CreateSuccessOnly, AbstractionCRUD):
     """
 
     Note only tested for success.
@@ -206,7 +217,7 @@ class TestCreateAbstraction(CreateSuccess, AbstractionCRUD):
     pass
 
 
-class TestCreateClient(CreateFailure, ClientCRUD):
+class TestCreateClient(CreateComplete, ClientCRUD):
     """
 
     """
@@ -214,7 +225,7 @@ class TestCreateClient(CreateFailure, ClientCRUD):
     pass
 
 
-class TestCreateCommandLine(CreateFailure, CommandLineCRUD):
+class TestCreateCommandLine(CreateComplete, CommandLineCRUD):
     """
 
     """

@@ -131,7 +131,7 @@ class SuccessKwargs:
 
 
 @dataclass
-class FailingKwargs:
+class FailureKwargs:
     """
 
     """
@@ -146,25 +146,16 @@ class ModelFixture:
     kwargs which can be used to instantiate the models within it.
 
     :param models: A ``MultipleModels`` object.
-    :param kwargs: A 2-tuple consisting of two ``ModelKwargs`` objects matched to the ``models``.
-      Note that two sets of kwargs are required because: (1) the ``read_range`` test requires
-      that more than one entry is populated into the database; and (2) the ``update`` test requires
-      that we have have an additional set of kwargs with which to update a database entry.
-    :param failing_kwargs:
+    :param success_kws: A 2-tuple consisting of two ``ModelKwargs`` objects matched to the
+      ``models``. Note that two sets of kwargs are required because: (1) the ``read_range`` test
+      requires that more than one entry is populated into the database; and (2) the ``update``
+      test requires that we have have an additional set of kwargs with which to update an entry.
+    :param failure_kws:
     """
 
     models: MultipleModels
-    kwargs: SuccessKwargs
-    failing_kwargs: Optional[FailingKwargs] = None
-
-
-def add_failing_kwargs(model_fixture: ModelFixture, failing_kwargs: FailingKwargs):
-    """
-
-    """
-    model_fixture_copy = copy.deepcopy(model_fixture)
-    model_fixture_copy.failing_kwargs = failing_kwargs
-    return model_fixture_copy
+    success_kws: SuccessKwargs
+    failure_kws: Optional[FailureKwargs] = None
 
 
 # To test additional models:
@@ -182,77 +173,91 @@ NOT_INT = "not parsable to int"
 NOT_ISO8601 = "Jan 01 2021 00:00:00"
 
 
-@pytest.fixture(
-    scope="session",
-    params=[
-        (dict(recipe_id=NOT_STR), APIErrors.str),
-        (dict(bakery_id=NOT_INT), APIErrors.int),
-        (dict(feedstock_id=NOT_INT), APIErrors.int),
-        (dict(head_sha=NOT_STR), APIErrors.str),
-        (dict(version=NOT_STR), APIErrors.str),  # TODO: use `ConstrainedStr`
-        (dict(path=NOT_STR), APIErrors.str),
-        (dict(started_at=NOT_ISO8601), APIErrors.datetime),
-        (dict(completed_at=NOT_ISO8601), APIErrors.datetime),
-        (dict(conclusion="not a valid conclusion"), APIErrors.enum),
-        (dict(status="not a valid status"), APIErrors.enum),
-        (dict(message=NOT_STR), APIErrors.str),
-        # TODO: Add invalid pairs of fields.
-    ],
-)
-def recipe_run_failing_kwargs(request):
-    update_with, raises = request.param
-    return FailingKwargs(update_with, raises)
+class RecipeRunFixtures:
+    """
+    """
 
+    models = MODELS["recipe_run"]
 
-@pytest.fixture(scope="session")
-def recipe_run_with_kwargs() -> ModelFixture:
-    success_kwargs = SuccessKwargs(
-        all=dict(
-            recipe_id="test-recipe-0",
-            bakery_id=0,
-            feedstock_id=0,
-            head_sha="abcdefg12345",
-            version="1.0",
-            path="/path-to-dataset.zarr",
-            started_at="2021-01-01T00:00:00Z",
-            completed_at="2021-01-01T01:01:01Z",
-            conclusion="success",
-            status="completed",
-            message="hello",
-        ),
-        reqs_only=dict(
-            recipe_id="test-recipe-1",
-            bakery_id=1,
-            feedstock_id=1,
-            head_sha="012345abcdefg",
-            version="2.0",
-            path="/path-to-another-dataset.zarr",
-            started_at="2021-02-02T00:00:00Z",
-            status="queued",
-        ),
+    @pytest.fixture(
+        scope="session",
+        params=[
+            (dict(recipe_id=NOT_STR), APIErrors.str),
+            (dict(bakery_id=NOT_INT), APIErrors.int),
+            (dict(feedstock_id=NOT_INT), APIErrors.int),
+            (dict(head_sha=NOT_STR), APIErrors.str),
+            (dict(version=NOT_STR), APIErrors.str),  # TODO: use `ConstrainedStr`
+            (dict(path=NOT_STR), APIErrors.str),
+            (dict(started_at=NOT_ISO8601), APIErrors.datetime),
+            (dict(completed_at=NOT_ISO8601), APIErrors.datetime),
+            (dict(conclusion="not a valid conclusion"), APIErrors.enum),
+            (dict(status="not a valid status"), APIErrors.enum),
+            (dict(message=NOT_STR), APIErrors.str),
+            # TODO: Add invalid pairs of fields.
+        ],
     )
-    return ModelFixture(MODELS["recipe_run"], success_kwargs)
+    def failure_kws_recipe_run(self, request):
+        """
+
+        """
+        update_with, raises = request.param
+        return FailureKwargs(update_with, raises)
+
+    @pytest.fixture(scope="session")
+    def success_kws_recipe_run(self) -> ModelFixture:
+        """
+
+        """
+        success_kwargs = SuccessKwargs(
+            all=dict(
+                recipe_id="test-recipe-0",
+                bakery_id=0,
+                feedstock_id=0,
+                head_sha="abcdefg12345",
+                version="1.0",
+                path="/path-to-dataset.zarr",
+                started_at="2021-01-01T00:00:00Z",
+                completed_at="2021-01-01T01:01:01Z",
+                conclusion="success",
+                status="completed",
+                message="hello",
+            ),
+            reqs_only=dict(
+                recipe_id="test-recipe-1",
+                bakery_id=1,
+                feedstock_id=1,
+                head_sha="012345abcdefg",
+                version="2.0",
+                path="/path-to-another-dataset.zarr",
+                started_at="2021-02-02T00:00:00Z",
+                status="queued",
+            ),
+        )
+        return success_kwargs
+
+    @pytest.fixture
+    def recipe_run_success_only_model(self, success_kws_recipe_run: SuccessKwargs) -> ModelFixture:
+        return ModelFixture(self.models, success_kws_recipe_run)
+
+    @pytest.fixture
+    def recipe_run_complete_model(
+        self, success_kws_recipe_run: SuccessKwargs, failure_kws_recipe_run: FailureKwargs
+    ) -> ModelFixture:
+        return ModelFixture(self.models, success_kws_recipe_run, failure_kws_recipe_run)
 
 
-@pytest.fixture
-def recipe_run_with_failing_kwargs(
-    recipe_run_with_kwargs: ModelFixture, recipe_run_failing_kwargs: FailingKwargs
-) -> ModelFixture:
-    return add_failing_kwargs(recipe_run_with_kwargs, recipe_run_failing_kwargs)
+class ModelFixtures(RecipeRunFixtures):
+    @pytest.fixture(
+        scope="session", params=[lazy_fixture("recipe_run_success_only_model")],
+    )
+    def success_only_models(self, request):
+        return request.param
 
-
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("recipe_run_with_failing_kwargs")],
-)
-def models_with_failing_kwargs(request):
-    return request.param
-
-
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("recipe_run_with_kwargs")],
-)
-def models_with_kwargs(request):
-    return request.param
+    @pytest.fixture(
+        scope="session", params=[lazy_fixture("recipe_run_complete_model")],
+    )
+    def complete_models(self, request):
+        return request.param
 
 
 # CRUD function fixtures ------------------------------------------------------------------
