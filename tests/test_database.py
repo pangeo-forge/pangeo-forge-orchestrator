@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import fastapi
 import pytest
@@ -24,11 +24,6 @@ from .interfaces import (
     _NonexistentTableError,
     _StrTypeError,
 )
-
-
-def commit_to_session(session: Session, model: SQLModel):
-    session.add(model)
-    session.commit()
 
 
 def add_z(input_string: str):
@@ -100,6 +95,20 @@ class BaseLogic:
         """
         connection = session if "db" in self.interface or "abstract" in self.interface else url
         return connection
+
+    @staticmethod
+    def commit_to_session(
+        model_fixture: ModelFixture, session: Session, ntables: int = 1
+    ) -> Tuple[abstractions.MultipleModels, Tuple[SQLModel, SQLModel]]:
+        """
+
+        """
+        models, kws = model_fixture.models, model_fixture.success_kws
+        tables = [models.table(**kw) for kw in (kws.all, kws.reqs_only)]
+        for i in range(ntables):
+            session.add(tables[i])
+            session.commit()
+        return models, tables
 
 
 # Test create ---------------------------------------------------------------------------
@@ -268,11 +277,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
     def test_read_range(
         self, success_only_models: ModelFixture, session: Session, http_server: str,
     ):
-        models, kws = success_only_models.models, success_only_models.success_kws
-        # TODO: Explain tables.
-        tables = [models.table(**kw) for kw in (kws.all, kws.reqs_only)]
-        for t in tables:
-            commit_to_session(session, t)  # add entries for this test
+        models, tables = self.commit_to_session(success_only_models, session, ntables=2)
         connection = self.get_connection(session, http_server)
         data = self.read_range(connection, models)
         self.evaluate_read_range_data(data, tables)
@@ -280,12 +285,10 @@ class ReadLogic(BaseLogic, ModelFixtures):
     def test_read_single(
         self, success_only_models: ModelFixture, session: Session, http_server: str,
     ):
-        models, kws = success_only_models.models, success_only_models.success_kws
-        table = models.table(**kws.all)
-        commit_to_session(session, table)  # add entries for this test
+        models, tables = self.commit_to_session(success_only_models, session)
         connection = self.get_connection(session, http_server)
-        data = self.read_single(connection, models, table)
-        self.evaluate_read_single_data(data, table)
+        data = self.read_single(connection, models, tables[0])
+        self.evaluate_read_single_data(data, tables[0])
 
     def test_read_nonexistent(
         self, success_only_models: ModelFixture, session: Session, http_server: str,
@@ -345,14 +348,14 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
 
     def test_update(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
-        commit_to_session(session, table)  # add entry for this test
+        # commit_to_session(session, table)  # add entry for this test
         connection = self.get_connection(session, http_server)
         data = self.update(connection, models, table, update_with)
         self.evaluate_data(data, table, update_with)
 
     def test_update_nonexistent(self, session, model_to_update, http_server):
         models, table, update_with = model_to_update
-        # don't add any entries for this test
+        # NOTE: We *don't* add any entries for this test
         connection = self.get_connection(session, http_server)
         error_cls = self.get_error()
         with pytest.raises(error_cls):
@@ -386,22 +389,22 @@ class DeleteLogic(BaseLogic, ModelFixtures):
         return errors[self.interface]
 
     def test_delete(self, success_only_models: ModelFixture, session: Session, http_server: str):
-        models, kws = success_only_models.models, success_only_models.success_kws
-        table = models.table(**kws.all)
-        commit_to_session(session, table)  # add entries for this test
+        models, tables = self.commit_to_session(success_only_models, session)
 
-        model_in_db = session.get(models.table, table.id)
+        model_in_db = session.get(models.table, tables[0].id)
         assert model_in_db is not None
-        assert model_in_db == table
+        assert model_in_db == tables[0]
 
         connection = self.get_connection(session, http_server)
-        self.delete(connection, models, table)
+        self.delete(connection, models, tables[0])
 
     def test_delete_nonexistent(
         self, success_only_models: ModelFixture, session: Session, http_server: str,
     ):
         models, kws = success_only_models.models, success_only_models.success_kws
         table = models.table(**kws.all)
+        # NOTE: We *don't* add any entries for this test
+
         connection = self.get_connection(session, http_server)
 
         if self.interface == "db":
