@@ -11,7 +11,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
 
-from .conftest import APIErrors, ModelFixture, ModelFixtures, UpdateFixtures
+from .conftest import APIErrors, ModelFixtures, ModelWithKwargs
 from .interfaces import (
     AbstractionCRUD,
     ClientCRUD,
@@ -31,9 +31,10 @@ from .interfaces import (
 class TestRegistration(ModelFixtures):
     @staticmethod
     def registered_routes(app: FastAPI):
+        # TODO: Explain why this is a staticmethod and not a property
         return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
 
-    def test_registration(self, uncleared_session: Session, success_only_models: ModelFixture):
+    def test_registration(self, uncleared_session: Session, success_only_models: ModelWithKwargs):
         models = success_only_models.models
         new_app = FastAPI()
 
@@ -86,7 +87,7 @@ class BaseLogic:
 
     @staticmethod
     def commit_to_session(
-        model_fixture: ModelFixture, session: Session, ntables: int = 1
+        model_fixture: ModelWithKwargs, session: Session, ntables: int = 1
     ) -> Tuple[abstractions.MultipleModels, Tuple[SQLModel, SQLModel]]:
         """
 
@@ -114,6 +115,7 @@ class BaseLogic:
 
 
 # Test create ---------------------------------------------------------------------------
+# NOTE: Why is there success only here?
 
 
 class CreateSuccessOnly(BaseLogic, ModelFixtures):
@@ -140,7 +142,7 @@ class CreateSuccessOnly(BaseLogic, ModelFixtures):
 
     @pytest.mark.parametrize("fields", ["all_fields", "req_only"])
     def test_create(
-        self, fields: str, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, fields: str, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, kws = success_only_models.models, success_only_models.success_kws
         request = kws.all if fields == "all_fields" else kws.reqs_only
@@ -170,7 +172,7 @@ class CreateComplete(CreateSuccessOnly):
         return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
     def test_create_incomplete_request(
-        self, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         """Even though this is a failure test, we use success_only_models, because the failure mode
         is incomplete.
@@ -186,7 +188,7 @@ class CreateComplete(CreateSuccessOnly):
             _ = self.create(connection, models, incomplete_kwargs)
 
     def test_create_failing_request(
-        self, complete_models: ModelFixture, session: Session, http_server: str,
+        self, complete_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, success_kws, failure_kws = (
             complete_models.models,
@@ -274,7 +276,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
                 assert data[k] == input_dict[k]
 
     def test_read_range(
-        self, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, tables = self.commit_to_session(success_only_models, session, ntables=2)
         connection = self.get_connection(session, http_server)
@@ -282,7 +284,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
         self.evaluate_read_range_data(data, tables)
 
     def test_read_single(
-        self, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, tables = self.commit_to_session(success_only_models, session)
         connection = self.get_connection(session, http_server)
@@ -290,7 +292,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
         self.evaluate_read_single_data(data, tables[0])
 
     def test_read_nonexistent(
-        self, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, kws = success_only_models.models, success_only_models.success_kws
         table = models.table(**kws.all)
@@ -320,7 +322,7 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 # Test update ---------------------------------------------------------------------------
 
 
-class UpdateLogic(BaseLogic, UpdateFixtures):
+class UpdateSuccessOnly(BaseLogic, ModelFixtures):
     """Container for tests of updating existing entries in database"""
 
     def get_error(self):
@@ -344,14 +346,18 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
                 else:
                     assert data[k] == input_dict[k]
 
-    def test_update(self, session, model_to_update, http_server):
-        models, table, update_with = model_to_update
-        # commit_to_session(session, table)  # add entry for this test
+    def test_update(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
+        models, tables = self.commit_to_session(success_only_models, session)
+        # MAKE SURE THE ONE UPDATING IS NOT THE SAME KWS USED TO CREATE
+        update_with = success_only_models.success_kws.reqs_only
         connection = self.get_connection(session, http_server)
-        data = self.update(connection, models, table, update_with)
-        self.evaluate_data(data, table, update_with)
+        data = self.update(connection, models, tables[0], update_with)
+        self.evaluate_data(data, tables[0], update_with)
 
     def test_update_nonexistent(self, session, model_to_update, http_server):
+        """
+        TODO: Explain why this is part of `UpdateSuccessOnly`
+        """
         models, table, update_with = model_to_update
         # NOTE: We *don't* add any entries for this test
         connection = self.get_connection(session, http_server)
@@ -360,19 +366,24 @@ class UpdateLogic(BaseLogic, UpdateFixtures):
             _ = self.update(connection, models, table, update_with)
 
 
-class TestUpdateDatabase(UpdateLogic, DatabaseCRUD):
+class TestUpdateDatabase(UpdateSuccessOnly, DatabaseCRUD):
     pass
 
 
-class TestUpdateAbstraction(UpdateLogic, AbstractionCRUD):
+class TestUpdateAbstraction(UpdateSuccessOnly, AbstractionCRUD):
     pass
 
 
-class TestUpdateClient(UpdateLogic, ClientCRUD):
+class UpdateComplete(UpdateSuccessOnly):
+    # TODO: Test update invalid fields.
     pass
 
 
-class TestUpdateCommandLine(UpdateLogic, CommandLineCRUD):
+class TestUpdateClient(UpdateComplete, ClientCRUD):
+    pass
+
+
+class TestUpdateCommandLine(UpdateComplete, CommandLineCRUD):
     pass
 
 
@@ -386,7 +397,7 @@ class DeleteLogic(BaseLogic, ModelFixtures):
         errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
         return errors[self.interface]
 
-    def test_delete(self, success_only_models: ModelFixture, session: Session, http_server: str):
+    def test_delete(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
         models, tables = self.commit_to_session(success_only_models, session)
 
         model_in_db = session.get(models.table, tables[0].id)
@@ -397,7 +408,7 @@ class DeleteLogic(BaseLogic, ModelFixtures):
         self.delete(connection, models, tables[0])
 
     def test_delete_nonexistent(
-        self, success_only_models: ModelFixture, session: Session, http_server: str,
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
         models, kws = success_only_models.models, success_only_models.success_kws
         table = models.table(**kws.all)

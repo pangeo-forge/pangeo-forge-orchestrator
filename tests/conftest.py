@@ -141,7 +141,7 @@ class FailureKwargs:
 
 
 @dataclass
-class ModelFixture:
+class ModelWithKwargs:
     """Container for a ``MultipleModels`` object (itself containing ``SQLModel`` objects) with
     kwargs which can be used to instantiate the models within it.
 
@@ -204,7 +204,7 @@ class RecipeRunFixtures:
         return FailureKwargs(update_with, raises)
 
     @pytest.fixture(scope="session")
-    def success_kws_recipe_run(self) -> ModelFixture:
+    def success_kws_recipe_run(self) -> SuccessKwargs:
         """
 
         """
@@ -236,27 +236,36 @@ class RecipeRunFixtures:
         return success_kwargs
 
     @pytest.fixture
-    def recipe_run_success_only_model(self, success_kws_recipe_run: SuccessKwargs) -> ModelFixture:
-        return ModelFixture(self.models, success_kws_recipe_run)
+    def recipe_run_success_only_model(
+        self, success_kws_recipe_run: SuccessKwargs
+    ) -> ModelWithKwargs:
+        """
+        """
+        return ModelWithKwargs(self.models, success_kws_recipe_run)
 
     @pytest.fixture
     def recipe_run_complete_model(
-        self, success_kws_recipe_run: SuccessKwargs, failure_kws_recipe_run: FailureKwargs
-    ) -> ModelFixture:
-        return ModelFixture(self.models, success_kws_recipe_run, failure_kws_recipe_run)
+        self, success_kws_recipe_run: SuccessKwargs, failure_kws_recipe_run: FailureKwargs,
+    ) -> ModelWithKwargs:
+        """
+        """
+        return ModelWithKwargs(self.models, success_kws_recipe_run, failure_kws_recipe_run)
 
 
 class ModelFixtures(RecipeRunFixtures):
+    """
+    """
+
     @pytest.fixture(
         scope="session", params=[lazy_fixture("recipe_run_success_only_model")],
     )
-    def success_only_models(self, request):
+    def success_only_models(self, request) -> ModelWithKwargs:
         return request.param
 
     @pytest.fixture(
         scope="session", params=[lazy_fixture("recipe_run_complete_model")],
     )
-    def complete_models(self, request):
+    def complete_models(self, request) -> ModelWithKwargs:
         return request.param
 
 
