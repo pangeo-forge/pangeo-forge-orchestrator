@@ -262,28 +262,6 @@ class ModelFixtures(RecipeRunFixtures):
 
 # CRUD function fixtures ------------------------------------------------------------------
 
-# Read ------------------------------------------------------------------------------------
-
-
-class ReadFixtures:
-    """Fixtures for ``TestRead``"""
-
-    @pytest.fixture
-    def models_to_read(self, models_with_kwargs: ModelFixture):
-        models = models_with_kwargs.models
-        kw_0, kw_1 = models_with_kwargs.kwargs
-        model_0 = models.table(**kw_0.request)
-        model_1 = models.table(**kw_1.request)
-        return models, (model_0, model_1)
-
-    @pytest.fixture
-    def single_model_to_read(self, models_with_kwargs: ModelFixture):
-        models = models_with_kwargs.models
-        _, kw_1 = models_with_kwargs.kwargs
-        table = models.table(**kw_1.request)
-        return models, table
-
-
 # Update --------------------------------------------------------------------------------
 
 

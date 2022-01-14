@@ -11,14 +11,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
 
-from .conftest import (
-    APIErrors,
-    DeleteFixtures,
-    ModelFixture,
-    ModelFixtures,
-    ReadFixtures,
-    UpdateFixtures,
-)
+from .conftest import APIErrors, DeleteFixtures, ModelFixture, ModelFixtures, UpdateFixtures
 from .interfaces import (
     AbstractionCRUD,
     ClientCRUD,
@@ -236,7 +229,7 @@ class TestCreateCommandLine(CreateComplete, CommandLineCRUD):
 # Test read -----------------------------------------------------------------------------
 
 
-class ReadLogic(BaseLogic, ReadFixtures):
+class ReadLogic(BaseLogic, ModelFixtures):
     """Container for tests of reading from database"""
 
     def get_error(self):
@@ -271,23 +264,33 @@ class ReadLogic(BaseLogic, ReadFixtures):
             else:
                 assert data[k] == input_dict[k]
 
-    def test_read_range(self, session, models_to_read, http_server):
-        models, tables = models_to_read
+    def test_read_range(
+        self, success_only_models: ModelFixture, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        # TODO: Explain tables.
+        tables = [models.table(**kw) for kw in (kws.all, kws.reqs_only)]
         for t in tables:
             commit_to_session(session, t)  # add entries for this test
         connection = self.get_connection(session, http_server)
         data = self.read_range(connection, models)
         self.evaluate_read_range_data(data, tables)
 
-    def test_read_single(self, session, single_model_to_read, http_server):
-        models, table = single_model_to_read
+    def test_read_single(
+        self, success_only_models: ModelFixture, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
         commit_to_session(session, table)  # add entries for this test
         connection = self.get_connection(session, http_server)
         data = self.read_single(connection, models, table)
         self.evaluate_read_single_data(data, table)
 
-    def test_read_nonexistent(self, session, single_model_to_read, http_server):
-        models, table = single_model_to_read
+    def test_read_nonexistent(
+        self, success_only_models: ModelFixture, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
         # don't add any entries for this test
         connection = self.get_connection(session, http_server)
         error_cls = self.get_error()
