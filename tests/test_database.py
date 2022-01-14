@@ -11,7 +11,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.abstractions as abstractions
 
-from .conftest import APIErrors, DeleteFixtures, ModelFixture, ModelFixtures, UpdateFixtures
+from .conftest import APIErrors, ModelFixture, ModelFixtures, UpdateFixtures
 from .interfaces import (
     AbstractionCRUD,
     ClientCRUD,
@@ -378,15 +378,16 @@ class TestUpdateCommandLine(UpdateLogic, CommandLineCRUD):
 # Test delete ---------------------------------------------------------------------------
 
 
-class DeleteLogic(BaseLogic, DeleteFixtures):
+class DeleteLogic(BaseLogic, ModelFixtures):
     """Container for tests of deleting existing entries in database"""
 
     def get_error(self):
         errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
         return errors[self.interface]
 
-    def test_delete(self, session, model_to_delete, http_server):
-        models, table = model_to_delete
+    def test_delete(self, success_only_models: ModelFixture, session: Session, http_server: str):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
         commit_to_session(session, table)  # add entries for this test
 
         model_in_db = session.get(models.table, table.id)
@@ -396,8 +397,11 @@ class DeleteLogic(BaseLogic, DeleteFixtures):
         connection = self.get_connection(session, http_server)
         self.delete(connection, models, table)
 
-    def test_delete_nonexistent(self, session, model_to_delete, http_server):
-        models, table = model_to_delete
+    def test_delete_nonexistent(
+        self, success_only_models: ModelFixture, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
         connection = self.get_connection(session, http_server)
 
         if self.interface == "db":

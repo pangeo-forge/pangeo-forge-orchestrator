@@ -277,17 +277,3 @@ class UpdateFixtures:
         key = next(iter(different_kws))
         update_with = {key: different_kws.pop(key)}
         return models, table, update_with
-
-
-# Delete --------------------------------------------------------------------------------
-
-
-class DeleteFixtures:
-    """Fixtures for ``TestDelete``"""
-
-    @pytest.fixture
-    def model_to_delete(self, models_with_kwargs):
-        models = models_with_kwargs.models
-        kw_0, _ = models_with_kwargs.kwargs
-        table = models.table(**kw_0.request)
-        return models, table
