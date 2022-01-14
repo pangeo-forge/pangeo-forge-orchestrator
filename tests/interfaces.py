@@ -6,8 +6,8 @@ from typing import Optional
 
 from sqlmodel import Session, SQLModel
 
-import pangeo_forge_orchestrator.abstractions as abstractions
-from pangeo_forge_orchestrator.abstractions import MultipleModels
+import pangeo_forge_orchestrator.model_builders as model_builders
+from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.client import Client
 
 # Exceptions ------------------------------------------------------------------------------
@@ -145,21 +145,21 @@ class AbstractionCRUD:
 
     def create(self, session: Session, models: MultipleModels, request: dict) -> dict:
         table = models.table(**request)
-        model_db = abstractions.create(session=session, table_cls=models.table, model=table,)
+        model_db = model_builders.create(session=session, table_cls=models.table, model=table,)
         data = model_db.dict()
         return data
 
     def read_range(self, session: Session, models: MultipleModels) -> dict:
-        data = abstractions.read_range(
+        data = model_builders.read_range(
             session=session,
             table_cls=models.table,
             offset=0,
-            limit=abstractions.QUERY_LIMIT.default,
+            limit=model_builders.QUERY_LIMIT.default,
         )
         return data
 
     def read_single(self, session: Session, models: MultipleModels, table: SQLModel) -> dict:
-        model_db = abstractions.read_single(session=session, table_cls=models.table, id=table.id)
+        model_db = model_builders.read_single(session=session, table_cls=models.table, id=table.id)
         data = model_db.dict()
         return data
 
@@ -171,14 +171,14 @@ class AbstractionCRUD:
             raise _NonexistentTableError
         for k, v in update_with.items():
             setattr(model_db, k, v)
-        updated_model = abstractions.update(
+        updated_model = model_builders.update(
             session=session, table_cls=models.table, id=model_db.id, model=model_db
         )
         data = updated_model.dict()
         return data
 
     def delete(self, session: Session, models: MultipleModels, table: SQLModel) -> None:
-        delete_response = abstractions.delete(session=session, table_cls=models.table, id=table.id)
+        delete_response = model_builders.delete(session=session, table_cls=models.table, id=table.id)
         assert delete_response == {"ok": True}  # successfully deleted
         model_in_db = session.get(models.table, table.id)
         assert model_in_db is None

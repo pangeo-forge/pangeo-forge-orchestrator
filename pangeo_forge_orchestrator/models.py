@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlmodel import SQLModel
 
-from .abstractions import MultipleModels
+from .model_builders import MultipleModels
 
 
 class RecipeRunBase(SQLModel):

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from sqlmodel import Session
 
-from .abstractions import register_endpoints
+from .model_builders import register_endpoints
 from .database import create_db_and_tables, engine
 from .models import MODELS
 

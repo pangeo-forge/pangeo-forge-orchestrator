@@ -11,7 +11,7 @@ from requests.exceptions import HTTPError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
-import pangeo_forge_orchestrator.abstractions as abstractions
+import pangeo_forge_orchestrator.model_builders as model_builders
 
 from .conftest import CreateFixtures, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
 from .interfaces import (
@@ -60,7 +60,7 @@ def test_registration(uncleared_session, models_with_kwargs):
         yield uncleared_session
 
     # register routes for this application
-    abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
+    model_builders.register_endpoints(api=new_app, get_session=get_session, models=models)
 
     # assert that this application now has five registered routes
     routes = registered_routes(new_app)

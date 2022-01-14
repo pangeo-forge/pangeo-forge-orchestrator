@@ -9,7 +9,7 @@ import pytest
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, create_engine
 
-from pangeo_forge_orchestrator.abstractions import MultipleModels
+from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import clear_table
