@@ -1,0 +1,13 @@
+# this is used by Heroku to install the environment
+# we should always be pinning specific versions for deployment
+fastapi==0.71.0
+sqlmodel==0.0.6
+typer==0.4.0
+
+# for deployment
+gunicorn==20.1.0
+uvicorn==0.17.0
+
+# install the pangeo-forge-orchestrator package
+# -e .
+# actually not necessary

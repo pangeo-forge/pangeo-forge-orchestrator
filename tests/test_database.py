@@ -9,7 +9,7 @@ from fastapi.exceptions import HTTPException
 from requests.exceptions import HTTPError
 from sqlmodel import Session, SQLModel
 
-import pangeo_forge_orchestrator.abstractions as abstractions
+import pangeo_forge_orchestrator.model_builders as model_builders
 
 from .conftest import APIErrors, ModelFixtures, ModelWithKwargs
 from .interfaces import (
@@ -45,7 +45,7 @@ class TestRegistration(ModelFixtures):
             yield uncleared_session
 
         # register routes for this application
-        abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
+        model_builders.register_endpoints(api=new_app, get_session=get_session, models=models)
 
         # assert that this application now has five registered routes
         routes = self.registered_routes(new_app)
@@ -88,7 +88,7 @@ class BaseLogic:
     @staticmethod
     def commit_to_session(
         model_fixture: ModelWithKwargs, session: Session, ntables: int = 1
-    ) -> Tuple[abstractions.MultipleModels, Tuple[SQLModel, SQLModel]]:
+    ) -> Tuple[model_builders.MultipleModels, Tuple[SQLModel, SQLModel]]:
         """
 
         """

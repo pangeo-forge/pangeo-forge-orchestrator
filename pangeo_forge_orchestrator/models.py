@@ -5,7 +5,7 @@ from typing import Optional
 # from pydantic import validator
 from sqlmodel import SQLModel
 
-from .abstractions import MultipleModels
+from .model_builders import MultipleModels
 
 
 class RecipeRunStatus(str, Enum):
