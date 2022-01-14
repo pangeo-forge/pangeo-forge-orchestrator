@@ -49,42 +49,43 @@ def registered_routes(app: FastAPI):
 # Test endpoint registration ------------------------------------------------------------
 
 
-def test_registration(uncleared_session, models_with_kwargs):
-    models = models_with_kwargs.models
-    new_app = FastAPI()
+class TestRegistration(ModelFixtures):
+    def test_registration(uncleared_session: Session, success_only_models: ModelFixture):
+        models = success_only_models.models
+        new_app = FastAPI()
 
-    # assert that this application has no registered routes
-    assert len(registered_routes(new_app)) == 0
+        # assert that this application has no registered routes
+        assert len(registered_routes(new_app)) == 0
 
-    def get_session():
-        yield uncleared_session
+        def get_session():
+            yield uncleared_session
 
-    # register routes for this application
-    abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
+        # register routes for this application
+        abstractions.register_endpoints(api=new_app, get_session=get_session, models=models)
 
-    # assert that this application now has five registered routes
-    routes = registered_routes(new_app)
+        # assert that this application now has five registered routes
+        routes = registered_routes(new_app)
 
-    assert len(routes) == 5
+        assert len(routes) == 5
 
-    expected_names = ("_create", "_read_range", "_read_single", "_update", "_delete")
-    # Check names
-    for r in routes:
-        assert r.name in expected_names
-    # Check routes
-    for r in routes:
-        if r.name in ("_create", "_read_range"):
-            assert r.path == models.path
-        elif r.name in ("_read_single", "_update", "_delete"):
-            assert r.path == f"{models.path}{{id}}"
-    # Check response models
-    for r in routes:
-        if r.name in ("_create", "_read_single", "_update"):
-            assert r.response_model == models.response
-        elif r.name == "_read_range":
-            assert r.response_model == List[models.response]
-        elif r.name == "_delete":
-            assert r.response_model is None
+        expected_names = ("_create", "_read_range", "_read_single", "_update", "_delete")
+        # Check names
+        for r in routes:
+            assert r.name in expected_names
+        # Check routes
+        for r in routes:
+            if r.name in ("_create", "_read_range"):
+                assert r.path == models.path
+            elif r.name in ("_read_single", "_update", "_delete"):
+                assert r.path == f"{models.path}{{id}}"
+        # Check response models
+        for r in routes:
+            if r.name in ("_create", "_read_single", "_update"):
+                assert r.response_model == models.response
+            elif r.name == "_read_range":
+                assert r.response_model == List[models.response]
+            elif r.name == "_delete":
+                assert r.response_model is None
 
 
 # Base logic ----------------------------------------------------------------------------
