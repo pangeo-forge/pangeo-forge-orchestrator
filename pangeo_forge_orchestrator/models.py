@@ -14,7 +14,6 @@ class RecipeRunBase(SQLModel):
     commit: str
     version: str
     status: str  # TODO: Enum or categorical
-    path: str  # Deterministic if in spec, but existing catalog not all in spec.
     message: Optional[str] = None
 
 
