@@ -59,11 +59,11 @@ jobs:
           conda list
       - name: 📦 Initialize sqlite database for tests
         shell: bash -l {0}
-        run: python -m alembic upgrade head
+        run: python -m alembic upgrade head --verbose
       - name: Run Tests
         shell: bash -l {0}
         run: |
-          pytest tests -v --cov=pangeo_forge_orchestrator \
+          pytest tests -vx --cov=pangeo_forge_orchestrator \
             --cov-config .coveragerc \
             --cov-report term-missing \
             --cov-report xml \

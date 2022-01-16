@@ -8,7 +8,7 @@
   "environments": {
     "test": {
       "scripts": {
-        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
+        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head --verbose",
         "test": "pytest -vsx tests"
       }
     }
