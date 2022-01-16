@@ -64,14 +64,10 @@ def commit_to_session(session: Session, model: SQLModel) -> None:
 
 
 def clear_table(session: Session, table_model: SQLModel):
-    # for some reason, this errors only in the Heroku test environment
-    # if the table has not already been created yet
-    # session.query(table_model).delete()
-    table = session.query(table_model)
-    print(table_model)
-    if table_model:
-        table.delete()
-        session.commit()
+    # For some reason, this errors only in the Heroku test environment
+    # because the table has not already been created yet.
+    session.query(table_model).delete()
+    session.commit()
     assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
