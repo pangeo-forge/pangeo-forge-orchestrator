@@ -1,10 +1,13 @@
 {
   "name": "Pangeo Forge API",
   "description": "FastAPI / Postgres Backend App",
+  "env": {
+    "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
+  },
   "environments": {
     "test": {
       "scripts": {
-        "test-setup": "git tag; git status; git describe; pip install -e '.[dev]'",
+        "test-setup": "pip install -e '.[dev]'",
         "test": "pytest -v tests"
       }
     }
