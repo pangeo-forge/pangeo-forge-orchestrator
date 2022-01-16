@@ -20,7 +20,7 @@ jobs:
     name: ${{ matrix.python-version }}-build
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: sqlite:///$${{ GITHUB_WORKSPACE }}/database.sqlite
+      DATABASE_URL: sqlite:///$${{ github.workspace }}/database.sqlite
     strategy:
       fail-fast: false
       matrix:
