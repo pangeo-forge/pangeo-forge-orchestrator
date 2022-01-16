@@ -9,7 +9,7 @@
     "test": {
       "scripts": {
         "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
-        "test": "pytest -vs tests"
+        "test": "pytest -vsx tests"
       }
     }
   }
