@@ -4,7 +4,7 @@
   "environments": {
     "test": {
       "scripts": {
-        "test-setup": "pip install codecov pre-commit pytest pytest-sugar pytest-cov pytest-lazy-fixture types-requests; pip install -e .",
+        "test-setup": "git tag; git status; git describe; pip install -e '.[dev]'",
         "test": "pytest -v tests"
       }
     }
