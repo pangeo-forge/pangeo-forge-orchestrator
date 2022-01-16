@@ -68,10 +68,11 @@ def clear_table(session: Session, table_model: SQLModel):
     # if the table has not already been created yet
     # session.query(table_model).delete()
     table = session.query(table_model)
+    print(table_model)
     if table_model:
         table.delete()
         session.commit()
-        assert len(session.query(table_model).all()) == 0  # make sure the database is empty
+    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
 def get_data_from_cli(

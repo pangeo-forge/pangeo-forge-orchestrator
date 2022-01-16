@@ -8,7 +8,7 @@
     "test": {
       "scripts": {
         "test-setup": "pip install -e '.[dev]'",
-        "test": "pytest -v tests"
+        "test": "pytest -vs tests"
       }
     }
   }
