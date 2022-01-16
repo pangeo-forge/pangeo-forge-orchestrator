@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session, create_engine
+from sqlmodel import Session
 
 from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
@@ -67,9 +67,12 @@ def uncleared_session(tempdir):
     # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
     # the session returned by that function resolves the database path via `os.getcwd()`, but
     # our tests are run from a different working directory than the one where the database resides.
-    sqlite_file_path = f"sqlite:////{tempdir}/database.db"
-    connect_args = {"check_same_thread": False}
-    engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
+
+    # sqlite_file_path = f"sqlite:////{tempdir}/database.db"
+    # connect_args = {"check_same_thread": False}
+    # engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
+    from pangeo_forge_orchestrator.database import engine
+
     with Session(engine) as session:
         yield session
 
