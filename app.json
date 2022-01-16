@@ -4,7 +4,7 @@
   "environments": {
     "test": {
       "scripts": {
-        "test-setup": "pip install codecov pre-commit pytest pytest-sugar pytest-cov pytest-lazy-fixture types-requests",
+        "test-setup": "pip install codecov pre-commit pytest pytest-sugar pytest-cov pytest-lazy-fixture types-requests; pip install -e .",
         "test": "pytest -v tests"
       }
     }
