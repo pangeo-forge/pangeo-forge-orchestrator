@@ -3,7 +3,7 @@
   "description": "FastAPI / Postgres Backend App",
   "env": {
     "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9",
-    "DATABASE_URL": "sqlite:///$HOME/database.db"
+    "DATABASE_URL": "sqlite:///database.sqlite"
   },
   "environments": {
     "test": {
