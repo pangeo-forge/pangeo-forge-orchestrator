@@ -1,4 +1,5 @@
 import copy
+import os
 import socket
 import subprocess
 import time
@@ -18,6 +19,9 @@ from .interfaces import clear_table
 
 
 def get_open_port():
+    heroku_port = os.environ.get("PORT", False)
+    if heroku_port:
+        return heroku_port
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", 0))
     s.listen(1)
