@@ -16,7 +16,14 @@ config = context.config
 fileConfig(config.config_file_name)
 
 # https://stackoverflow.com/questions/37890284/ini-file-load-environment-variable
-config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+database_url = os.environ["DATABASE_URL"]
+if database_url.startswith("postgres://"):
+    # Fix Heroku's incompatible postgres database uri
+    # https://stackoverflow.com/a/67754795/3266235
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+print(f"Alembic env.py DATABASE_URL: {database_url}")
+
+config.set_main_option("sqlalchemy.url", database_url)
 
 
 # add your model's MetaData object here
