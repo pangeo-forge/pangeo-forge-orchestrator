@@ -70,7 +70,7 @@ def uncleared_session(tempdir):
     # our tests are run from a different working directory than the one where the database resides.
     sqlite_file_path = f"sqlite:////{tempdir}/database.db"
     connect_args = {"check_same_thread": False}
-    engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
+    engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
     with Session(engine) as session:
         yield session
 
