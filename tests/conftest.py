@@ -1,5 +1,6 @@
 import copy
 import os
+import signal
 import socket
 import subprocess
 import time
@@ -27,36 +28,6 @@ def get_open_port():
     return port
 
 
-def start_http_server(path, request):
-    env_port = os.environ.get("PORT", False)
-    port = env_port or get_open_port()
-    host = "127.0.0.1"
-    url = f"http://{host}:{port}"
-    command_list = [
-        # "uvicorn",
-        # "pangeo_forge_orchestrator.api:api",
-        # f"--port={port}",
-        # "--log-level=info",
-        "gunicorn",
-        f"--bind={host}:{port}",
-        "--workers=1",
-        "-k",
-        "uvicorn.workers.UvicornWorker",
-        "pangeo_forge_orchestrator.api:api",
-        "--log-level=info",
-    ]
-    p = subprocess.Popen(command_list, cwd=path)
-
-    time.sleep(1)  # let the server start up
-
-    def teardown():
-        p.kill()
-
-    request.addfinalizer(teardown)
-
-    return url
-
-
 # General fixtures ------------------------------------------------------------------------
 
 
@@ -67,8 +38,30 @@ def tempdir(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def http_server_url(tempdir, request):
-    url = start_http_server(tempdir, request=request)
-    return url
+    env_port = os.environ.get("PORT", False)
+    port = env_port or get_open_port()
+    host = "127.0.0.1"
+    url = f"http://{host}:{port}"
+    command_list = [
+        "gunicorn",
+        f"--bind={host}:{port}",
+        "--workers=1",
+        "-k",
+        "uvicorn.workers.UvicornWorker",
+        "pangeo_forge_orchestrator.api:api",
+        "--log-level=info",
+    ]
+
+    # the setsid allows us to properly clean up the gunicorn child processes
+    # otherwise those get zombied
+    # https://stackoverflow.com/a/22582602/3266235
+    p = subprocess.Popen(command_list, cwd=tempdir, preexec_fn=os.setsid)
+
+    time.sleep(1)  # let the server start up
+
+    yield url
+
+    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
 
 
 @pytest.fixture
