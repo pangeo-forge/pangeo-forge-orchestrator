@@ -49,7 +49,6 @@ def registered_routes(app: FastAPI):
 # Test endpoint registration ------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="want to see if this changes anything")
 def test_registration(uncleared_session, models_with_kwargs):
     models = models_with_kwargs.models
     new_app = FastAPI()
