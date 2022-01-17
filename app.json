@@ -16,11 +16,6 @@
         "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
         "test": "pytest -vsx tests"
       }
-    },
-    "review": {
-      "addons": [
-        "heroku-postgresql:in-dyno"
-      ]
     }
   }
 }
