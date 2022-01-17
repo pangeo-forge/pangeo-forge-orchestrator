@@ -21,6 +21,7 @@ from .interfaces import clear_table
 def get_open_port():
     heroku_port = os.environ.get("PORT", False)
     if heroku_port:
+
         return heroku_port
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", 0))
@@ -36,7 +37,7 @@ def start_http_server(path, request):
         "uvicorn",
         "pangeo_forge_orchestrator.api:api",
         f"--port={port}",
-        "--log-level=critical",
+        "--log-level=info",
     ]
     p = subprocess.Popen(command_list, cwd=path)
     url = f"http://127.0.0.1:{port}"

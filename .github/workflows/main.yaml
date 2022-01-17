@@ -63,7 +63,7 @@ jobs:
       - name: Run Tests
         shell: bash -l {0}
         run: |
-          pytest tests -vx --cov=pangeo_forge_orchestrator \
+          pytest tests -v --cov=pangeo_forge_orchestrator \
             --cov-config .coveragerc \
             --cov-report term-missing \
             --cov-report xml \
