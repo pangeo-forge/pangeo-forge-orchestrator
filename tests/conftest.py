@@ -33,18 +33,18 @@ def start_http_server(path, request):
     host = "127.0.0.1"
     url = f"http://{host}:{port}"
     command_list = [
-        # "uvicorn",
-        # "pangeo_forge_orchestrator.api:api",
-        # f"--port={port}",
-        # "--log-level=info",
-        "gunicorn",
-        "-w",
-        "1",
-        "-k",
-        "uvicorn.workers.UvicornWorker",
+        "uvicorn",
         "pangeo_forge_orchestrator.api:api",
-        f"--bind={host}:{port}",
+        f"--port={port}",
         "--log-level=info",
+        # "gunicorn",
+        # "-w",
+        #  "1",
+        # "-k",
+        # "uvicorn.workers.UvicornWorker",
+        # "pangeo_forge_orchestrator.api:api",
+        # f"--bind={host}:{port}",
+        # "--log-level=info",
     ]
     p = subprocess.Popen(command_list, cwd=path)
 

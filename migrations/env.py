@@ -21,7 +21,6 @@ if database_url.startswith("postgres://"):
     # Fix Heroku's incompatible postgres database uri
     # https://stackoverflow.com/a/67754795/3266235
     database_url = database_url.replace("postgres://", "postgresql://", 1)
-print(f"Alembic env.py DATABASE_URL: {database_url}")
 
 config.set_main_option("sqlalchemy.url", database_url)
 
