@@ -42,9 +42,6 @@ class RecipeRunBase(SQLModel):
     :param head_sha: The feedstock repository commit from which this recipe run was executed.
     :param version: The two-element, dot-delimited semantic version of the feedstock in which the
       executed recipe resides. Versions begin at 1.0 and are of format {MAJ_VERSION}.{MIN_VERSION}.
-    :param path: The absolute path to the dataset built by this recipe run. This path will be
-      deterministically defined by the Pangeo Forge dataset path specification at the time of
-      execution. It is included here for convenience and backwards compatability.
     :param started_at: Time the run began, as an ISO 8601 timestamp: YYYY-MM-DDTHH:MM:SSZ.
     :param completed_at: Time the run ended, as an ISO 8601 timestamp: YYYY-MM-DDTHH:MM:SSZ.
     :param conclusion: Required if you provide completed_at or a status of completed. The final
@@ -66,7 +63,6 @@ class RecipeRunBase(SQLModel):
     feedstock_id: int  # TODO: Foreign key
     head_sha: str
     version: str
-    path: str
     started_at: datetime
     completed_at: Optional[datetime] = None
     conclusion: Optional[RecipeRunConclusion] = None

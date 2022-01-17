@@ -187,7 +187,6 @@ class RecipeRunFixtures:
             (dict(feedstock_id=NOT_INT), APIErrors.int),
             (dict(head_sha=NOT_STR), APIErrors.str),
             (dict(version=NOT_STR), APIErrors.str),  # TODO: use `ConstrainedStr`
-            (dict(path=NOT_STR), APIErrors.str),
             (dict(started_at=NOT_ISO8601), APIErrors.datetime),
             (dict(completed_at=NOT_ISO8601), APIErrors.datetime),
             (dict(conclusion="not a valid conclusion"), APIErrors.enum),
@@ -215,7 +214,6 @@ class RecipeRunFixtures:
                 feedstock_id=0,
                 head_sha="abcdefg12345",
                 version="1.0",
-                path="/path-to-dataset.zarr",
                 started_at="2021-01-01T00:00:00Z",
                 completed_at="2021-01-01T01:01:01Z",
                 conclusion="success",
@@ -228,7 +226,6 @@ class RecipeRunFixtures:
                 feedstock_id=1,
                 head_sha="012345abcdefg",
                 version="2.0",
-                path="/path-to-another-dataset.zarr",
                 started_at="2021-02-02T00:00:00Z",
                 status="queued",
             ),
