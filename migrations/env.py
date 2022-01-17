@@ -1,5 +1,6 @@
 # Based on https://github.com/tiangolo/sqlmodel/issues/85#issuecomment-917228849
 
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -13,6 +14,10 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 fileConfig(config.config_file_name)
+
+# https://stackoverflow.com/questions/37890284/ini-file-load-environment-variable
+config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
 
 # add your model's MetaData object here
 # for 'autogenerate' support
