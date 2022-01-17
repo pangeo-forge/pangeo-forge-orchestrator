@@ -388,16 +388,20 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
         data = self.update(connection, models, tables[0], update_with)
         self.evaluate_data(original_kws=original_kws, updated_table=data, update_with=update_with)
 
-    def test_update_nonexistent(self, session, model_to_update, http_server):
+    def test_update_nonexistent(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
         """
         TODO: Explain why this is part of `UpdateSuccessOnly`
         """
-        models, table, update_with = model_to_update
+        models = success_only_models.models
+        table_not_in_db = models.table(**success_only_models.success_kws.all)
+        update_with = success_only_models.success_kws.reqs_only
         # NOTE: We *don't* add any entries for this test
         connection = self.get_connection(session, http_server)
         error_cls = self.get_error()
         with pytest.raises(error_cls):
-            _ = self.update(connection, models, table, update_with)
+            _ = self.update(connection, models, table_not_in_db, update_with)
 
 
 class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
