@@ -2,11 +2,13 @@
   "name": "Pangeo Forge API",
   "description": "FastAPI / Postgres Backend App",
   "env": {
-    "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9",
-    "DATABASE_URL": "sqlite:///app/database.sqlite"
+    "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
   },
   "environments": {
     "test": {
+      "env": {
+        "DATABASE_URL": "sqlite:///herkou_database.sqlite"
+      },
       "scripts": {
         "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head && echo $DATABASE_URL",
         "test": "pytest -vsx tests"
