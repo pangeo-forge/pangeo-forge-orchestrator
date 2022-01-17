@@ -14,10 +14,10 @@ import pangeo_forge_orchestrator.model_builders as model_builders
 
 from .conftest import APIErrors, ModelFixtures, ModelWithKwargs
 from .interfaces import (
-    AbstractionCRUD,
     ClientCRUD,
     CommandLineCRUD,
     DatabaseCRUD,
+    ModelBuildersCRUD,
     _DatetimeError,
     _EnumTypeError,
     _IntTypeError,
@@ -81,11 +81,13 @@ class TestRegistration(ModelFixtures):
 class BaseLogic:
     def get_connection(self, session: Session, url: str):
         """Different fixtures require different connection points to the database. `db` and
-        `abstraction` interfaces use a `session` connection, whereas `client` and `cli`
+        `model_builders` interfaces use a `session` connection, whereas `client` and `cli`
         interfaces connect via the http URL. This function finds the appropriate connection
         point based on the interface.
         """
-        connection = session if "db" in self.interface or "abstract" in self.interface else url
+        connection = (
+            session if "db" in self.interface or "model_builders" in self.interface else url
+        )
         return connection
 
     @staticmethod
@@ -225,7 +227,7 @@ class TestCreateDatabase(CreateSuccessOnly, DatabaseCRUD):
     pass
 
 
-class TestCreateAbstraction(CreateSuccessOnly, AbstractionCRUD):
+class TestCreateModelBuilders(CreateSuccessOnly, ModelBuildersCRUD):
     """
 
     Note only tested for success.
@@ -259,7 +261,7 @@ class ReadLogic(BaseLogic, ModelFixtures):
     def get_error(self):
         errors = dict(
             db=_NonexistentTableError,
-            abstraction=HTTPException,
+            model_builders=HTTPException,
             client=HTTPError,
             cli=_IntTypeError,
         )
@@ -318,7 +320,7 @@ class TestReadDatabase(ReadLogic, DatabaseCRUD):
     pass
 
 
-class TestReadAbstraction(ReadLogic, AbstractionCRUD):
+class TestReadModelBuilders(ReadLogic, ModelBuildersCRUD):
     pass
 
 
@@ -339,7 +341,7 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     def get_error(self):
         errors = dict(
             db=_NonexistentTableError,
-            abstraction=_NonexistentTableError,
+            model_builders=_NonexistentTableError,
             client=HTTPError,
             cli=_IntTypeError,
         )
@@ -374,7 +376,7 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
 
         update_with = success_only_models.success_kws.reqs_only
         # TODO: Explain below
-        if self.interface in ("db", "abstraction"):
+        if self.interface in ("db", "model_builders"):
             update_with = self.timestamp_vals_to_datetime_objs(update_with)
         # TODO: Explain below
         for k, v in original_kws.items():
@@ -408,7 +410,7 @@ class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
     pass
 
 
-class TestUpdateAbstraction(UpdateSuccessOnlyLogic, AbstractionCRUD):
+class TestUpdateModelBuilders(UpdateSuccessOnlyLogic, ModelBuildersCRUD):
     pass
 
 
@@ -434,7 +436,7 @@ class DeleteLogic(BaseLogic, ModelFixtures):
     """Container for tests of deleting existing entries in database"""
 
     def get_error(self):
-        errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
+        errors = dict(model_builders=HTTPException, client=HTTPError, cli=_IntTypeError,)
         return errors[self.interface]
 
     def test_delete(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
@@ -476,7 +478,7 @@ class TestDeleteDatabase(DeleteLogic, DatabaseCRUD):
     pass
 
 
-class TestDeleteAbstraction(DeleteLogic, AbstractionCRUD):
+class TestDeleteModelBuilders(DeleteLogic, ModelBuildersCRUD):
     pass
 
 

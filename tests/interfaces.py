@@ -156,10 +156,10 @@ class DatabaseCRUD:
         assert model_in_db is None
 
 
-class AbstractionCRUD:
-    """Abstraction interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+class ModelBuildersCRUD:
+    """ModelBuilders interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    interface = "abstraction"
+    interface = "model_builders"
 
     def create(self, session: Session, models: MultipleModels, request: dict) -> dict:
         table = models.table(**request)
