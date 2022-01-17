@@ -1,12 +1,10 @@
 {
   "name": "Pangeo Forge API",
   "description": "FastAPI / Postgres Backend App",
-  "env": {
-    "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
-  },
   "environments": {
     "test": {
       "env": {
+        "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9",
         "DATABASE_URL": "sqlite:///herkou_database.sqlite"
       },
       "scripts": {
