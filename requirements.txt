@@ -8,6 +8,7 @@ alembic==1.7.5
 # for deployment
 gunicorn==20.1.0
 uvicorn==0.17.0
+psycopg2==2.9.3
 
 # install the pangeo-forge-orchestrator package
 # -e .
