@@ -10,7 +10,7 @@
         "heroku-postgresql:in-dyno"
       ],
       "scripts": {
-        "test-setup": "pip install -e '.[dev]'",
+        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
         "test": "pytest -vsx tests"
       }
     }
