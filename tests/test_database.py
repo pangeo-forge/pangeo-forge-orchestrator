@@ -118,14 +118,6 @@ class BaseLogic:
         input_string = self.add_z(input_string)
         return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
 
-    def timestamp_vals_to_datetime_objs(self, kws: dict) -> dict:
-        kws_copy = copy.deepcopy(kws)
-        for k, v in kws_copy.items():
-            if isinstance(v, str):
-                if re.match(ISO8601_REGEX, v):
-                    kws_copy[k] = self.parse_to_datetime(v)
-        return kws_copy
-
     def get_failing_kws_error(self, failure_mode: str):
         errors = dict(client=HTTPError)
         cli_errors = {
@@ -334,6 +326,34 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     """Container for tests of updating existing entries in database"""
 
+    def timestamp_vals_to_datetime_objs(self, kws: dict) -> dict:
+        """
+        """
+        kws_copy = copy.deepcopy(kws)
+        for k, v in kws_copy.items():
+            if isinstance(v, str):
+                if re.match(ISO8601_REGEX, v):
+                    kws_copy[k] = self.parse_to_datetime(v)
+        return kws_copy
+
+    def validate_and_parse_update_kws(
+        self, original_table: SQLModel, original_kws: dict, update_with: dict
+    ) -> Tuple[dict, dict]:
+        """
+        """
+        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
+        # TODO: Explain below
+        if self.interface in ("db", "model_builders"):
+            update_with = self.timestamp_vals_to_datetime_objs(update_with)
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            assert v == original_table.dict()[k]
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            if k in update_with.keys():
+                assert v != update_with[k]
+        return original_kws, update_with
+
     def evaluate_data(self, original_kws: dict, updated_table: dict, update_with: dict):
         for k in updated_table.keys():
             if k in original_kws.keys() and k not in update_with.keys():
@@ -357,20 +377,11 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
 
         original_table = session.get(models.table, tables[0].id)
         original_kws = success_only_models.success_kws.all
-        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
-
         update_with = success_only_models.success_kws.reqs_only
-        # TODO: Explain below
-        if self.interface in ("db", "model_builders"):
-            update_with = self.timestamp_vals_to_datetime_objs(update_with)
-        # TODO: Explain below
-        for k, v in original_kws.items():
-            assert v == original_table.dict()[k]
-        # TODO: Explain below
-        for k, v in original_kws.items():
-            if k in update_with.keys():
-                assert v != update_with[k]
 
+        original_kws, update_with = self.validate_and_parse_update_kws(
+            original_table, original_kws, update_with,
+        )
         connection = self.get_connection(session, http_server)
         data = self.update(connection, models, tables[0], update_with)
         self.evaluate_data(original_kws=original_kws, updated_table=data, update_with=update_with)
@@ -408,19 +419,11 @@ class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
 
         original_table = session.get(models.table, tables[0].id)
         original_kws = complete_models.success_kws.all
-        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
-
         update_with = complete_models.success_kws.reqs_only
-        # TODO: Explain below
-        if self.interface in ("db", "model_builders"):
-            update_with = self.timestamp_vals_to_datetime_objs(update_with)
-        # TODO: Explain below
-        for k, v in original_kws.items():
-            assert v == original_table.dict()[k]
-        # TODO: Explain below
-        for k, v in original_kws.items():
-            if k in update_with.keys():
-                assert v != update_with[k]
+
+        original_kws, update_with = self.validate_and_parse_update_kws(
+            original_table, original_kws, update_with,
+        )
 
         update_with = copy.deepcopy(update_with)
         update_with.update(complete_models.failure_kws.update_with)
