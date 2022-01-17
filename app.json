@@ -3,12 +3,12 @@
   "description": "FastAPI / Postgres Backend App",
   "env": {
     "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9",
-    "DATABASE_URL": "sqlite:///database.sqlite"
+    "DATABASE_URL": "sqlite:///app/database.sqlite"
   },
   "environments": {
     "test": {
       "scripts": {
-        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
+        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head && echo $DATABASE_URL",
         "test": "pytest -vsx tests"
       }
     }
