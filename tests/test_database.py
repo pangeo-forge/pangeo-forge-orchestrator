@@ -126,6 +126,18 @@ class BaseLogic:
                     kws_copy[k] = self.parse_to_datetime(v)
         return kws_copy
 
+    def get_failing_kws_error(self, failure_mode: str):
+        errors = dict(client=HTTPError)
+        cli_errors = {
+            APIErrors.missing: _MissingFieldError,
+            APIErrors.str: _StrTypeError,
+            APIErrors.enum: _EnumTypeError,
+            APIErrors.int: _IntTypeError,
+            APIErrors.datetime: _DatetimeError,
+        }
+        errors.update(dict(cli=cli_errors[failure_mode]))
+        return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
+
 
 # Test create ---------------------------------------------------------------------------
 # NOTE: Why is there success only here?
@@ -172,18 +184,6 @@ class CreateComplete(CreateSuccessOnly):
     Note this is used for public interfaces: client and command line.
     """
 
-    def get_error(self, failure_mode: str):
-        errors = dict(client=HTTPError)
-        cli_errors = {
-            APIErrors.missing: _MissingFieldError,
-            APIErrors.str: _StrTypeError,
-            APIErrors.enum: _EnumTypeError,
-            APIErrors.int: _IntTypeError,
-            APIErrors.datetime: _DatetimeError,
-        }
-        errors.update(dict(cli=cli_errors[failure_mode]))
-        return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
-
     def test_create_incomplete_request(
         self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
@@ -196,7 +196,7 @@ class CreateComplete(CreateSuccessOnly):
         del incomplete_kwargs[next(iter(incomplete_kwargs))]  # Remove a required field
 
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error(APIErrors.missing)
+        error_cls = self.get_failing_kws_error(APIErrors.missing)
         with pytest.raises(error_cls):
             _ = self.create(connection, models, incomplete_kwargs)
 
@@ -210,10 +210,9 @@ class CreateComplete(CreateSuccessOnly):
         )
         failing_request = copy.deepcopy(success_kws.all)  # NOTE: Use of `all`
         failing_request.update(failure_kws.update_with)
-        error_cls = self.get_error(failure_kws.raises)
 
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error(failure_kws.raises)
+        error_cls = self.get_failing_kws_error(failure_kws.raises)
         with pytest.raises(error_cls):
             _ = self.create(connection, models, failing_request)
 
@@ -258,15 +257,6 @@ class TestCreateCommandLine(CreateComplete, CommandLineCRUD):
 class ReadLogic(BaseLogic, ModelFixtures):
     """Container for tests of reading from database"""
 
-    def get_error(self):
-        errors = dict(
-            db=_NonexistentTableError,
-            model_builders=HTTPException,
-            client=HTTPError,
-            cli=_IntTypeError,
-        )
-        return errors[self.interface]
-
     def evaluate_read_range_data(self, data, tables):
         assert len(data) == len(tables)
         for i, t in enumerate(tables):
@@ -309,9 +299,15 @@ class ReadLogic(BaseLogic, ModelFixtures):
     ):
         models, kws = success_only_models.models, success_only_models.success_kws
         table = models.table(**kws.all)
-        # don't add any entries for this test
+        # NOTE: We *don't* add any entries for this test.
+        errors = dict(
+            db=_NonexistentTableError,
+            model_builders=HTTPException,
+            client=HTTPError,
+            cli=_IntTypeError,
+        )
+        error_cls = errors[self.interface]
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error()
         with pytest.raises(error_cls):
             _ = self.read_single(connection, models, table)
 
@@ -338,18 +334,7 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     """Container for tests of updating existing entries in database"""
 
-    def get_error(self):
-        errors = dict(
-            db=_NonexistentTableError,
-            model_builders=_NonexistentTableError,
-            client=HTTPError,
-            cli=_IntTypeError,
-        )
-        return errors[self.interface]
-
     def evaluate_data(self, original_kws: dict, updated_table: dict, update_with: dict):
-        """
-        """
         for k in updated_table.keys():
             if k in original_kws.keys() and k not in update_with.keys():
                 if not isinstance(original_kws[k], type(updated_table[k])):
@@ -401,31 +386,80 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
         update_with = success_only_models.success_kws.reqs_only
         # NOTE: We *don't* add any entries for this test
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error()
+        errors = dict(
+            db=_NonexistentTableError,
+            model_builders=_NonexistentTableError,
+            client=HTTPError,
+            cli=_IntTypeError,
+        )
+        error_cls = errors[self.interface]
         with pytest.raises(error_cls):
             _ = self.update(connection, models, table_not_in_db, update_with)
-
-
-class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
-    pass
-
-
-class TestUpdateModelBuilders(UpdateSuccessOnlyLogic, ModelBuildersCRUD):
-    pass
 
 
 class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
     """
     """
 
+    def test_update_failing_request(
+        self, complete_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, tables = self.commit_to_session(complete_models, session)
+
+        original_table = session.get(models.table, tables[0].id)
+        original_kws = complete_models.success_kws.all
+        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
+
+        update_with = complete_models.success_kws.reqs_only
+        # TODO: Explain below
+        if self.interface in ("db", "model_builders"):
+            update_with = self.timestamp_vals_to_datetime_objs(update_with)
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            assert v == original_table.dict()[k]
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            if k in update_with.keys():
+                assert v != update_with[k]
+
+        update_with = copy.deepcopy(update_with)
+        update_with.update(complete_models.failure_kws.update_with)
+
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_failing_kws_error(complete_models.failure_kws.raises)
+        with pytest.raises(error_cls):
+            _ = self.update(connection, models, tables[0], update_with)
+
+
+class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
+    """
+
+    NOTE: Not tested for failing kwargs.
+    """
+
+    pass
+
+
+class TestUpdateModelBuilders(UpdateSuccessOnlyLogic, ModelBuildersCRUD):
+    """
+
+    NOTE: Not tested for failing kwargs.
+    """
+
     pass
 
 
 class TestUpdateClient(UpdateCompleteLogic, ClientCRUD):
+    """
+    """
+
     pass
 
 
 class TestUpdateCommandLine(UpdateCompleteLogic, CommandLineCRUD):
+    """
+    """
+
     pass
 
 
@@ -434,10 +468,6 @@ class TestUpdateCommandLine(UpdateCompleteLogic, CommandLineCRUD):
 
 class DeleteLogic(BaseLogic, ModelFixtures):
     """Container for tests of deleting existing entries in database"""
-
-    def get_error(self):
-        errors = dict(model_builders=HTTPException, client=HTTPError, cli=_IntTypeError,)
-        return errors[self.interface]
 
     def test_delete(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
         models, tables = self.commit_to_session(success_only_models, session)
@@ -469,7 +499,8 @@ class DeleteLogic(BaseLogic, ModelFixtures):
                 "interface, so it is omitted here."
             )
         else:
-            error_cls = self.get_error()
+            errors = dict(model_builders=HTTPException, client=HTTPError, cli=_IntTypeError,)
+            error_cls = errors[self.interface]
             with pytest.raises(error_cls):
                 _ = self.delete(connection, models, table)
 
