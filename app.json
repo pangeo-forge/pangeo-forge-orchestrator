@@ -6,12 +6,12 @@
   },
   "environments": {
     "test": {
+      "addons": [
+        "heroku-postgresql:in-dyno"
+      ],
       "scripts": {
         "test-setup": "pip install -e '.[dev]' && echo $DATABASE_URL && python -m alembic upgrade head",
-        "test": "pytest -vsx tests",
-        "addons": [
-          "heroku-postgresql:in-dyno"
-        ]
+        "test": "pytest -vsx tests"
       }
     }
   }
