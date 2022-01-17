@@ -33,14 +33,24 @@ def get_open_port():
 
 def start_http_server(path, request):
     port = get_open_port()
+    host = "127.0.0.1"
+    url = f"http://{host}:{port}"
     command_list = [
-        "uvicorn",
+        # "uvicorn",
+        # "pangeo_forge_orchestrator.api:api",
+        # f"--port={port}",
+        # "--log-level=info",
+        "gunicorn",
+        "-w",
+        "1",
+        "-k",
+        "uvicorn.workers.UvicornWorker",
         "pangeo_forge_orchestrator.api:api",
-        f"--port={port}",
+        f"--bind={host}:{port}",
         "--log-level=info",
     ]
     p = subprocess.Popen(command_list, cwd=path)
-    url = f"http://127.0.0.1:{port}"
+
     time.sleep(1)  # let the server start up
 
     def teardown():
