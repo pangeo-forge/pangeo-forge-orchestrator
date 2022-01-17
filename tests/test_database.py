@@ -1,4 +1,5 @@
 import copy
+import re
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -24,6 +25,8 @@ from .interfaces import (
     _NonexistentTableError,
     _StrTypeError,
 )
+
+ISO8601_REGEX = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 
 # Test endpoint registration ------------------------------------------------------------
 
@@ -100,18 +103,26 @@ class BaseLogic:
         return models, tables
 
     @staticmethod
-    def add_z(input_string: str):
+    def add_z(input_string: str) -> str:
         """
         """
         if not input_string.endswith("Z"):
             input_string += "Z"
         return input_string
 
-    def parse_to_datetime(self, input_string: str):
+    def parse_to_datetime(self, input_string: str) -> datetime:
         """
         """
         input_string = self.add_z(input_string)
         return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
+
+    def timestamp_vals_to_datetime_objs(self, kws: dict) -> dict:
+        kws_copy = copy.deepcopy(kws)
+        for k, v in kws_copy.items():
+            if isinstance(v, str):
+                if re.match(ISO8601_REGEX, v):
+                    kws_copy[k] = self.parse_to_datetime(v)
+        return kws_copy
 
 
 # Test create ---------------------------------------------------------------------------
@@ -322,7 +333,7 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 # Test update ---------------------------------------------------------------------------
 
 
-class UpdateSuccessOnly(BaseLogic, ModelFixtures):
+class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     """Container for tests of updating existing entries in database"""
 
     def get_error(self):
@@ -334,25 +345,48 @@ class UpdateSuccessOnly(BaseLogic, ModelFixtures):
         )
         return errors[self.interface]
 
-    def evaluate_data(self, data, table, update_with):
-        assert data["id"] == table.id
-        input_dict = table.dict()
-        for k in input_dict.keys():
-            if k == list(update_with)[0]:
-                assert data[k] == update_with[k]
-            else:
-                if not isinstance(data[k], type(input_dict[k])):
-                    assert self.parse_to_datetime(data[k]) == input_dict[k]
+    def evaluate_data(self, original_kws: dict, updated_table: dict, update_with: dict):
+        """
+        """
+        for k in updated_table.keys():
+            if k in original_kws.keys() and k not in update_with.keys():
+                if not isinstance(original_kws[k], type(updated_table[k])):
+                    assert self.parse_to_datetime(updated_table[k]) == original_kws[k]
                 else:
-                    assert data[k] == input_dict[k]
+                    assert updated_table[k] == original_kws[k]
+            elif k in original_kws.keys() and k in update_with.keys():
+                if k == "id":
+                    assert updated_table[k] == original_kws[k]
+                elif not isinstance(update_with[k], type(original_kws[k])):
+                    assert self.parse_to_datetime(update_with[k]) == self.parse_to_datetime(
+                        updated_table[k]
+                    )
+                else:
+                    assert updated_table[k] != original_kws[k]
+                    assert updated_table[k] == updated_table[k]
 
     def test_update(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
         models, tables = self.commit_to_session(success_only_models, session)
-        # MAKE SURE THE ONE UPDATING IS NOT THE SAME KWS USED TO CREATE
+
+        original_table = session.get(models.table, tables[0].id)
+        original_kws = success_only_models.success_kws.all
+        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
+
         update_with = success_only_models.success_kws.reqs_only
+        # TODO: Explain below
+        if self.interface in ("db", "abstraction"):
+            update_with = self.timestamp_vals_to_datetime_objs(update_with)
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            assert v == original_table.dict()[k]
+        # TODO: Explain below
+        for k, v in original_kws.items():
+            if k in update_with.keys():
+                assert v != update_with[k]
+
         connection = self.get_connection(session, http_server)
         data = self.update(connection, models, tables[0], update_with)
-        self.evaluate_data(data, tables[0], update_with)
+        self.evaluate_data(original_kws=original_kws, updated_table=data, update_with=update_with)
 
     def test_update_nonexistent(self, session, model_to_update, http_server):
         """
@@ -366,24 +400,26 @@ class UpdateSuccessOnly(BaseLogic, ModelFixtures):
             _ = self.update(connection, models, table, update_with)
 
 
-class TestUpdateDatabase(UpdateSuccessOnly, DatabaseCRUD):
+class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
     pass
 
 
-class TestUpdateAbstraction(UpdateSuccessOnly, AbstractionCRUD):
+class TestUpdateAbstraction(UpdateSuccessOnlyLogic, AbstractionCRUD):
     pass
 
 
-class UpdateComplete(UpdateSuccessOnly):
-    # TODO: Test update invalid fields.
+class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
+    """
+    """
+
     pass
 
 
-class TestUpdateClient(UpdateComplete, ClientCRUD):
+class TestUpdateClient(UpdateCompleteLogic, ClientCRUD):
     pass
 
 
-class TestUpdateCommandLine(UpdateComplete, CommandLineCRUD):
+class TestUpdateCommandLine(UpdateCompleteLogic, CommandLineCRUD):
     pass
 
 
