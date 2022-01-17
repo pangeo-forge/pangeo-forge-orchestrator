@@ -19,10 +19,6 @@ from .interfaces import clear_table
 
 
 def get_open_port():
-    heroku_port = os.environ.get("PORT", False)
-    if heroku_port:
-
-        return heroku_port
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", 0))
     s.listen(1)
@@ -32,7 +28,8 @@ def get_open_port():
 
 
 def start_http_server(path, request):
-    port = get_open_port()
+    env_port = os.environ.get("PORT", False)
+    port = env_port or get_open_port()
     host = "127.0.0.1"
     url = f"http://{host}:{port}"
     command_list = [
