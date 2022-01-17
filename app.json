@@ -5,7 +5,9 @@
     "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
   },
   "addons": [
-    "heroku-postgresql:standard-0"
+    {
+      "plan": "heroku-postgresql:standard-0"
+    }
   ],
   "environments": {
     "test": {
@@ -16,11 +18,6 @@
         "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
         "test": "pytest -vsx tests"
       }
-    },
-    "review": {
-      "addons": [
-        "heroku-postgresql:hobby-dev"
-      ]
     }
   }
 }
