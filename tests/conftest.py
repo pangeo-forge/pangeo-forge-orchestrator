@@ -207,8 +207,6 @@ class RecipeRunFixtures:
            fixture, and the ``failure_kws_model_name`` fixture.
     """
 
-    models = MODELS["recipe_run"]
-
     @pytest.fixture(
         scope="session",
         params=[
@@ -272,7 +270,7 @@ class RecipeRunFixtures:
     ) -> ModelWithKwargs:
         """A ``ModelWithKwargs`` object for ``RecipeRun`` omitting the optional failure kwargs.
         """
-        return ModelWithKwargs(self.models, success_kws_recipe_run)
+        return ModelWithKwargs(MODELS["recipe_run"], success_kws_recipe_run)
 
     @pytest.fixture
     def recipe_run_complete_model(
@@ -280,10 +278,59 @@ class RecipeRunFixtures:
     ) -> ModelWithKwargs:
         """A ``ModelWithKwargs`` object for ``RecipeRun`` including the optional failure kwargs.
         """
-        return ModelWithKwargs(self.models, success_kws_recipe_run, failure_kws_recipe_run)
+        return ModelWithKwargs(MODELS["recipe_run"], success_kws_recipe_run, failure_kws_recipe_run)
 
 
-class ModelFixtures(RecipeRunFixtures):
+class BakeryFixtures:
+    """
+    """
+
+    @pytest.fixture(
+        scope="session",
+        params=[
+            (dict(region=NOT_STR), APIErrors.str),
+            (dict(name=NOT_STR), APIErrors.str),
+            (dict(description=NOT_STR), APIErrors.str),
+        ],
+    )
+    def failure_kws_bakery(self, request):
+        """A parametrized fixture of ``FailureKwargs`` objects covering all known failure modes of
+        the ``Bakery`` model.
+        """
+
+        update_with, raises = request.param
+        return FailureKwargs(update_with, raises)
+
+    @pytest.fixture(scope="session")
+    def success_kws_bakery(self) -> SuccessKwargs:
+        """A ``SuccessKwargs`` object for the ``Bakery`` model, inclusive of an ``.all`` dict
+        containing valid values for all fields, as well as a ``.reqs_only`` dict containing only
+        required fields. Note that for shared keys, all values are distinct (this is enforced by
+        the ``__post_init__`` method of ``SucessKwargs``).
+        """
+
+        success_kwargs = SuccessKwargs(
+            all=dict(region="a", name="b", description="c",),
+            reqs_only=dict(region="d", name="e", description="f",),
+        )
+        return success_kwargs
+
+    @pytest.fixture
+    def bakery_success_only_model(self, success_kws_bakery: SuccessKwargs) -> ModelWithKwargs:
+        """A ``ModelWithKwargs`` object for ``Bakery`` omitting the optional failure kwargs.
+        """
+        return ModelWithKwargs(MODELS["bakery"], success_kws_bakery)
+
+    @pytest.fixture
+    def bakery_complete_model(
+        self, success_kws_bakery: SuccessKwargs, failure_kws_bakery: FailureKwargs,
+    ) -> ModelWithKwargs:
+        """A ``ModelWithKwargs`` object for ``Bakery`` including the optional failure kwargs.
+        """
+        return ModelWithKwargs(MODELS["bakery"], success_kws_bakery, failure_kws_bakery)
+
+
+class ModelFixtures(RecipeRunFixtures, BakeryFixtures):
     """A container of lazy fixtures for all models to test. To add a model, add its cooresponding
     fixtures class as a subclass; e.g., ``ModelFixtures(RecipeRunFixtures, ModelNameFixtures)``.
     Then add ``lazy_fixture("model_name_success_only_model")`` fixture to the params list of
@@ -292,13 +339,18 @@ class ModelFixtures(RecipeRunFixtures):
     """
 
     @pytest.fixture(
-        scope="session", params=[lazy_fixture("recipe_run_success_only_model")],
+        scope="session",
+        params=[
+            lazy_fixture("recipe_run_success_only_model"),
+            lazy_fixture("bakery_success_only_model"),
+        ],
     )
     def success_only_models(self, request) -> ModelWithKwargs:
         return request.param
 
     @pytest.fixture(
-        scope="session", params=[lazy_fixture("recipe_run_complete_model")],
+        scope="session",
+        params=[lazy_fixture("recipe_run_complete_model"), lazy_fixture("bakery_complete_model")],
     )
     def complete_models(self, request) -> ModelWithKwargs:
         return request.param

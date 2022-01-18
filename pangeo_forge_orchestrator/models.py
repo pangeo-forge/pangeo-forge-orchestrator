@@ -7,6 +7,22 @@ from sqlmodel import SQLModel
 from .model_builders import MultipleModels
 
 
+class BakeryBase(SQLModel):
+    """
+    """
+
+    region: str
+    name: str
+    description: str
+
+
+class BakeryRead(BakeryBase):
+    """
+    """
+
+    id: int
+
+
 class RecipeRunStatus(str, Enum):
     """Categorical choices for ``RecipeRunBase.status``. Copied from the GitHub check runs API.
     """
@@ -82,5 +98,6 @@ class RecipeRunRead(RecipeRunBase):
 
 
 MODELS = {
-    "recipe_run": MultipleModels(path="/recipe_runs/", base=RecipeRunBase, response=RecipeRunRead)
+    "recipe_run": MultipleModels(path="/recipe_runs/", base=RecipeRunBase, response=RecipeRunRead),
+    "bakery": MultipleModels(path="/bakeries/", base=BakeryBase, response=BakeryRead),
 }
