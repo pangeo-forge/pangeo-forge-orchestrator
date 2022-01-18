@@ -5,6 +5,7 @@ import subprocess
 from typing import Optional
 
 from sqlmodel import Session, SQLModel
+import pytest
 
 import pangeo_forge_orchestrator.model_builders as model_builders
 from pangeo_forge_orchestrator.client import Client
@@ -76,13 +77,6 @@ def commit_to_session(session: Session, model: SQLModel) -> None:
     session.add(model)
     session.commit()
 
-
-def clear_table(session: Session, table_model: SQLModel):
-    session.query(table_model).delete()
-    session.commit()
-    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
-
-
 def get_data_from_cli(
     request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
 ) -> dict:
@@ -108,130 +102,33 @@ def get_data_from_cli(
     return data
 
 
-# Containers ------------------------------------------------------------------------------
-
-
-class DatabaseCRUD:
-    """Database interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
-
-    interface = "db"
-
-    def create(self, session: Session, models: MultipleModels, request: dict) -> dict:
-        table = models.table(**request)
-        commit_to_session(session, table)
-        # Need to `get` b/c db doesn't return a response
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        return data
-
-    def read_range(self, session: Session, models: MultipleModels) -> dict:
-        data = session.query(models.table).all()
-        return data
-
-    def read_single(self, session: Session, models: MultipleModels, table: SQLModel) -> dict:
-        model_db = session.get(models.table, table.id)
-        if model_db is None:
-            raise _NonexistentTableError
-        data = model_db.dict()
-        return data
-
-    def update(
-        self, session: Session, models: MultipleModels, table: SQLModel, update_with: dict,
-    ) -> dict:
-        model_db = session.query(models.table).first()
-        if model_db is None:
-            raise _NonexistentTableError
-        for k, v in update_with.items():
-            setattr(model_db, k, v)
-        session.commit()
-        model_db = session.get(models.table, table.id)
-        data = model_db.dict()
-        return data
-
-    def delete(self, session: Session, models: MultipleModels, table: SQLModel) -> None:
-        # TODO: Database deletions based on specific table id (vs. below clear all).
-        # Not urgent because we'll generally be doing this via either the client or cli.
-        clear_table(session, models.table)
-        model_in_db = session.get(models.table, table.id)
-        assert model_in_db is None
-
-
-class ModelBuildersCRUD:
-    """ModelBuilders interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
-
-    interface = "model_builders"
-
-    def create(self, session: Session, models: MultipleModels, request: dict) -> dict:
-        table = models.table(**request)
-        model_db = model_builders.create(session=session, table_cls=models.table, model=table,)
-        data = model_db.dict()
-        return data
-
-    def read_range(self, session: Session, models: MultipleModels) -> dict:
-        data = model_builders.read_range(
-            session=session,
-            table_cls=models.table,
-            offset=0,
-            limit=model_builders.QUERY_LIMIT.default,
-        )
-        return data
-
-    def read_single(self, session: Session, models: MultipleModels, table: SQLModel) -> dict:
-        model_db = model_builders.read_single(session=session, table_cls=models.table, id=table.id)
-        data = model_db.dict()
-        return data
-
-    def update(
-        self, session: Session, models: MultipleModels, table: SQLModel, update_with: dict,
-    ) -> dict:
-        model_db = session.query(models.table).first()
-        if model_db is None:
-            raise _NonexistentTableError
-        for k, v in update_with.items():
-            setattr(model_db, k, v)
-        updated_model = model_builders.update(
-            session=session, table_cls=models.table, id=model_db.id, model=model_db
-        )
-        data = updated_model.dict()
-        return data
-
-    def delete(self, session: Session, models: MultipleModels, table: SQLModel) -> None:
-        delete_response = model_builders.delete(
-            session=session, table_cls=models.table, id=table.id
-        )
-        assert delete_response == {"ok": True}  # successfully deleted
-        model_in_db = session.get(models.table, table.id)
-        assert model_in_db is None
-
-
 class ClientCRUD:
     """Client interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    interface = "client"
+    def __init__(self, base_url):
+        self.base_url = base_url
+        self.client = Client(base_url)
 
-    def create(self, base_url: str, models: MultipleModels, json: dict) -> dict:
-        client = Client(base_url)
-        response = client.post(models.path, json)
+    def create(self, models: MultipleModels, json: dict) -> dict:
+        response = self.client.post(models.path, json)
         response.raise_for_status()
         data = response.json()
         return data
 
-    def read_range(self, base_url: str, models: MultipleModels) -> dict:
-        client = Client(base_url)
-        response = client.get(models.path)
+    def read_range(self, models: MultipleModels) -> dict:
+        response = self.client.get(models.path)
         assert response.status_code == 200
         data = response.json()
         return data
 
-    def read_single(self, base_url: str, models: MultipleModels, table: SQLModel) -> dict:
-        client = Client(base_url)
-        response = client.get(f"{models.path}{table.id}")
+    def read_single(self, models: MultipleModels, table: SQLModel) -> dict:
+        response = self.client.get(f"{models.path}{table.id}")
         response.raise_for_status()
         data = response.json()
         return data
 
     def update(
-        self, base_url: str, models: MultipleModels, table: SQLModel, update_with: dict,
+        self, models: MultipleModels, table: SQLModel, update_with: dict,
     ) -> dict:
         client = Client(base_url)
         response = client.patch(f"{models.path}{table.id}", json=update_with)
@@ -239,7 +136,7 @@ class ClientCRUD:
         data = response.json()
         return data
 
-    def delete(self, base_url: str, models: MultipleModels, table: SQLModel) -> None:
+    def delete(self, models: MultipleModels, table: SQLModel) -> None:
         client = Client(base_url)
         delete_response = client.delete(f"{models.path}{table.id}")
         # `assert delete_response.status_code == 200`, indicating successful deletion,
@@ -253,28 +150,35 @@ class ClientCRUD:
 class CommandLineCRUD:
     """CLI interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    interface = "cli"
+    def __init__(self, base_url):
+        self.base_url = base_url
 
-    def create(self, base_url: str, models: MultipleModels, request: dict) -> dict:
-        data = get_data_from_cli("post", base_url, models.path, request)
+    def create(self, models: MultipleModels, request: dict) -> dict:
+        data = get_data_from_cli("post", self.base_url, models.path, request)
         return data
 
-    def read_range(self, base_url: str, models: MultipleModels) -> dict:
-        data = get_data_from_cli("get", base_url, models.path)
+    def read_range(self, models: MultipleModels) -> dict:
+        data = get_data_from_cli("get", self.base_url, models.path)
         return data
 
-    def read_single(self, base_url: str, models: MultipleModels, table: SQLModel) -> dict:
-        data = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
+    def read_single(self, models: MultipleModels, table: SQLModel) -> dict:
+        data = get_data_from_cli("get", self.base_url, f"{models.path}{table.id}")
         return data
 
     def update(
-        self, base_url: str, models: MultipleModels, table: SQLModel, update_with: dict,
+        self, models: MultipleModels, table: SQLModel, update_with: dict,
     ) -> dict:
-        data = get_data_from_cli("patch", base_url, f"{models.path}{table.id}", update_with)
+        data = get_data_from_cli("patch", self.base_url, f"{models.path}{table.id}", update_with)
         return data
 
-    def delete(self, base_url: str, models: MultipleModels, table: SQLModel) -> None:
-        delete_response = get_data_from_cli("delete", base_url, f"{models.path}{table.id}")
+    def delete(self, models: MultipleModels, table: SQLModel) -> None:
+        delete_response = get_data_from_cli("delete", self.base_url, f"{models.path}{table.id}")
         assert delete_response == {"ok": True}  # successfully deleted
-        get_response = get_data_from_cli("get", base_url, f"{models.path}{table.id}")
+        get_response = get_data_from_cli("get", self.base_url, f"{models.path}{table.id}")
         assert get_response == {"detail": f"{models.table.__name__} not found"}
+
+
+@pytest.fixture(params=[ClientCRUD, CommandLineCRUD])
+def client(request, http_server_url):
+    CRUDClass = request.param
+    return CRUDClass(http_server_url)

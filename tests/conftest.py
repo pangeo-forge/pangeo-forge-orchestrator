@@ -7,12 +7,10 @@ from typing import Optional
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, create_engine, SQLModel
 
 from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
-
-from .interfaces import clear_table
 
 # Helpers ---------------------------------------------------------------------------------
 
@@ -72,6 +70,12 @@ def uncleared_session(tempdir):
     engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
     with Session(engine) as session:
         yield session
+
+
+def clear_table(session: Session, table_model: SQLModel):
+    session.query(table_model).delete()
+    session.commit()
+    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
 @pytest.fixture
