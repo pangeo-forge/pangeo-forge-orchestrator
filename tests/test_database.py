@@ -1,90 +1,78 @@
 import copy
+import re
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import fastapi
 import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
-from pydantic import ValidationError
 from requests.exceptions import HTTPError
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator.model_builders as model_builders
 
-from .conftest import CreateFixtures, DeleteFixtures, ModelFixture, ReadFixtures, UpdateFixtures
+from .conftest import APIErrors, ModelFixtures, ModelWithKwargs
 from .interfaces import (
-    AbstractionCRUD,
     ClientCRUD,
     CommandLineCRUD,
     DatabaseCRUD,
+    ModelBuildersCRUD,
+    _DatetimeError,
+    _EnumTypeError,
     _IntTypeError,
     _MissingFieldError,
     _NonexistentTableError,
     _StrTypeError,
 )
 
-
-def commit_to_session(session: Session, model: SQLModel):
-    session.add(model)
-    session.commit()
-
-
-def add_z(input_string: str):
-    if not input_string.endswith("Z"):
-        input_string += "Z"
-    return input_string
-
-
-def parse_to_datetime(input_string: str):
-    input_string = add_z(input_string)
-    return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
-
-
-def registered_routes(app: FastAPI):
-    return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
-
+ISO8601_REGEX = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
 
 # Test endpoint registration ------------------------------------------------------------
 
 
-def test_registration(uncleared_session, models_with_kwargs):
-    models = models_with_kwargs.models
-    new_app = FastAPI()
+class TestRegistration(ModelFixtures):
+    @staticmethod
+    def registered_routes(app: FastAPI):
+        # TODO: Explain why this is a staticmethod and not a property
+        return [r for r in app.routes if isinstance(r, fastapi.routing.APIRoute)]
 
-    # assert that this application has no registered routes
-    assert len(registered_routes(new_app)) == 0
+    def test_registration(self, uncleared_session: Session, success_only_models: ModelWithKwargs):
+        models = success_only_models.models
+        new_app = FastAPI()
 
-    def get_session():
-        yield uncleared_session
+        # assert that this application has no registered routes
+        assert len(self.registered_routes(new_app)) == 0
 
-    # register routes for this application
-    model_builders.register_endpoints(api=new_app, get_session=get_session, models=models)
+        def get_session():
+            yield uncleared_session
 
-    # assert that this application now has five registered routes
-    routes = registered_routes(new_app)
+        # register routes for this application
+        model_builders.register_endpoints(api=new_app, get_session=get_session, models=models)
 
-    assert len(routes) == 5
+        # assert that this application now has five registered routes
+        routes = self.registered_routes(new_app)
 
-    expected_names = ("_create", "_read_range", "_read_single", "_update", "_delete")
-    # Check names
-    for r in routes:
-        assert r.name in expected_names
-    # Check routes
-    for r in routes:
-        if r.name in ("_create", "_read_range"):
-            assert r.path == models.path
-        elif r.name in ("_read_single", "_update", "_delete"):
-            assert r.path == f"{models.path}{{id}}"
-    # Check response models
-    for r in routes:
-        if r.name in ("_create", "_read_single", "_update"):
-            assert r.response_model == models.response
-        elif r.name == "_read_range":
-            assert r.response_model == List[models.response]
-        elif r.name == "_delete":
-            assert r.response_model is None
+        assert len(routes) == 5
+
+        expected_names = ("_create", "_read_range", "_read_single", "_update", "_delete")
+        # Check names
+        for r in routes:
+            assert r.name in expected_names
+        # Check routes
+        for r in routes:
+            if r.name in ("_create", "_read_range"):
+                assert r.path == models.path
+            elif r.name in ("_read_single", "_update", "_delete"):
+                assert r.path == f"{models.path}{{id}}"
+        # Check response models
+        for r in routes:
+            if r.name in ("_create", "_read_single", "_update"):
+                assert r.response_model == models.response
+            elif r.name == "_read_range":
+                assert r.response_model == List[models.response]
+            elif r.name == "_delete":
+                assert r.response_model is None
 
 
 # Base logic ----------------------------------------------------------------------------
@@ -93,31 +81,85 @@ def test_registration(uncleared_session, models_with_kwargs):
 class BaseLogic:
     def get_connection(self, session: Session, url: str):
         """Different fixtures require different connection points to the database. `db` and
-        `abstraction` interfaces use a `session` connection, whereas `client` and `cli`
+        `model_builders` interfaces use a `session` connection, whereas `client` and `cli`
         interfaces connect via the http URL. This function finds the appropriate connection
         point based on the interface.
         """
-        connection = session if "db" in self.interface or "abstract" in self.interface else url
+        connection = (
+            session if "db" in self.interface or "model_builders" in self.interface else url
+        )
         return connection
+
+    @staticmethod
+    def commit_to_session(
+        model_fixture: ModelWithKwargs, session: Session, ntables: int = 1
+    ) -> Tuple[model_builders.MultipleModels, Tuple[SQLModel, SQLModel]]:
+        """Commit tables to the database for testing.
+
+        :param model_fixture: The fixture object containing models to commit.
+        :param session: The session to commit to.
+        :param ntables: The number of tables to commit (either ``1`` or ``2``).
+        """
+
+        models, kws = model_fixture.models, model_fixture.success_kws
+        tables = [models.table(**kw) for kw in (kws.all, kws.reqs_only)]
+        for i in range(ntables):
+            session.add(tables[i])
+            session.commit()
+        return models, tables
+
+    @staticmethod
+    def add_z(input_string: str) -> str:
+        """Add a ``Z`` character the end of a timestamp string if needed, to bring it into
+        compliance with ISO8601 formatting.
+        """
+
+        if not input_string.endswith("Z"):
+            input_string += "Z"
+        return input_string
+
+    def parse_to_datetime(self, input_string: str) -> datetime:
+        """Parse an ISO8601 timestamp string into a Python datetime object.
+
+        :param input_string: The ISO8601 timestamp.
+        """
+
+        input_string = self.add_z(input_string)
+        return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
+
+    def get_failing_kws_error(self, failure_mode: APIErrors):
+        """From an ``APIErrors`` error type, select the cooresponding Python error, which is
+        dependant on the interface.
+
+        :param failure_mode: One of the categorical error types contained in ``APIErrors``.
+        """
+
+        errors = dict(client=HTTPError)
+        cli_errors = {
+            APIErrors.missing: _MissingFieldError,
+            APIErrors.str: _StrTypeError,
+            APIErrors.enum: _EnumTypeError,
+            APIErrors.int: _IntTypeError,
+            APIErrors.datetime: _DatetimeError,
+        }
+        errors.update(dict(cli=cli_errors[failure_mode]))
+        return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
 
 
 # Test create ---------------------------------------------------------------------------
 
 
-class CreateLogic(BaseLogic, CreateFixtures):
-    """Container for tests of database entry creation and associated failure modes"""
+class CreateSuccessOnlyLogic(BaseLogic, ModelFixtures):
+    """Container for tests of successful database entry creation.
 
-    def get_error(self, failure_mode: str):
-        errors = dict(db=IntegrityError, abstraction=ValidationError, client=HTTPError,)
-        cli_error = _MissingFieldError if failure_mode == "incomplete" else _StrTypeError
-        errors.update(dict(cli=cli_error))
-        return errors[self.interface]  # `self.interface` inherited from `*CRUD` obj
+    Note: This is used to test implementation of the database and model_builders interfaces, for
+    which we don't want to bother testing as many failure modes.
+    """
 
-    @staticmethod
-    def evaluate_data(request: dict, data: dict, blank_opts: Optional[List] = None):
+    def evaluate_data(self, request: dict, data: dict, blank_opts: Optional[List] = None):
         for k in request.keys():
             if isinstance(data[k], datetime):
-                assert data[k] == parse_to_datetime(request[k])
+                assert data[k] == self.parse_to_datetime(request[k])
             elif (
                 # Pydantic requires a "Z"-terminated timestamp, but FastAPI responds without the "Z"
                 isinstance(data[k], str)
@@ -125,7 +167,7 @@ class CreateLogic(BaseLogic, CreateFixtures):
                 and any([s.endswith("Z") for s in (data[k], request[k])])
                 and not all([s.endswith("Z") for s in (data[k], request[k])])
             ):
-                assert add_z(data[k]) == add_z(request[k])
+                assert self.add_z(data[k]) == self.add_z(request[k])
             else:
                 assert data[k] == request[k]
         if blank_opts:
@@ -133,67 +175,90 @@ class CreateLogic(BaseLogic, CreateFixtures):
                 assert data[k] is None
         assert data["id"] is not None
 
+    @pytest.mark.parametrize("fields", ["all_fields", "req_only"])
     def test_create(
-        self, session: Session, model_to_create: ModelFixture, http_server: str,
+        self, fields: str, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
-        models, request, blank_opts = model_to_create
+        models, kws = success_only_models.models, success_only_models.success_kws
+        request = kws.all if fields == "all_fields" else kws.reqs_only
+        # TODO: Explain blank_opts.
+        blank_opts = None if fields == "all_fields" else list(set(kws.all) - set(kws.reqs_only))
         connection = self.get_connection(session, http_server)
         data = self.create(connection, models, request)  # `self.create` inherited from `*CRUD` obj
         self.evaluate_data(request, data, blank_opts)
 
-    @pytest.mark.parametrize("failure_mode", ["incomplete", "invalid"])
-    def test_create_failure(
-        self, session: Session, model_to_create: ModelFixture, http_server: str, failure_mode: str,
+
+class CreateCompleteLogic(CreateSuccessOnlyLogic):
+    """Container for tests of both successful _and_ failing database entry creation
+
+    Note: This is used for public client and command line interfaces, for which we want to test the
+    complete suite of failure modes.
+    """
+
+    def test_create_incomplete_request(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
-        models, request, _ = model_to_create
+        """Note: Even though this is a failure test, we use success_only_models, because the
+        failure mode is incomplete.
+        """
+
+        models, kws = success_only_models.models, success_only_models.success_kws
+        incomplete_kwargs = copy.deepcopy(kws.reqs_only)  # NOTE: Use of `reqs_only`
+        del incomplete_kwargs[next(iter(incomplete_kwargs))]  # Remove a required field
+
         connection = self.get_connection(session, http_server)
+        error_cls = self.get_failing_kws_error(APIErrors.missing)
+        with pytest.raises(error_cls):
+            _ = self.create(connection, models, incomplete_kwargs)
 
-        failing_request = copy.deepcopy(request)
-        if failure_mode == "incomplete":
-            del failing_request[list(failing_request)[0]]  # Remove a required field
-        else:
-            assert type(request[list(request)[0]]) == str
-            failing_request[list(failing_request)[0]] = {"message": "Is this wrong?"}
-            assert type(failing_request[list(failing_request)[0]]) == dict
+    def test_create_failing_request(
+        self, complete_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, success_kws, failure_kws = (
+            complete_models.models,
+            complete_models.success_kws,
+            complete_models.failure_kws,
+        )
+        failing_request = copy.deepcopy(success_kws.all)  # NOTE: Use of `all`
+        failing_request.update(failure_kws.update_with)
 
-        error_cls = self.get_error(failure_mode)
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_failing_kws_error(failure_kws.raises)
         with pytest.raises(error_cls):
             _ = self.create(connection, models, failing_request)
 
 
-class TestCreateDatabase(CreateLogic, DatabaseCRUD):
+class TestCreateDatabase(CreateSuccessOnlyLogic, DatabaseCRUD):
+    """Note: Only tested for success."""
+
     pass
 
 
-class TestCreateAbstraction(CreateLogic, AbstractionCRUD):
+class TestCreateModelBuilders(CreateSuccessOnlyLogic, ModelBuildersCRUD):
+    """Note: Only tested for success."""
+
     pass
 
 
-class TestCreateClient(CreateLogic, ClientCRUD):
+class TestCreateClient(CreateCompleteLogic, ClientCRUD):
+    """Note: Tested for success and failure."""
+
     pass
 
 
-class TestCreateCommandLine(CreateLogic, CommandLineCRUD):
+class TestCreateCommandLine(CreateCompleteLogic, CommandLineCRUD):
+    """Note: Tested for success and failure."""
+
     pass
 
 
 # Test read -----------------------------------------------------------------------------
 
 
-class ReadLogic(BaseLogic, ReadFixtures):
+class ReadLogic(BaseLogic, ModelFixtures):
     """Container for tests of reading from database"""
 
-    def get_error(self):
-        errors = dict(
-            db=_NonexistentTableError,
-            abstraction=HTTPException,
-            client=HTTPError,
-            cli=_IntTypeError,
-        )
-        return errors[self.interface]
-
-    @staticmethod
-    def evaluate_read_range_data(data, tables):
+    def evaluate_read_range_data(self, data, tables):
         assert len(data) == len(tables)
         for i, t in enumerate(tables):
             input_data = t.dict()
@@ -202,39 +267,48 @@ class ReadLogic(BaseLogic, ReadFixtures):
             response_data = data[i].dict() if type(data[i]) != dict else data[i]
             for k in input_data.keys():
                 if type(input_data[k]) == datetime and type(response_data[k]) != datetime:
-                    assert parse_to_datetime(response_data[k]) == input_data[k]
+                    assert self.parse_to_datetime(response_data[k]) == input_data[k]
                 else:
                     assert response_data[k] == input_data[k]
 
-    @staticmethod
-    def evaluate_read_single_data(data, table):
+    def evaluate_read_single_data(self, data, table):
         input_dict = table.dict()
         for k in input_dict.keys():
             if type(input_dict[k]) == datetime and type(data[k]) != datetime:
-                assert parse_to_datetime(data[k]) == input_dict[k]
+                assert self.parse_to_datetime(data[k]) == input_dict[k]
             else:
                 assert data[k] == input_dict[k]
 
-    def test_read_range(self, session, models_to_read, http_server):
-        models, tables = models_to_read
-        for t in tables:
-            commit_to_session(session, t)  # add entries for this test
+    def test_read_range(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, tables = self.commit_to_session(success_only_models, session, ntables=2)
         connection = self.get_connection(session, http_server)
         data = self.read_range(connection, models)
         self.evaluate_read_range_data(data, tables)
 
-    def test_read_single(self, session, single_model_to_read, http_server):
-        models, table = single_model_to_read
-        commit_to_session(session, table)  # add entries for this test
+    def test_read_single(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, tables = self.commit_to_session(success_only_models, session)
         connection = self.get_connection(session, http_server)
-        data = self.read_single(connection, models, table)
-        self.evaluate_read_single_data(data, table)
+        data = self.read_single(connection, models, tables[0])
+        self.evaluate_read_single_data(data, tables[0])
 
-    def test_read_nonexistent(self, session, single_model_to_read, http_server):
-        models, table = single_model_to_read
-        # don't add any entries for this test
+    def test_read_nonexistent(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
+        # NOTE: We *don't* add any entries for this test.
+        errors = dict(
+            db=_NonexistentTableError,
+            model_builders=HTTPException,
+            client=HTTPError,
+            cli=_IntTypeError,
+        )
+        error_cls = errors[self.interface]
         connection = self.get_connection(session, http_server)
-        error_cls = self.get_error()
         with pytest.raises(error_cls):
             _ = self.read_single(connection, models, table)
 
@@ -243,7 +317,7 @@ class TestReadDatabase(ReadLogic, DatabaseCRUD):
     pass
 
 
-class TestReadAbstraction(ReadLogic, AbstractionCRUD):
+class TestReadModelBuilders(ReadLogic, ModelBuildersCRUD):
     pass
 
 
@@ -258,86 +332,176 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 # Test update ---------------------------------------------------------------------------
 
 
-class UpdateLogic(BaseLogic, UpdateFixtures):
-    """Container for tests of updating existing entries in database"""
+class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
+    """Container for tests of successful database entry updates.
 
-    def get_error(self):
+    Note: This is used to test implementation of the database and model_builders interfaces, for
+    which we don't want to bother testing as many failure modes.
+    """
+
+    def timestamp_vals_to_datetime_objs(self, kws: dict) -> dict:
+        """For testing implementation of the database and model builders, we need to parse
+        timestamp values into datetime objects. Also used for comparing ``update_with``
+        dict to ``original_table`` in ``validate_and_parse_update_kws`` method below.
+        """
+
+        kws_copy = copy.deepcopy(kws)
+        for k, v in kws_copy.items():
+            if isinstance(v, str):
+                if re.match(ISO8601_REGEX, v):
+                    kws_copy[k] = self.parse_to_datetime(v)
+        return kws_copy
+
+    def validate_and_parse_update_kws(
+        self, original_table: SQLModel, original_kws: dict, update_with: dict
+    ) -> Tuple[dict, dict]:
+        """Ensures that the ``update_with`` dict is indeed distinct from the original
+        table values. Also parses ``update_with`` dict if required by interface.
+        """
+
+        original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
+
+        if self.interface in ("db", "model_builders"):
+            update_with = self.timestamp_vals_to_datetime_objs(update_with)
+
+        for k, v in original_kws.items():
+            assert v == original_table.dict()[k]
+
+        for k, v in original_kws.items():
+            if k in update_with.keys():
+                assert v != update_with[k]
+        return original_kws, update_with
+
+    def evaluate_data(self, original_kws: dict, updated_table: dict, update_with: dict):
+        for k in updated_table.keys():
+            if k in original_kws.keys() and k not in update_with.keys():
+                if not isinstance(original_kws[k], type(updated_table[k])):
+                    assert self.parse_to_datetime(updated_table[k]) == original_kws[k]
+                else:
+                    assert updated_table[k] == original_kws[k]
+            elif k in original_kws.keys() and k in update_with.keys():
+                if k == "id":
+                    assert updated_table[k] == original_kws[k]
+                elif not isinstance(update_with[k], type(original_kws[k])):
+                    assert self.parse_to_datetime(update_with[k]) == self.parse_to_datetime(
+                        updated_table[k]
+                    )
+                else:
+                    assert updated_table[k] != original_kws[k]
+                    assert updated_table[k] == updated_table[k]
+
+    def test_update(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
+        models, tables = self.commit_to_session(success_only_models, session)
+
+        original_table = session.get(models.table, tables[0].id)
+        original_kws = success_only_models.success_kws.all
+        update_with = success_only_models.success_kws.reqs_only
+
+        original_kws, update_with = self.validate_and_parse_update_kws(
+            original_table, original_kws, update_with,
+        )
+        connection = self.get_connection(session, http_server)
+        data = self.update(connection, models, tables[0], update_with)
+        self.evaluate_data(original_kws=original_kws, updated_table=data, update_with=update_with)
+
+    def test_update_nonexistent(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        """The one failure mode which is easy to test for all interfaces, so this is included here.
+        """
+
+        models = success_only_models.models
+        table_not_in_db = models.table(**success_only_models.success_kws.all)
+        update_with = success_only_models.success_kws.reqs_only
+        # NOTE: We *don't* add any entries for this test
+        connection = self.get_connection(session, http_server)
         errors = dict(
             db=_NonexistentTableError,
-            abstraction=_NonexistentTableError,
+            model_builders=_NonexistentTableError,
             client=HTTPError,
             cli=_IntTypeError,
         )
-        return errors[self.interface]
-
-    @staticmethod
-    def evaluate_data(data, table, update_with):
-        assert data["id"] == table.id
-        input_dict = table.dict()
-        for k in input_dict.keys():
-            if k == list(update_with)[0]:
-                assert data[k] == update_with[k]
-            else:
-                if not isinstance(data[k], type(input_dict[k])):
-                    assert parse_to_datetime(data[k]) == input_dict[k]
-                else:
-                    assert data[k] == input_dict[k]
-
-    def test_update(self, session, model_to_update, http_server):
-        models, table, update_with = model_to_update
-        commit_to_session(session, table)  # add entry for this test
-        connection = self.get_connection(session, http_server)
-        data = self.update(connection, models, table, update_with)
-        self.evaluate_data(data, table, update_with)
-
-    def test_update_nonexistent(self, session, model_to_update, http_server):
-        models, table, update_with = model_to_update
-        # don't add any entries for this test
-        connection = self.get_connection(session, http_server)
-        error_cls = self.get_error()
+        error_cls = errors[self.interface]
         with pytest.raises(error_cls):
-            _ = self.update(connection, models, table, update_with)
+            _ = self.update(connection, models, table_not_in_db, update_with)
 
 
-class TestUpdateDatabase(UpdateLogic, DatabaseCRUD):
+class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
+    """Container for tests of both successful _and_ failing database entry updates.
+
+    Note: This is used for public client and command line interfaces, for which we want to test the
+    complete suite of failure modes.
+    """
+
+    def test_update_failing_request(
+        self, complete_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, tables = self.commit_to_session(complete_models, session)
+
+        original_table = session.get(models.table, tables[0].id)
+        original_kws = complete_models.success_kws.all
+        update_with = complete_models.success_kws.reqs_only
+
+        original_kws, update_with = self.validate_and_parse_update_kws(
+            original_table, original_kws, update_with,
+        )
+
+        update_with = copy.deepcopy(update_with)
+        update_with.update(complete_models.failure_kws.update_with)
+
+        connection = self.get_connection(session, http_server)
+        error_cls = self.get_failing_kws_error(complete_models.failure_kws.raises)
+        with pytest.raises(error_cls):
+            _ = self.update(connection, models, tables[0], update_with)
+
+
+class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
+    """Note: Only tested for success plus one failure mode."""
+
     pass
 
 
-class TestUpdateAbstraction(UpdateLogic, AbstractionCRUD):
+class TestUpdateModelBuilders(UpdateSuccessOnlyLogic, ModelBuildersCRUD):
+    """Note: Only tested for success plus one failure mode."""
+
     pass
 
 
-class TestUpdateClient(UpdateLogic, ClientCRUD):
+class TestUpdateClient(UpdateCompleteLogic, ClientCRUD):
+    """Note: Tested for success and all failure modes."""
+
     pass
 
 
-class TestUpdateCommandLine(UpdateLogic, CommandLineCRUD):
+class TestUpdateCommandLine(UpdateCompleteLogic, CommandLineCRUD):
+    """Note: Tested for success and all failure modes."""
+
     pass
 
 
 # Test delete ---------------------------------------------------------------------------
 
 
-class DeleteLogic(BaseLogic, DeleteFixtures):
+class DeleteLogic(BaseLogic, ModelFixtures):
     """Container for tests of deleting existing entries in database"""
 
-    def get_error(self):
-        errors = dict(abstraction=HTTPException, client=HTTPError, cli=_IntTypeError,)
-        return errors[self.interface]
+    def test_delete(self, success_only_models: ModelWithKwargs, session: Session, http_server: str):
+        models, tables = self.commit_to_session(success_only_models, session)
 
-    def test_delete(self, session, model_to_delete, http_server):
-        models, table = model_to_delete
-        commit_to_session(session, table)  # add entries for this test
-
-        model_in_db = session.get(models.table, table.id)
+        model_in_db = session.get(models.table, tables[0].id)
         assert model_in_db is not None
-        assert model_in_db == table
+        assert model_in_db == tables[0]
 
         connection = self.get_connection(session, http_server)
-        self.delete(connection, models, table)
+        self.delete(connection, models, tables[0])
 
-    def test_delete_nonexistent(self, session, model_to_delete, http_server):
-        models, table = model_to_delete
+    def test_delete_nonexistent(
+        self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
+    ):
+        models, kws = success_only_models.models, success_only_models.success_kws
+        table = models.table(**kws.all)
+        # NOTE: We *don't* add any entries for this test
+
         connection = self.get_connection(session, http_server)
 
         if self.interface == "db":
@@ -351,7 +515,8 @@ class DeleteLogic(BaseLogic, DeleteFixtures):
                 "interface, so it is omitted here."
             )
         else:
-            error_cls = self.get_error()
+            errors = dict(model_builders=HTTPException, client=HTTPError, cli=_IntTypeError,)
+            error_cls = errors[self.interface]
             with pytest.raises(error_cls):
                 _ = self.delete(connection, models, table)
 
@@ -360,7 +525,7 @@ class TestDeleteDatabase(DeleteLogic, DatabaseCRUD):
     pass
 
 
-class TestDeleteAbstraction(DeleteLogic, AbstractionCRUD):
+class TestDeleteModelBuilders(DeleteLogic, ModelBuildersCRUD):
     pass
 
 

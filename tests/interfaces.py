@@ -21,7 +21,7 @@ from pangeo_forge_orchestrator.model_builders import MultipleModels
 # The primary scenario we are working around here is the fact that JSON responses are returned by
 # the command line interface as plain text. Therefore, unlike responses returned by the client
 # interface, e.g., we cannot call `response.raise_for_status` to raise Python errors from them. The
-# `_MissingFieldError`, `_StrTypeError`, and `_IntTypeError` are all for use in this context;
+# `_MissingFieldError`, `_StrTypeError`, `_IntTypeError`, and `_EnumTypeError` are used for this;
 # i.e., they are exceptions to raise if specific error text is present in a CLI JSON response.
 #
 # The one other silent error covered by these exceptions is the case of a query to a the database
@@ -44,6 +44,20 @@ class _StrTypeError(Exception):
 
 class _IntTypeError(Exception):
     """Exception to raise if JSON returned by CLI indicates error of type `"type_error.integer"`.
+    """
+
+    pass
+
+
+class _EnumTypeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"type_error.enum"`.
+    """
+
+    pass
+
+
+class _DatetimeError(Exception):
+    """Exception to raise if JSON returned by CLI indicates error of type `"value_error.datetime"`.
     """
 
     pass
@@ -87,6 +101,10 @@ def get_data_from_cli(
                 raise _StrTypeError
             elif error["type"] == "type_error.integer":
                 raise _IntTypeError
+            elif error["type"] == "type_error.enum":
+                raise _EnumTypeError
+            elif error["type"] == "value_error.datetime":
+                raise _DatetimeError
     return data
 
 
@@ -138,10 +156,10 @@ class DatabaseCRUD:
         assert model_in_db is None
 
 
-class AbstractionCRUD:
-    """Abstraction interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
+class ModelBuildersCRUD:
+    """ModelBuilders interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    interface = "abstraction"
+    interface = "model_builders"
 
     def create(self, session: Session, models: MultipleModels, request: dict) -> dict:
         table = models.table(**request)
