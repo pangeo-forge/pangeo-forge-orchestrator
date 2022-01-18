@@ -94,9 +94,13 @@ class BaseLogic:
     def commit_to_session(
         model_fixture: ModelWithKwargs, session: Session, ntables: int = 1
     ) -> Tuple[model_builders.MultipleModels, Tuple[SQLModel, SQLModel]]:
+        """Commit tables to the database for testing.
+
+        :param model_fixture: The fixture object containing models to commit.
+        :param session: The session to commit to.
+        :param ntables: The number of tables to commit (either ``1`` or ``2``).
         """
 
-        """
         models, kws = model_fixture.models, model_fixture.success_kws
         tables = [models.table(**kw) for kw in (kws.all, kws.reqs_only)]
         for i in range(ntables):
@@ -106,19 +110,30 @@ class BaseLogic:
 
     @staticmethod
     def add_z(input_string: str) -> str:
+        """Add a ``Z`` character the end of a timestamp string if needed, to bring it into
+        compliance with ISO8601 formatting.
         """
-        """
+
         if not input_string.endswith("Z"):
             input_string += "Z"
         return input_string
 
     def parse_to_datetime(self, input_string: str) -> datetime:
+        """Parse an ISO8601 timestamp string into a Python datetime object.
+
+        :param input_string: The ISO8601 timestamp.
         """
-        """
+
         input_string = self.add_z(input_string)
         return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
 
-    def get_failing_kws_error(self, failure_mode: str):
+    def get_failing_kws_error(self, failure_mode: APIErrors):
+        """From an ``APIErrors`` error type, select the cooresponding Python error, which is
+        dependant on the interface.
+
+        :param failure_mode: One of the categorical error types contained in ``APIErrors``.
+        """
+
         errors = dict(client=HTTPError)
         cli_errors = {
             APIErrors.missing: _MissingFieldError,
@@ -132,11 +147,14 @@ class BaseLogic:
 
 
 # Test create ---------------------------------------------------------------------------
-# NOTE: Why is there success only here?
 
 
-class CreateSuccessOnly(BaseLogic, ModelFixtures):
-    """Container for tests of successful database entry creation"""
+class CreateSuccessOnlyLogic(BaseLogic, ModelFixtures):
+    """Container for tests of successful database entry creation.
+
+    Note: This is used to test implementation of the database and model_builders interfaces, for
+    which we don't want to bother testing as many failure modes.
+    """
 
     def evaluate_data(self, request: dict, data: dict, blank_opts: Optional[List] = None):
         for k in request.keys():
@@ -170,19 +188,20 @@ class CreateSuccessOnly(BaseLogic, ModelFixtures):
         self.evaluate_data(request, data, blank_opts)
 
 
-class CreateComplete(CreateSuccessOnly):
+class CreateCompleteLogic(CreateSuccessOnlyLogic):
     """Container for tests of both successful _and_ failing database entry creation
 
-    Note this is used for public interfaces: client and command line.
+    Note: This is used for public client and command line interfaces, for which we want to test the
+    complete suite of failure modes.
     """
 
     def test_create_incomplete_request(
         self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
-        """Even though this is a failure test, we use success_only_models, because the failure mode
-        is incomplete.
-
+        """Note: Even though this is a failure test, we use success_only_models, because the
+        failure mode is incomplete.
         """
+
         models, kws = success_only_models.models, success_only_models.success_kws
         incomplete_kwargs = copy.deepcopy(kws.reqs_only)  # NOTE: Use of `reqs_only`
         del incomplete_kwargs[next(iter(incomplete_kwargs))]  # Remove a required field
@@ -209,36 +228,26 @@ class CreateComplete(CreateSuccessOnly):
             _ = self.create(connection, models, failing_request)
 
 
-class TestCreateDatabase(CreateSuccessOnly, DatabaseCRUD):
-    """
-
-    Note only tested for success.
-    """
+class TestCreateDatabase(CreateSuccessOnlyLogic, DatabaseCRUD):
+    """Note: Only tested for success."""
 
     pass
 
 
-class TestCreateModelBuilders(CreateSuccessOnly, ModelBuildersCRUD):
-    """
-
-    Note only tested for success.
-    """
+class TestCreateModelBuilders(CreateSuccessOnlyLogic, ModelBuildersCRUD):
+    """Note: Only tested for success."""
 
     pass
 
 
-class TestCreateClient(CreateComplete, ClientCRUD):
-    """
-
-    """
+class TestCreateClient(CreateCompleteLogic, ClientCRUD):
+    """Note: Tested for success and failure."""
 
     pass
 
 
-class TestCreateCommandLine(CreateComplete, CommandLineCRUD):
-    """
-
-    """
+class TestCreateCommandLine(CreateCompleteLogic, CommandLineCRUD):
+    """Note: Tested for success and failure."""
 
     pass
 
@@ -324,11 +333,18 @@ class TestReadCommandLine(ReadLogic, CommandLineCRUD):
 
 
 class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
-    """Container for tests of updating existing entries in database"""
+    """Container for tests of successful database entry updates.
+
+    Note: This is used to test implementation of the database and model_builders interfaces, for
+    which we don't want to bother testing as many failure modes.
+    """
 
     def timestamp_vals_to_datetime_objs(self, kws: dict) -> dict:
+        """For testing implementation of the database and model builders, we need to parse
+        timestamp values into datetime objects. Also used for comparing ``update_with``
+        dict to ``original_table`` in ``validate_and_parse_update_kws`` method below.
         """
-        """
+
         kws_copy = copy.deepcopy(kws)
         for k, v in kws_copy.items():
             if isinstance(v, str):
@@ -339,16 +355,18 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     def validate_and_parse_update_kws(
         self, original_table: SQLModel, original_kws: dict, update_with: dict
     ) -> Tuple[dict, dict]:
+        """Ensures that the ``update_with`` dict is indeed distinct from the original
+        table values. Also parses ``update_with`` dict if required by interface.
         """
-        """
+
         original_kws = self.timestamp_vals_to_datetime_objs(original_kws)
-        # TODO: Explain below
+
         if self.interface in ("db", "model_builders"):
             update_with = self.timestamp_vals_to_datetime_objs(update_with)
-        # TODO: Explain below
+
         for k, v in original_kws.items():
             assert v == original_table.dict()[k]
-        # TODO: Explain below
+
         for k, v in original_kws.items():
             if k in update_with.keys():
                 assert v != update_with[k]
@@ -389,9 +407,9 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
     def test_update_nonexistent(
         self, success_only_models: ModelWithKwargs, session: Session, http_server: str,
     ):
+        """The one failure mode which is easy to test for all interfaces, so this is included here.
         """
-        TODO: Explain why this is part of `UpdateSuccessOnly`
-        """
+
         models = success_only_models.models
         table_not_in_db = models.table(**success_only_models.success_kws.all)
         update_with = success_only_models.success_kws.reqs_only
@@ -409,7 +427,10 @@ class UpdateSuccessOnlyLogic(BaseLogic, ModelFixtures):
 
 
 class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
-    """
+    """Container for tests of both successful _and_ failing database entry updates.
+
+    Note: This is used for public client and command line interfaces, for which we want to test the
+    complete suite of failure modes.
     """
 
     def test_update_failing_request(
@@ -435,33 +456,25 @@ class UpdateCompleteLogic(UpdateSuccessOnlyLogic):
 
 
 class TestUpdateDatabase(UpdateSuccessOnlyLogic, DatabaseCRUD):
-    """
-
-    NOTE: Not tested for failing kwargs.
-    """
+    """Note: Only tested for success plus one failure mode."""
 
     pass
 
 
 class TestUpdateModelBuilders(UpdateSuccessOnlyLogic, ModelBuildersCRUD):
-    """
-
-    NOTE: Not tested for failing kwargs.
-    """
+    """Note: Only tested for success plus one failure mode."""
 
     pass
 
 
 class TestUpdateClient(UpdateCompleteLogic, ClientCRUD):
-    """
-    """
+    """Note: Tested for success and all failure modes."""
 
     pass
 
 
 class TestUpdateCommandLine(UpdateCompleteLogic, CommandLineCRUD):
-    """
-    """
+    """Note: Tested for success and all failure modes."""
 
     pass
 
