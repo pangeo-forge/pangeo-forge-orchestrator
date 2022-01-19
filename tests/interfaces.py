@@ -1,34 +1,27 @@
-import ast
 import json
-import os
-import subprocess
-from typing import Optional
+from typing import Sequence
 
 from requests.exceptions import HTTPError
+from rich import print
 
-from pangeo_forge_orchestrator.client import Client
 
-
-class HTTPClientCRUD:
+class FastAPITestClientCRUD:
     """Client interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
     error_cls = HTTPError
 
-    def __init__(self, base_url):
-        self.base_url = base_url
-        self.client = Client(base_url)
+    def __init__(self, client):
+        self.client = client
 
     def create(self, path: str, json: dict) -> dict:
-        response = self.client.post(path, json)
+        response = self.client.post(path, json=json)
         response.raise_for_status()
         data = response.json()
         return data
 
     def read_range(self, path: str) -> dict:
         response = self.client.get(path)
-        assert response.status_code == 200
-        data = response.json()
-        return data
+        return response.json()
 
     def read_single(self, path: str, id: int) -> dict:
         response = self.client.get(f"{path}{id}")
@@ -51,21 +44,14 @@ class HTTPClientCRUD:
         return delete_response
 
 
-def get_data_from_cli(
-    request_type: str, database_url: str, endpoint: str, request: Optional[dict] = None,
-) -> dict:
-    os.environ["PANGEO_FORGE_DATABASE_URL"] = database_url
-    cmd = ["pangeo-forge", "database", request_type, endpoint]
-    if request is not None:
-        cmd.append(json.dumps(request))
-    stdout = subprocess.check_output(cmd)
-    data = ast.literal_eval(stdout.decode("utf-8"))
-    if isinstance(data, dict) and "detail" in data.keys():
-        # presence of "detail" means an error
-        # this seems like an unreliable way to detect errors
-        # what if the API response has a "detail" key
-        raise CLIError(str(data["detail"]))
-    return data
+def parse_cli_response(response):
+    # useful for debugging:
+    # for prop in ["stdout_bytes", "stderr_bytes", "return_value", "exit_code", "exception", "exc_info"]:  # noqa: E501
+    #    print(f'response.{prop}', getattr(response, prop))
+    if response.exit_code:
+        raise response.exception
+    if response.stdout:
+        return json.loads(response.stdout_bytes)
 
 
 class CLIError(Exception):
@@ -75,27 +61,28 @@ class CLIError(Exception):
 class CommandLineCRUD:
     """CLI interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    error_cls = CLIError
+    error_cls = HTTPError
 
-    def __init__(self, base_url):
-        self.base_url = base_url
+    def __init__(self, app, runner):
+        self.app = app
+        self.runner = runner
+
+    def _invoke(self, *cmds: Sequence[str]):
+        response = self.runner.invoke(self.app, ["database"] + list(cmds))
+        print("response.stdout:", response.stdout)
+        return parse_cli_response(response)
 
     def create(self, path: str, request: dict) -> dict:
-        data = get_data_from_cli("post", self.base_url, path, request)
-        return data
+        return self._invoke("post", path, json.dumps(request))
 
     def read_range(self, path: str) -> dict:
-        data = get_data_from_cli("get", self.base_url, path)
-        return data
+        return self._invoke("get", path)
 
     def read_single(self, path: str, id: int) -> dict:
-        data = get_data_from_cli("get", self.base_url, f"{path}{id}")
-        return data
+        return self._invoke("get", f"{path}{id}")
 
     def update(self, path: str, id: int, update_with: dict,) -> dict:
-        data = get_data_from_cli("patch", self.base_url, f"{path}{id}", update_with)
-        return data
+        return self._invoke("patch", f"{path}{id}", json.dumps(update_with))
 
     def delete(self, path: str, id: int) -> None:
-        delete_response = get_data_from_cli("delete", self.base_url, f"{path}{id}")
-        return delete_response
+        return self._invoke("delete", f"{path}{id}")

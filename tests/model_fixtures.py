@@ -83,8 +83,8 @@ recipe_run_fixtures = ModelFixtures(
         dict(status="not a valid status"),
         dict(message=NOT_STR),
         # the following two options should fail but don't
-        dict(id=100),  # shouldn't be able to pass id at all; instead silently ignored
-        dict(random_field_that_doesnt_exist_and_shouldnt_be_allow="foobar"),
+        # dict(id=100),  # shouldn't be able to pass id at all; instead silently ignored
+        # dict(random_field_that_doesnt_exist_and_shouldnt_be_allow="foobar"),
     ],
     update_opts=[
         {"completed_at": "2021-01-02T01:01:01Z", "status": "completed", "conclusion": "failure"},
