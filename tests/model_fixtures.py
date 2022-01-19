@@ -6,9 +6,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Sequence, Union
 
-from pangeo_forge_orchestrator.model_builders import MultipleModels
-from pangeo_forge_orchestrator.models import MODELS
-
 # Model fixture containers --------------------------------------------------------------
 
 
@@ -29,7 +26,7 @@ APIOpts = Dict[str, Union[int, str]]
 
 @dataclass
 class ModelFixtures:
-    model: MultipleModels
+    path: str
     required_fields: Sequence[str]
     create_opts: Sequence[APIOpts]
     invalid_opts: Sequence[APIOpts]
@@ -42,7 +39,7 @@ NOT_ISO8601 = "Jan 01 2021 00:00:00"
 
 
 recipe_run_fixtures = ModelFixtures(
-    model=MODELS["recipe_run"],
+    path="/recipe_runs/",
     required_fields=[
         "recipe_id",
         "bakery_id",
