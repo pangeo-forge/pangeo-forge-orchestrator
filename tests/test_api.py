@@ -22,17 +22,9 @@ def parse_to_datetime(input_string: str) -> datetime:
     return datetime.strptime(input_string, "%Y-%m-%dT%H:%M:%SZ")
 
 
-create_params = [
-    (mf.model, create_opts) for mf in ALL_MODEL_FIXTURES for create_opts in mf.create_opts
-]
-
-
-@pytest.mark.parametrize("model,create_opts", create_params)
-def test_create(model: MultipleModels, create_opts: APIOpts, client):
-    data = client.create(model, create_opts)
-
-    for k, expected in create_opts.items():
-        actual = data[k]
+def compare_response(response_fixture, reponse_data):
+    for k, expected in response_fixture.items():
+        actual = reponse_data[k]
         if isinstance(actual, datetime):
             assert actual == parse_to_datetime(expected)
         elif (
@@ -45,7 +37,19 @@ def test_create(model: MultipleModels, create_opts: APIOpts, client):
             assert add_z(actual) == add_z(expected)
         else:
             assert actual == expected
-    assert data["id"] is not None
+
+
+create_params = [
+    (mf.model, create_opts) for mf in ALL_MODEL_FIXTURES for create_opts in mf.create_opts
+]
+
+
+@pytest.mark.parametrize("model,create_opts", create_params)
+def test_create(model: MultipleModels, create_opts: APIOpts, client):
+    data = client.create(model, create_opts)
+
+    compare_response(create_opts, data)
+    assert data["id"] > 0
 
 
 create_params_incomplete = [
@@ -78,3 +82,26 @@ def test_create_invalid(model: MultipleModels, create_opts: APIOpts, invalid_arg
     create_kwargs.update(invalid_arg)
     with pytest.raises(client.error_cls):
         _ = client.create(model, create_kwargs)
+
+
+@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
+def test_read_range(model_fixtures: MultipleModels, client):
+    # first create some data
+    model = model_fixtures.model
+    for create_opts in model_fixtures.create_opts:
+        client.create(model, create_opts)
+    response = client.read_range(model)
+    for expected, actual in zip(model_fixtures.create_opts, response):
+        compare_response(expected, actual)
+        assert actual["id"] > 0
+
+
+@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
+def test_read_single(model_fixtures: MultipleModels, client):
+    # first create some data
+    model = model_fixtures.model
+    for create_opts in model_fixtures.create_opts:
+        create_response = client.create(model, create_opts)
+        read_response = client.read_single(model, create_response["id"])
+        compare_response(create_opts, read_response)
+        assert read_response["id"] == create_response["id"]

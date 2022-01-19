@@ -50,7 +50,6 @@ recipe_run_fixtures = ModelFixtures(
         "head_sha",
         "version",
         "started_at",
-        "status",
     ],
     create_opts=[
         dict(
