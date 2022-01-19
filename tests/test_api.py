@@ -103,3 +103,36 @@ def test_read_single(model_fixtures, client):
         read_response = client.read_single(path, create_response["id"])
         compare_response(create_opts, read_response)
         assert read_response["id"] == create_response["id"]
+
+
+@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
+def test_read_nonexistent(model_fixtures, client):
+    # first create some data
+    path = model_fixtures.path
+    id = 99999999  # an id that we are pretty sure does not exist in the db!
+    with pytest.raises(client.error_cls):
+        _ = client.read_single(path, id)
+
+
+@pytest.mark.parametrize("path,create_opts,invalid_arg", create_params_invalid)
+def test_update_invalid(path: str, create_opts: APIOpts, invalid_arg, client):
+    response = client.create(path, create_opts)
+    id = response["id"]
+    with pytest.raises(client.error_cls):
+        _ = client.update(path, id, invalid_arg)
+
+
+update_params = [
+    (mf.path, create_opts, invalid_opt)
+    for mf in ALL_MODEL_FIXTURES
+    for create_opts in mf.create_opts[:1]  # just use the first create fixture
+    for invalid_opt in mf.update_opts
+]
+
+
+@pytest.mark.parametrize("path,create_opts,update_opts", update_params)
+def test_update(path: str, create_opts: APIOpts, update_opts, client):
+    create_response = client.create(path, create_opts)
+    id = create_response["id"]
+    response = client.update(path, id, update_opts)
+    compare_response(update_opts, response)

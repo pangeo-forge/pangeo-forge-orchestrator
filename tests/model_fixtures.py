@@ -28,9 +28,9 @@ APIOpts = Dict[str, Union[int, str]]
 class ModelFixtures:
     path: str
     required_fields: Sequence[str]
-    create_opts: Sequence[APIOpts]
-    invalid_opts: Sequence[APIOpts]
-    update_opts: Sequence[APIOpts]
+    create_opts: Sequence[APIOpts]  # valid ways to create the model
+    invalid_opts: Sequence[APIOpts]  # setting these on creation or update should error
+    update_opts: Sequence[APIOpts]  # setting these on update should be valid
 
 
 NOT_STR = {"not parsable": "to str"}
@@ -82,8 +82,14 @@ recipe_run_fixtures = ModelFixtures(
         dict(conclusion="not a valid conclusion"),
         dict(status="not a valid status"),
         dict(message=NOT_STR),
+        # the following two options should fail but don't
+        dict(id=100),  # shouldn't be able to pass id at all; instead silently ignored
+        dict(random_field_that_doesnt_exist_and_shouldnt_be_allow="foobar"),
     ],
-    update_opts=[],
+    update_opts=[
+        {"completed_at": "2021-01-02T01:01:01Z", "status": "completed", "conclusion": "failure"},
+        {"completed_at": "2021-01-02T01:01:01Z", "status": "completed", "conclusion": "success"},
+    ],
 )
 
 ALL_MODEL_FIXTURES = [recipe_run_fixtures]

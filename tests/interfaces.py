@@ -44,12 +44,8 @@ class HTTPClientCRUD:
 
     def delete(self, path: str, id: int) -> None:
         delete_response = self.client.delete(f"{path}{id}")
-        # `assert delete_response.status_code == 200`, indicating successful deletion,
-        # is commented out in favor of `raise_for_status`, for compatibility with the
-        # `TestDelete.test_delete_nonexistent`
         delete_response.raise_for_status()
-        get_response = self.client.get(f"{path}{id}")
-        assert get_response.status_code == 404  # not found, b/c deleted
+        return delete_response.json()
 
 
 def get_data_from_cli(
@@ -62,11 +58,10 @@ def get_data_from_cli(
     stdout = subprocess.check_output(cmd)
     data = ast.literal_eval(stdout.decode("utf-8"))
     if isinstance(data, dict) and "detail" in data.keys():
-        error = data["detail"][0]
-        if isinstance(error, dict):
-            raise CLIError(error["type"])
-        else:
-            assert False, "This should probably never happen?"
+        # presence of "detail" means an error
+        # this seems like an unreliable way to detect errors
+        # what if the API response has a "detail" key
+        raise CLIError(str(data["detail"]))
     return data
 
 
@@ -100,6 +95,4 @@ class CommandLineCRUD:
 
     def delete(self, path: str, id: int) -> None:
         delete_response = get_data_from_cli("delete", self.base_url, f"{path}{id}")
-        assert delete_response == {"ok": True}  # successfully deleted
-        get_response = get_data_from_cli("get", self.base_url, f"{path}{id}")
-        assert get_response == {"detail": "not found"}
+        return delete_response
