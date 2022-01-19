@@ -28,13 +28,6 @@ the `DATABASE_URL` environment variable to determine which database to connect t
 **This environment variable must be set in order for the app to work.**
 This string must be a valid sqlalchemy database URI.
 
-For example, to set up a local environment for the test suite:
-
-```bash
-export DATABASE_URL=sqlite:///`pwd`/database.sqlite
-pytest -vx tests
-```
-
 The Heroku deployment environments automatically set this environment variable
 to point to the appropriate postgres database.
 
@@ -53,6 +46,27 @@ exists, it will migrate. For more details on how this works, see the Alembic doc
 **A migration must be run before the app is started on a fresh database!**
 Otherwise the tables will not exist. (The app code itself no longer creates tables.)
 
+> ### Local Testing 
+> 
+> What we've learned in the previous two sections about the `DATABASE_URL` variable and the requirement that migrations be run prior to starting the API informs the local testing approach. To set up local testing, run
+>
+> ```bash
+> export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+> ```
+>
+> to assign the required environment variable. Then run the migrations with
+> 
+> ```bash
+> python -m alembic upgrade head
+> ```
+> 
+> And finally, invoke the tests
+>
+> ```bash
+> pytest -vx
+> ```
+>
+> Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 ### Creating a new Database Version
 
 Any time the SQLModel table models are changed in any way, a new migration
