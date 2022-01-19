@@ -72,16 +72,16 @@ recipe_run_fixtures = ModelFixtures(
         ),
     ],
     invalid_opts=[
-        dict(recipe_id=NOT_STR),
+        dict(recipe_id=NOT_STR),  # type: ignore
         dict(bakery_id=NOT_INT),
         dict(feedstock_id=NOT_INT),
-        dict(head_sha=NOT_STR),
-        dict(version=NOT_STR),
+        dict(head_sha=NOT_STR),  # type: ignore
+        dict(version=NOT_STR),  # type: ignore
         dict(started_at=NOT_ISO8601),
         dict(completed_at=NOT_ISO8601),
         dict(conclusion="not a valid conclusion"),
         dict(status="not a valid status"),
-        dict(message=NOT_STR),
+        dict(message=NOT_STR),  # type: ignore
         # the following two options should fail but don't
         # dict(id=100),  # shouldn't be able to pass id at all; instead silently ignored
         # dict(random_field_that_doesnt_exist_and_shouldnt_be_allow="foobar"),

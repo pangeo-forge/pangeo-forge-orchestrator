@@ -1,5 +1,4 @@
 import json
-from typing import Sequence
 
 from requests.exceptions import HTTPError
 
@@ -66,7 +65,7 @@ class CommandLineCRUD:
         self.app = app
         self.runner = runner
 
-    def _invoke(self, *cmds: Sequence[str]):
+    def _invoke(self, *cmds: str):
         response = self.runner.invoke(self.app, ["database"] + list(cmds))
         print("response.stdout:", response.stdout)
         return parse_cli_response(response)
