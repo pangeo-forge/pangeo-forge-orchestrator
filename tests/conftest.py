@@ -1,15 +1,15 @@
-import copy
 import os
 import signal
 import socket
 import subprocess
 import time
-from dataclasses import dataclass, field
-from typing import List, Tuple
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
 
 import pytest
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session
+from sqlmodel import Session, create_engine
 
 from pangeo_forge_orchestrator.model_builders import MultipleModels
 from pangeo_forge_orchestrator.models import MODELS
@@ -71,12 +71,9 @@ def uncleared_session(tempdir):
     # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
     # the session returned by that function resolves the database path via `os.getcwd()`, but
     # our tests are run from a different working directory than the one where the database resides.
-
-    # sqlite_file_path = f"sqlite:////{tempdir}/database.db"
-    # connect_args = {"check_same_thread": False}
-    # engine = create_engine(sqlite_file_path, echo=True, connect_args=connect_args)
-    from pangeo_forge_orchestrator.database import engine
-
+    sqlite_file_path = f"sqlite:////{tempdir}/database.db"
+    connect_args = {"check_same_thread": False}
+    engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
     with Session(engine) as session:
         yield session
 
@@ -98,148 +95,214 @@ def http_server(http_server_url, session):
 
 # Models --------------------------------------------------------------------------------
 
+# Model fixture containers --------------------------------------------------------------
 
-@dataclass
-class ModelKwargs:
-    """Container to hold kwargs for instantiating ``SQLModel`` table model.
 
-    :param request: The kwargs for instantatiting a table model. Can be passed to a model object
-    in the Python context, or sent as JSON to the database API.
-    :param blank_opts: List of any optional model fields which are excluded from the ``request``.
+class APIErrors(str, Enum):
+    """Error types that may occur if field input does not conform to the schema defined by the
+    table's Pydantic base model.
     """
 
-    request: dict
-    blank_opts: List[str] = field(default_factory=list)
+    datetime = "datetime"
+    enum = "enum"
+    int = "integer"
+    missing = "missing"
+    str = "string"
 
 
 @dataclass
-class ModelFixture:
-    """Container for a ``MultipleModels`` object (itself containing ``SQLModel`` objects) with
-    kwargs which can be used to instantiate the models within it.
+class SuccessKwargs:
+    """Container to hold kwargs for instantiating ``SQLModel`` table model. Can be passed to a
+    model object in the Python context, or sent as JSON to the database API. As indicated by the
+    ``__post_init__`` method of this class, for all keys present in both kwargs dictionaries, there
+    cannot be any overlap in values. This ensures that tests which use both sets of kwargs (i.e.,
+    read range and update tests) have distinct values to work with for each of the shared keys.
 
-    :param models: A ``MultipleModels`` object.
-    :param kwargs: A 2-tuple consisting of two ``ModelKwargs`` objects matched to the ``models``.
-      Note that two sets of kwargs are required because: (1) the ``read_range`` test requires
-      that more than one entry is populated into the database; and (2) the ``update`` test requires
-      that we have have an additional set of kwargs with which to update a database entry.
+    :param all: This dict should contain a key:value pair for all fields (required & optional).
+    :param reqs_only: This dict should contain a key:value pair only for required fields.
+    """
+
+    all: dict
+    reqs_only: dict
+
+    def __post_init__(self):
+        overlap = {
+            k: v
+            for k, v in self.all.items()
+            if k in self.reqs_only.keys() and self.reqs_only[k] == v
+        }
+        if overlap:
+            raise ValueError(
+                "On instantiation of `SuccessKwargs`, the following values in `self.all` and "
+                f"`self.reqs_only` were found to be equivalent: {overlap}. All values in these "
+                "two dicts must be distinct."
+            )
+
+
+@dataclass
+class FailureKwargs:
+    """Container to hold kwargs for a ``SQLModel`` which will cause a known failure (i.e. type
+    validation error) to occur. Note that the ``update_with`` dict is not a complete set of
+    kwargs for instantiating the ``SQLModel``, but rather the minimal set of kwargs which, if used
+    to update a ``SuccessKwargs.all`` dict, would cause the error specified by ``raises`` to occur.
+
+    :param update_with: A dictionary which will cause a known type validation error to occur. This
+      is likely to be only a single key:value pair, where the value provided is known to be of not
+      parseable into a valid type for the field specified by the key. In (less common) situations
+      where the validation error is caused by interrelationships of model fields, this dictionary
+      may contain more than one key:value pair.
+    :param raises: The error type raised by passing the kwargs provided in ``update_with``. Note
+      that this is not the actual Python exception class, but rather a categorical option from the
+      ``APIErrors`` class. This is because different interfaces (client, CLI, etc.) raise different
+      exception classes when the same failure mode is encountered.
+    """
+
+    update_with: dict
+    raises: APIErrors
+
+
+@dataclass
+class ModelWithKwargs:
+    """Container for a ``MultipleModels`` object (itself containing ``SQLModel`` objects) with
+    kwargs which can be used to successfully instantiate the models within it, as well as kwargs
+    which will cause known failures to occur.
+
+    :param models: A ``MultipleModels`` object cooresponding to the table to test.
+    :param success_kws: A ``SuccessKwargs`` object cooresponding to the table to test.
+    :param failure_kws: A ``FailureKwargs`` object cooresponding to the table to test.
     """
 
     models: MultipleModels
-    kwargs: Tuple[ModelKwargs, ModelKwargs]
-
-    def __post_init__(self):
-        if len(self.kwargs) != 2:
-            raise ValueError("``len(self.kwargs)`` must equal 2.")
+    success_kws: SuccessKwargs
+    failure_kws: Optional[FailureKwargs] = None
 
 
+# Specific model fixtures ---------------------------------------------------------------
+#
 # To test additional models:
-#   1. Add a session-scoped fixture here which returns a `ModelFixture`, the name of which should
-#      be `model_key_with_kwargs`, where `model_key` is the name of the key mapping for the
-#      associated `MultipleModels` object in the `pangeo_forge_orchestrator.models::MODELS` dict.
-#   2. Add `lazy_fixture("model_key_with_kwargs")` to the param list of the `models_with_kwargs`
-#      fixture. (Where `"model_key_with_kwargs"` is the name of the fixture you created in step 1.)
+#   1. Add a `ModelNameFixtures` object below, following the template provided by the
+#      `RecipeRunFixtures` object.
+#   2. Add the `ModelNameFixtures` as a subclass of of the `ModelFixtures` object below.
+#
+# NOTE: The constants defined below can be used for instantiating `FailureKwargs` objects
+# with values which cannot be parsed by Pydantic to a given type. Because Pydantic parses
+# input fields, it is not sufficient for a given input to be of a different Python type;
+# for example, the int `1` can be parsed by Pydantic as `str(1)`.
+
+NOT_STR = {"not parsable": "to str"}
+NOT_INT = "not parsable to int"
+NOT_ISO8601 = "Jan 01 2021 00:00:00"
 
 
-@pytest.fixture(scope="session")
-def recipe_run_with_kwargs():
-    kws = [
-        ModelKwargs(
-            request=dict(
-                recipe_id="test-recipe-0",
-                run_date="2021-01-01T00:00:00Z",
-                bakery_id=0,
-                feedstock_id=0,
-                commit="012345abcdefg",
-                version="1.0",
-                status="complete",
-            ),
-            blank_opts=["message"],
-        ),
-        ModelKwargs(
-            request=dict(
-                recipe_id="test-recipe-1",
-                run_date="2021-02-02T00:00:00Z",
-                bakery_id=1,
-                feedstock_id=1,
-                commit="012345abcdefg",
-                version="2.0",
-                status="complete",
-                message="hello",
-            ),
-        ),
-    ]
-    return ModelFixture(MODELS["recipe_run"], kws)
+class RecipeRunFixtures:
+    """Container for fixtures for testing the ``RecipeRun`` model. Also serves as a template for
+    fixtures classes for other models. Note that all such fixture classes must include:
+        1. A ``models`` attribute defining the cooresponding ``MultipleModels`` object in the
+           ``pangeo_forge_orchestrator.models.MODELS`` dict.
+        2. A ``failure_kws_model_name`` session-scoped fixture, parametrized to return as many
+           ``FailureKwargs`` objects as you would like to test for the given model.
+        3. A ``success_kws_model_name`` session-scoped fixture, returning a ``SuccessKwargs``
+           object cooresponding to the model.
+        4. A ``model_name_success_only_model`` session-scoped fixture, returning a
+           ``ModelWithKwargs`` object instantiated with the ``models`` attribute and the
+           ``success_kws_model_name`` fixture.
+        5. A ``model_name_complete_model`` session-scoped fixture, returning a ``ModelWithKwargs``
+           object instantiated with the ``models`` attribute, the ``success_kws_model_name``
+           fixture, and the ``failure_kws_model_name`` fixture.
+    """
 
+    models = MODELS["recipe_run"]
 
-@pytest.fixture(
-    scope="session", params=[lazy_fixture("recipe_run_with_kwargs")],
-)
-def models_with_kwargs(request):
-    return request.param
+    @pytest.fixture(
+        scope="session",
+        params=[
+            (dict(recipe_id=NOT_STR), APIErrors.str),
+            (dict(bakery_id=NOT_INT), APIErrors.int),
+            (dict(feedstock_id=NOT_INT), APIErrors.int),
+            (dict(head_sha=NOT_STR), APIErrors.str),
+            (dict(version=NOT_STR), APIErrors.str),  # TODO: use `ConstrainedStr`
+            (dict(started_at=NOT_ISO8601), APIErrors.datetime),
+            (dict(completed_at=NOT_ISO8601), APIErrors.datetime),
+            (dict(conclusion="not a valid conclusion"), APIErrors.enum),
+            (dict(status="not a valid status"), APIErrors.enum),
+            (dict(message=NOT_STR), APIErrors.str),
+            # TODO: Add invalid pairs of fields; e.g. `status=completed` w/ `conclusion=None`.
+        ],
+    )
+    def failure_kws_recipe_run(self, request):
+        """A parametrized fixture of ``FailureKwargs`` objects covering all known failure modes of
+        the ``RecipeRun`` model.
+        """
 
-
-# CRUD function fixtures ------------------------------------------------------------------
-
-# Create ----------------------------------------------------------------------------------
-
-
-class CreateFixtures:
-    """Fixtures for ``TestCreate``"""
-
-    @pytest.fixture
-    def model_to_create(self, models_with_kwargs):
-        kw_0, _ = models_with_kwargs.kwargs
-        return models_with_kwargs.models, kw_0.request, kw_0.blank_opts
-
-
-# Read ------------------------------------------------------------------------------------
-
-
-class ReadFixtures:
-    """Fixtures for ``TestRead``"""
-
-    @pytest.fixture
-    def models_to_read(self, models_with_kwargs: ModelFixture):
-        models = models_with_kwargs.models
-        kw_0, kw_1 = models_with_kwargs.kwargs
-        model_0 = models.table(**kw_0.request)
-        model_1 = models.table(**kw_1.request)
-        return models, (model_0, model_1)
-
-    @pytest.fixture
-    def single_model_to_read(self, models_with_kwargs: ModelFixture):
-        models = models_with_kwargs.models
-        _, kw_1 = models_with_kwargs.kwargs
-        table = models.table(**kw_1.request)
-        return models, table
-
-
-# Update --------------------------------------------------------------------------------
-
-
-class UpdateFixtures:
-    """Fixtures for ``TestUpdate``"""
+        update_with, raises = request.param
+        return FailureKwargs(update_with, raises)
 
     @pytest.fixture(scope="session")
-    def model_to_update(self, models_with_kwargs):
-        models = models_with_kwargs.models
-        kw_0, kw_1 = models_with_kwargs.kwargs
-        table = models.table(**kw_0.request)
-        different_kws = copy.deepcopy(kw_1.request)
-        key = list(different_kws)[0]
-        update_with = {key: different_kws.pop(key)}
-        return models, table, update_with
+    def success_kws_recipe_run(self) -> SuccessKwargs:
+        """A ``SuccessKwargs`` object for the ``RecipeRun`` model, inclusive of an ``.all`` dict
+        containing valid values for all fields, as well as a ``.reqs_only`` dict containing only
+        required fields. Note that for shared keys, all values are distinct (this is enforced by
+        the ``__post_init__`` method of ``SucessKwargs``).
+        """
 
-
-# Delete --------------------------------------------------------------------------------
-
-
-class DeleteFixtures:
-    """Fixtures for ``TestDelete``"""
+        success_kwargs = SuccessKwargs(
+            all=dict(
+                recipe_id="test-recipe-0",
+                bakery_id=0,
+                feedstock_id=0,
+                head_sha="abcdefg12345",
+                version="1.0",
+                started_at="2021-01-01T00:00:00Z",
+                completed_at="2021-01-01T01:01:01Z",
+                conclusion="success",
+                status="completed",
+                message="hello",
+            ),
+            reqs_only=dict(
+                recipe_id="test-recipe-1",
+                bakery_id=1,
+                feedstock_id=1,
+                head_sha="012345abcdefg",
+                version="2.0",
+                started_at="2021-02-02T00:00:00Z",
+                status="queued",
+            ),
+        )
+        return success_kwargs
 
     @pytest.fixture
-    def model_to_delete(self, models_with_kwargs):
-        models = models_with_kwargs.models
-        kw_0, _ = models_with_kwargs.kwargs
-        table = models.table(**kw_0.request)
-        return models, table
+    def recipe_run_success_only_model(
+        self, success_kws_recipe_run: SuccessKwargs
+    ) -> ModelWithKwargs:
+        """A ``ModelWithKwargs`` object for ``RecipeRun`` omitting the optional failure kwargs.
+        """
+        return ModelWithKwargs(self.models, success_kws_recipe_run)
+
+    @pytest.fixture
+    def recipe_run_complete_model(
+        self, success_kws_recipe_run: SuccessKwargs, failure_kws_recipe_run: FailureKwargs,
+    ) -> ModelWithKwargs:
+        """A ``ModelWithKwargs`` object for ``RecipeRun`` including the optional failure kwargs.
+        """
+        return ModelWithKwargs(self.models, success_kws_recipe_run, failure_kws_recipe_run)
+
+
+class ModelFixtures(RecipeRunFixtures):
+    """A container of lazy fixtures for all models to test. To add a model, add its cooresponding
+    fixtures class as a subclass; e.g., ``ModelFixtures(RecipeRunFixtures, ModelNameFixtures)``.
+    Then add ``lazy_fixture("model_name_success_only_model")`` fixture to the params list of
+    ``sucess_only_models`` and ``lazy_fixture("model_name_complete_model")`` to the params list
+    of ``complete_models``.
+    """
+
+    @pytest.fixture(
+        scope="session", params=[lazy_fixture("recipe_run_success_only_model")],
+    )
+    def success_only_models(self, request) -> ModelWithKwargs:
+        return request.param
+
+    @pytest.fixture(
+        scope="session", params=[lazy_fixture("recipe_run_complete_model")],
+    )
+    def complete_models(self, request) -> ModelWithKwargs:
+        return request.param
