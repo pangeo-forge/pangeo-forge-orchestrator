@@ -46,8 +46,8 @@ exists, it will migrate. For more details on how this works, see the Alembic doc
 **A migration must be run before the app is started on a fresh database!**
 Otherwise the tables will not exist. (The app code itself no longer creates tables.)
 
-> ### Local Testing 
-> 
+> ### Local Testing
+>
 > What we've learned in the previous two sections about the `DATABASE_URL` variable and the requirement that migrations be run prior to starting the API informs the local testing approach. To set up local testing, run
 >
 > ```bash
@@ -55,11 +55,11 @@ Otherwise the tables will not exist. (The app code itself no longer creates tabl
 > ```
 >
 > to assign the required environment variable. Then run the migrations with
-> 
+>
 > ```bash
 > python -m alembic upgrade head
 > ```
-> 
+>
 > And finally, invoke the tests
 >
 > ```bash
