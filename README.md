@@ -47,27 +47,6 @@ exists, it will migrate. For more details on how this works, see the Alembic doc
 **A migration must be run before the app is started on a fresh database!**
 Otherwise the tables will not exist. (The app code itself no longer creates tables.)
 
-> ### Local Testing
->
-> What we've learned in the previous two sections about the `DATABASE_URL` variable and the requirement that migrations be run prior to starting the API informs the local testing approach. To set up local testing, run
->
-> ```bash
-> export DATABASE_URL=sqlite:///`pwd`/database.sqlite
-> ```
->
-> to assign the required environment variable. Then run the migrations with
->
-> ```bash
-> python -m alembic upgrade head
-> ```
->
-> And finally, invoke the tests
->
-> ```bash
-> pytest -vx
-> ```
->
-> Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 ### Creating a new Database Version
 
 Any time the SQLModel table models are changed in any way, a new migration
@@ -84,6 +63,37 @@ when we want to migrate.
 If the migration is complex or ambiguous, the migration script might have to be
 tweaked manually.
 
+## Local Testing
+
+What we've learned in the previous section on migrations informs the local testing approach. To set up local testing, first run
+
+```bash
+export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+```
+
+to assign the required environment variable.
+
+> If you are testing changes to `pangeo_forge_orchestrator/models.py`, you will now need to generate a new migration script with
+>
+> ```bash
+> python -m alembic revision --autogenerate -m "Description of migration"
+> ```
+>
+> Note this will be required each time changes are made to `models.py`. You can skip this step if you haven't changed that module.
+
+Then run the migrations with
+
+```bash
+python -m alembic upgrade head
+```
+
+And finally, invoke the tests
+
+```bash
+pytest -vx
+```
+
+Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 
 ## Heroku Deployment
 
