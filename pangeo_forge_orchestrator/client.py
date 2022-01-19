@@ -24,6 +24,7 @@ class Client:
         :param json: The request JSON as a Python ``dict``.
         """
         response = requests.post(f"{self.base_url}{endpoint}", json=json)
+        response.raise_for_status()
         return response
 
     def get(self, endpoint: str):
@@ -35,6 +36,7 @@ class Client:
             table. If the latter, returns single table entry.
         """
         response = requests.get(f"{self.base_url}{endpoint}")
+        response.raise_for_status()
         return response
 
     def patch(self, endpoint: str, json: dict):
@@ -44,6 +46,7 @@ class Client:
         :param json: The request JSON as a Python ``dict``.
         """
         response = requests.patch(f"{self.base_url}{endpoint}", json=json)
+        response.raise_for_status()
         return response
 
     def delete(self, endpoint: str):
@@ -53,4 +56,5 @@ class Client:
             e.g. '/my_endpoint/1'.
         """
         response = requests.delete(f"{self.base_url}{endpoint}")
+        response.raise_for_status()
         return response
