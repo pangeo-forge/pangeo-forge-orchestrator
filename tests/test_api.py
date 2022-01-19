@@ -4,7 +4,6 @@ import pytest
 
 from pangeo_forge_orchestrator.model_builders import MultipleModels
 
-from .interfaces import client  # noqa: F401
 from .model_fixtures import ALL_MODEL_FIXTURES, APIOpts
 
 
@@ -61,7 +60,7 @@ create_params_incomplete = [
 def test_create_incomplete(model: MultipleModels, create_opts: APIOpts, required_arg: str, client):
     create_kwargs = create_opts.copy()
     del create_kwargs[required_arg]
-    with pytest.raises(client.error_cls) as err:
+    with pytest.raises(client.error_cls):
         _ = client.create(model, create_kwargs)
 
 

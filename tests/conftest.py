@@ -7,7 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from pangeo_forge_orchestrator.models import MODELS
 
-# Helpers ---------------------------------------------------------------------------------
+from .interfaces import CommandLineCRUD, HTTPClientCRUD
 
 
 def get_open_port():
@@ -86,3 +86,9 @@ def http_server(http_server_url, session):
     for k in MODELS.keys():
         clear_table(session, MODELS[k].table)  # make sure the database is empty
     return http_server_url
+
+
+@pytest.fixture(params=[HTTPClientCRUD, CommandLineCRUD])
+def client(request, http_server_url):
+    CRUDClass = request.param
+    return CRUDClass(http_server_url)

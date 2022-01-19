@@ -4,7 +4,6 @@ import os
 import subprocess
 from typing import Optional
 
-import pytest
 from requests.exceptions import HTTPError
 from sqlmodel import Session, SQLModel
 
@@ -81,7 +80,7 @@ class HTTPClientCRUD:
         # is commented out in favor of `raise_for_status`, for compatibility with the
         # `TestDelete.test_delete_nonexistent`
         delete_response.raise_for_status()
-        get_response = client.get(f"{models.path}{table.id}")
+        get_response = self.client.get(f"{models.path}{table.id}")
         assert get_response.status_code == 404  # not found, b/c deleted
 
 
@@ -114,9 +113,3 @@ class CommandLineCRUD:
         assert delete_response == {"ok": True}  # successfully deleted
         get_response = get_data_from_cli("get", self.base_url, f"{models.path}{table.id}")
         assert get_response == {"detail": f"{models.table.__name__} not found"}
-
-
-@pytest.fixture(params=[HTTPClientCRUD, CommandLineCRUD])
-def client(request, http_server_url):
-    CRUDClass = request.param
-    return CRUDClass(http_server_url)
