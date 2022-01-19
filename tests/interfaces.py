@@ -44,8 +44,11 @@ class HTTPClientCRUD:
 
     def delete(self, path: str, id: int) -> None:
         delete_response = self.client.delete(f"{path}{id}")
+        # `assert delete_response.status_code == 200`, indicating successful deletion,
+        # is commented out in favor of `raise_for_status`, for compatibility with the
+        # `TestDelete.test_delete_nonexistent`
         delete_response.raise_for_status()
-        return delete_response.json()
+        return delete_response
 
 
 def get_data_from_cli(

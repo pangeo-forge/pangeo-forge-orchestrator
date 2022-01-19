@@ -136,3 +136,19 @@ def test_update(path: str, create_opts: APIOpts, update_opts, client):
     id = create_response["id"]
     response = client.update(path, id, update_opts)
     compare_response(update_opts, response)
+
+
+@pytest.mark.parametrize("path,create_opts", create_params)
+def test_delete(path: str, create_opts: APIOpts, client):
+    data = client.create(path, create_opts)
+    id = data["id"]
+    _ = client.delete(path, id)
+    with pytest.raises(client.error_cls):
+        _ = client.read_single(path, id)
+
+
+@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
+def test_delete_invalid(model_fixtures, client):
+    id = 99999999
+    with pytest.raises(client.error_cls):
+        _ = client.delete(model_fixtures.path, id)
