@@ -78,9 +78,6 @@ class MultipleModels:
         cls_name = self.make_cls_name(self.base, "Update")
         sig = self.base.__signature__
         params = list(sig.parameters)
-        if "id" in params:
-            # disallow changing the model ID field once created
-            params.remove("id")
         # Pulling type via `__signature__` rather than `__annotation__` because
         # this accessor drops the `typing.Union[...]` wrapper for optional fields
         annotations = {p: Union[sig.parameters[p].annotation, None] for p in params}
