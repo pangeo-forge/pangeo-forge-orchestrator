@@ -2,7 +2,6 @@ import json
 from typing import Sequence
 
 from requests.exceptions import HTTPError
-from rich import print
 
 
 class FastAPITestClientCRUD:
