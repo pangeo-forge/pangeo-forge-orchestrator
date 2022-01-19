@@ -66,5 +66,5 @@ def delete(endpoint: str = typer.Argument(..., help=specific_endpoint)):
 cli.add_typer(db, name="database")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     cli()
