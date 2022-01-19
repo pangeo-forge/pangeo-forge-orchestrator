@@ -15,6 +15,7 @@ def get_session():
 
 @app.on_event("startup")
 def on_startup():
+    print("STARTING UP!")
     # `SQLModel` registration logic requires that we import `models` before creating the database.
     # This works fine now but leaving this link here to avoid confusion in a future refactor:
     # https://sqlmodel.tiangolo.com/tutorial/code-structure/#order-matters

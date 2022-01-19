@@ -67,7 +67,6 @@ class CommandLineCRUD:
 
     def _invoke(self, *cmds: str):
         response = self.runner.invoke(self.app, ["database"] + list(cmds))
-        print("response.stdout:", response.stdout)
         return parse_cli_response(response)
 
     def create(self, path: str, request: dict) -> dict:

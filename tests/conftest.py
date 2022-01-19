@@ -8,6 +8,7 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
 
+from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
@@ -93,9 +94,10 @@ def http_server(http_server_url, session):
 
 @pytest.fixture(scope="session")
 def fastapi_test_client_uncleared():
-    from pangeo_forge_orchestrator.api import app, get_session
+    from pangeo_forge_orchestrator.api import get_session
 
-    return TestClient(app), get_session
+    with TestClient(app) as client:
+        yield client, get_session
 
 
 @pytest.fixture
