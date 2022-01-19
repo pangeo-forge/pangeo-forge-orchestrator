@@ -175,6 +175,7 @@ def update(*, session: Session, table_cls: SQLModel, id: int, model: SQLModel) -
     """
     db_model = session.get(table_cls, id)
     if not db_model:
+        # TODO: add test coverage for this
         raise HTTPException(status_code=404, detail=f"{table_cls.__name__} not found")
     model_data = model.dict(exclude_unset=True)
     for key, value in model_data.items():

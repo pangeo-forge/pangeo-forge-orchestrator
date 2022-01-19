@@ -19,6 +19,8 @@ jobs:
   test:
     name: ${{ matrix.python-version }}-build
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite:///${{ github.workspace }}/database.sqlite
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +57,9 @@ jobs:
         run: |
           conda info
           conda list
+      - name: 📦 Initialize sqlite database for tests
+        shell: bash -l {0}
+        run: python -m alembic upgrade head
       - name: Run Tests
         shell: bash -l {0}
         run: |

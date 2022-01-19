@@ -1,25 +1,8 @@
 """
 This is where we put all the data about creating / updating models
 """
-
 from dataclasses import dataclass
-from enum import Enum
 from typing import Dict, Sequence, Union
-
-# Model fixture containers --------------------------------------------------------------
-
-
-class APIErrors(str, Enum):
-    """Error types that may occur if field input does not conform to the schema defined by the
-    table's Pydantic base model.
-    """
-
-    datetime = "datetime"
-    enum = "enum"
-    int = "integer"
-    missing = "missing"
-    str = "string"
-
 
 APIOpts = Dict[str, Union[int, str]]
 
