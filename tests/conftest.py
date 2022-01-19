@@ -45,7 +45,7 @@ def http_server_url(tempdir, request):
         "--workers=1",
         "-k",
         "uvicorn.workers.UvicornWorker",
-        "pangeo_forge_orchestrator.api:api",
+        "pangeo_forge_orchestrator.api:app",
         "--log-level=info",
     ]
 
