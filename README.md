@@ -4,6 +4,7 @@ A central place for introspecting and executing the various modular components o
 [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml)
 [![pre-commit](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml)
 [![Documentation Status](https://readthedocs.org/projects/pangeo-forge-orchestrator/badge/?version=latest)](https://pangeo-forge-orchestrator.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/branch/main/graph/badge.svg?token=ay8eJ6JUiX)](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator)
 
 
 ## Database Migrations with Alembic
