@@ -5,7 +5,7 @@ from .database import engine
 from .model_builders import register_endpoints
 from .models import MODELS
 
-api = FastAPI()
+app = FastAPI()
 
 
 def get_session():
@@ -14,4 +14,4 @@ def get_session():
 
 
 for k in MODELS.keys():
-    register_endpoints(api, models=MODELS[k], get_session=get_session)
+    register_endpoints(app, models=MODELS[k], get_session=get_session)

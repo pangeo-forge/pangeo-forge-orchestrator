@@ -7,11 +7,16 @@ from .client import Client
 
 cli = typer.Typer()
 db = typer.Typer()
-client = Client(base_url=os.environ["PANGEO_FORGE_DATABASE_URL"])
 
 top_endpoint = "A top level endpoint, enclosed in forward slashes, e.g. '/my_endpoint/'."
 specific_endpoint = "A unique entry endpoint concluding with an integer id, e.g. '/my_endpoint/1'."
 json_help = "A JSON string, created via with Python's ``json.dumps`` method, for example."
+
+
+def get_client():
+    # Putting this in a function means that the environment variable is checked
+    # at evaluation time rather than import time.
+    return Client(base_url=os.environ["PANGEO_FORGE_DATABASE_URL"])
 
 
 @db.command()
@@ -21,8 +26,8 @@ def post(
 ):
     """Add new entries to the database."""
     as_dict = ast.literal_eval(json)
-    response = client.post(endpoint=endpoint, json=as_dict)
-    typer.echo(response.json())
+    response = get_client().post(endpoint=endpoint, json=as_dict)
+    typer.echo(response.text)
 
 
 @db.command()
@@ -36,8 +41,8 @@ def get(
     )
 ):
     """Read entries from the database."""
-    response = client.get(endpoint=endpoint)
-    typer.echo(response.json())
+    response = get_client().get(endpoint=endpoint)
+    typer.echo(response.text)
 
 
 @db.command()
@@ -47,15 +52,15 @@ def patch(
 ):
     """Update entries in the database."""
     as_dict = ast.literal_eval(json)
-    response = client.patch(endpoint=endpoint, json=as_dict)
-    typer.echo(response.json())
+    response = get_client().patch(endpoint=endpoint, json=as_dict)
+    typer.echo(response.text)
 
 
 @db.command()
 def delete(endpoint: str = typer.Argument(..., help=specific_endpoint)):
     """Delete entries from the database."""
-    response = client.delete(endpoint=endpoint)
-    typer.echo(response.json())
+    response = get_client().delete(endpoint=endpoint)
+    typer.echo(response.text)
 
 
 cli.add_typer(db, name="database")
