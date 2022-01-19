@@ -1,0 +1,23 @@
+{
+  "name": "Pangeo Forge API",
+  "description": "FastAPI / Postgres Backend App",
+  "env": {
+    "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:standard-0"
+    }
+  ],
+  "environments": {
+    "test": {
+      "addons": [
+        "heroku-postgresql:in-dyno"
+      ],
+      "scripts": {
+        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
+        "test": "pytest -vsx tests"
+      }
+    }
+  }
+}

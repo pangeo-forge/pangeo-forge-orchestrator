@@ -1,3 +1,5 @@
+import os
+import signal
 import socket
 import subprocess
 import time
@@ -7,6 +9,15 @@ from fastapi.testclient import TestClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
+
+try:
+    _ = os.environ["DATABASE_URL"]
+except KeyError:  # pragma: no cover
+    raise ValueError(
+        "The DATABASE_URL environment variable must be set and "
+        "the corresponding database migrated in order to run the tests. "
+        "See README.md for details."
+    )
 
 from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.models import MODELS
@@ -23,26 +34,6 @@ def get_open_port():
     return port
 
 
-def start_http_server(path, request):
-    port = get_open_port()
-    command_list = [
-        "uvicorn",
-        "pangeo_forge_orchestrator.api:app",
-        f"--port={port}",
-        "--log-level=critical",
-    ]
-    p = subprocess.Popen(command_list, cwd=path)
-    url = f"http://127.0.0.1:{port}"
-    time.sleep(1)  # let the server start up
-
-    def teardown():
-        p.kill()
-
-    request.addfinalizer(teardown)
-
-    return url
-
-
 # General fixtures ------------------------------------------------------------------------
 
 
@@ -53,8 +44,30 @@ def tempdir(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def http_server_url(tempdir, request):
-    url = start_http_server(tempdir, request=request)
-    return url
+    env_port = os.environ.get("PORT", False)
+    port = env_port or get_open_port()
+    host = "127.0.0.1"
+    url = f"http://{host}:{port}"
+    command_list = [
+        "gunicorn",
+        f"--bind={host}:{port}",
+        "--workers=1",
+        "-k",
+        "uvicorn.workers.UvicornWorker",
+        "pangeo_forge_orchestrator.api:app",
+        "--log-level=info",
+    ]
+
+    # the setsid allows us to properly clean up the gunicorn child processes
+    # otherwise those get zombied
+    # https://stackoverflow.com/a/22582602/3266235
+    p = subprocess.Popen(command_list, cwd=tempdir, preexec_fn=os.setsid)
+
+    time.sleep(1)  # let the server start up
+
+    yield url
+
+    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
 
 
 @pytest.fixture
