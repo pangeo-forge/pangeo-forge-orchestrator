@@ -92,4 +92,22 @@ recipe_run_fixtures = ModelFixtures(
     ],
 )
 
-ALL_MODEL_FIXTURES = [recipe_run_fixtures]
+bakery_fixtures = ModelFixtures(
+    path="/bakeries/",
+    required_fields=["region", "name", "description"],
+    create_opts=[
+        dict(region="a", name="b", description="c"),
+        dict(region="d", name="e", description="f"),
+    ],
+    invalid_opts=[
+        dict(region=NOT_STR),  # type: ignore
+        dict(name=NOT_STR),  # type: ignore
+        dict(description=NOT_STR),  # type: ignore
+    ],
+    update_opts=[
+        {"region": "x", "name": "y", "description": "z"},
+        {"region": "q", "name": "r", "description": "s"},
+    ],
+)
+
+ALL_MODEL_FIXTURES = [recipe_run_fixtures, bakery_fixtures]
