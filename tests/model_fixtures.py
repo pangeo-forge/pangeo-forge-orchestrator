@@ -2,9 +2,16 @@
 This is where we put all the data about creating / updating models
 """
 from dataclasses import dataclass
-from typing import Dict, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 APIOpts = Dict[str, Union[int, str]]
+
+
+@dataclass
+class RelationFixture:
+    field_name: str  # field name in related table
+    path: str  # API endpoint path
+    create_opts: APIOpts
 
 
 @dataclass
@@ -14,6 +21,7 @@ class ModelFixtures:
     create_opts: Sequence[APIOpts]  # valid ways to create the model
     invalid_opts: Sequence[APIOpts]  # setting these on creation or update should error
     update_opts: Sequence[APIOpts]  # setting these on update should be valid
+    requires_relations: Optional[List[RelationFixture]] = None  # req'd for read_single tests
 
 
 NOT_STR = {"not parsable": "to str"}
@@ -34,8 +42,8 @@ recipe_run_fixtures = ModelFixtures(
     create_opts=[
         dict(
             recipe_id="test-recipe-0",
-            bakery_id=0,
-            feedstock_id=0,
+            bakery_id=1,  # has to be `1` unless we change `RelationFixture`
+            feedstock_id=1,  # has to be `1` unless we change `RelationFixture`
             head_sha="abcdefg12345",
             version="1.0",
             started_at="2021-01-01T00:00:00Z",
@@ -46,8 +54,8 @@ recipe_run_fixtures = ModelFixtures(
         ),
         dict(
             recipe_id="test-recipe-1",
-            bakery_id=1,
-            feedstock_id=1,
+            bakery_id=1,  # has to be `1` unless we change `RelationFixture`
+            feedstock_id=1,  # has to be `1` unless we change `RelationFixture`
             head_sha="012345abcdefg",
             version="2.0",
             started_at="2021-02-02T00:00:00Z",
@@ -92,5 +100,12 @@ bakery_fixtures = ModelFixtures(
         {"region": "q", "name": "r", "description": "s"},
     ],
 )
+
+recipe_run_fixtures.requires_relations = [
+    RelationFixture("bakery", bakery_fixtures.path, bakery_fixtures.create_opts[0]),
+]
+bakery_fixtures.requires_relations = [
+    RelationFixture("recipe_runs", recipe_run_fixtures.path, recipe_run_fixtures.create_opts[0]),
+]
 
 ALL_MODEL_FIXTURES = [recipe_run_fixtures, bakery_fixtures]

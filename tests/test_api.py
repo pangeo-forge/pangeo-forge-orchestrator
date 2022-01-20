@@ -99,9 +99,19 @@ def test_read_single(model_fixtures, client):
     # first create some data
     path = model_fixtures.path
     for create_opts in model_fixtures.create_opts:
+        for relation in model_fixtures.requires_relations:
+            relation_create_response = client.create(relation.path, relation.create_opts)
+            compare_response(relation.create_opts, relation_create_response)
         create_response = client.create(path, create_opts)
         read_response = client.read_single(path, create_response["id"])
         compare_response(create_opts, read_response)
+        # `compare_response` iterates over fixture keys, so we need to eval relations separately
+        for relation in model_fixtures.requires_relations:  # there could be more than one relation
+            if isinstance(read_response[relation.field_name], list):  # relations might be a list
+                for resp in read_response[relation.field_name]:
+                    compare_response(relation.create_opts, resp)  # TODO: Test > 1 items in list
+            else:
+                compare_response(relation.create_opts, read_response[relation.field_name])
         assert read_response["id"] == create_response["id"]
 
 

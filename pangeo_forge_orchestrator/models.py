@@ -1,10 +1,10 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
-from sqlmodel import SQLModel
+from sqlmodel import Field, SQLModel
 
-from .model_builders import MultipleModels
+from .model_builders import MultipleModels, RelationBuilder
 
 
 class BakeryBase(SQLModel):
@@ -74,7 +74,7 @@ class RecipeRunBase(SQLModel):
     #  3. You cannot change a check run conclusion to stale, only GitHub can set this.
 
     recipe_id: str
-    bakery_id: int  # TODO: Foreign key
+    bakery_id: int = Field(foreign_key="bakery.id")
     feedstock_id: int  # TODO: Foreign key
     head_sha: str
     version: str  # TODO: use `ConstrainedStr`
@@ -97,7 +97,43 @@ class RecipeRunRead(RecipeRunBase):
     id: int
 
 
-MODELS = {
-    "recipe_run": MultipleModels(path="/recipe_runs/", base=RecipeRunBase, response=RecipeRunRead),
-    "bakery": MultipleModels(path="/bakeries/", base=BakeryBase, response=BakeryRead),
-}
+# Extended response models --------------------------------------------------------------
+
+
+class BakeryReadWithRecipeRuns(BakeryRead):
+    recipe_runs: List[RecipeRunRead]
+
+
+class RecipeRunReadWithBakery(RecipeRunRead):
+    bakery: BakeryRead
+
+
+# Mutliple models -----------------------------------------------------------------------
+
+
+bakery_models = MultipleModels(
+    path="/bakeries/",
+    base=BakeryBase,
+    response=BakeryRead,
+    extended_response=BakeryReadWithRecipeRuns,
+    relations=[
+        RelationBuilder(
+            field="recipe_runs",
+            back_populates="RecipeRun.bakery",
+            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+        ),
+    ],
+)
+recipe_run_models = MultipleModels(
+    path="/recipe_runs/",
+    base=RecipeRunBase,
+    response=RecipeRunRead,
+    extended_response=RecipeRunReadWithBakery,
+    relations=[
+        RelationBuilder(
+            field="bakery", back_populates="Bakery.recipe_runs", annotation=bakery_models.table,
+        ),
+    ],
+)
+
+MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models}

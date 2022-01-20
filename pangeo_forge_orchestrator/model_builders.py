@@ -1,11 +1,25 @@
 import types
 from dataclasses import dataclass
-from typing import Callable, List, Union
+from typing import Callable, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlmodel import Field, Session, SQLModel, select
+from sqlmodel import Field, Relationship, Session, SQLModel, select
 
 QUERY_LIMIT = Query(default=100, lte=100)
+
+
+@dataclass
+class RelationBuilder:
+    """
+
+    :param field: The name of the field to create.
+    :param back_populates: The name of the field in the linked table.
+    :param annotation: The annotation.
+    """
+
+    field: str
+    back_populates: str
+    annotation: Union[SQLModel, List[str]]
 
 
 # Model generator + container -------------------------------------------------------------
@@ -36,11 +50,15 @@ class MultipleModels:
       either Python's built-in ``type()`` or ``types.new_class()`` function, therefore the most
       robust option is simply for the user to define and pass it to ``MultipleModels`` manually.
       (Note also that "id" as used here is just another way of saying "primary key".)
+    :param extended_response:
+    :param relations:
     """
 
     path: str
     base: SQLModel
     response: SQLModel
+    extended_response: Optional[SQLModel] = None
+    relations: Optional[List[RelationBuilder]] = None
 
     def __post_init__(self):
         self.creation: SQLModel = self.make_creator_cls()
@@ -96,6 +114,10 @@ class MultipleModels:
         attrs = dict(id=Field(default=None, primary_key=True))
         annotations = dict(id=Union[int, None])
         attrs.update(dict(__annotations__=annotations))
+        if self.relations:
+            for r in self.relations:
+                attrs.update({r.field: Relationship(back_populates=r.back_populates.split(".")[1])})
+                attrs.get("__annotations__").update({r.field: r.annotation})  # type: ignore
         # We are using `typing.new_class` (vs. `type`) b/c it supports the `table=True` kwarg.
         # https://twitter.com/simonw/status/1430255521127305216?s=20
         # https://docs.python.org/3/reference/datamodel.html#customizing-class-creation
@@ -252,7 +274,11 @@ class _RegisterEndpoints:
             )
 
     def register_read_single_endpoint(self):
-        @self.api.get(self.models.path + "{id}", response_model=self.models.response)
+        response_model = (
+            self.models.extended_response if self.models.extended_response else self.models.response
+        )
+
+        @self.api.get(self.models.path + "{id}", response_model=response_model)
         def _read_single(*, session: Session = Depends(self.get_session), id: int):
             return read_single(session=session, table_cls=self.models.table, id=id)
 
