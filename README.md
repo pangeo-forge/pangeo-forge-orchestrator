@@ -47,27 +47,6 @@ exists, it will migrate. For more details on how this works, see the Alembic doc
 **A migration must be run before the app is started on a fresh database!**
 Otherwise the tables will not exist. (The app code itself no longer creates tables.)
 
-> ### Local Testing
->
-> What we've learned in the previous two sections about the `DATABASE_URL` variable and the requirement that migrations be run prior to starting the API informs the local testing approach. To set up local testing, run
->
-> ```bash
-> export DATABASE_URL=sqlite:///`pwd`/database.sqlite
-> ```
->
-> to assign the required environment variable. Then run the migrations with
->
-> ```bash
-> python -m alembic upgrade head
-> ```
->
-> And finally, invoke the tests
->
-> ```bash
-> pytest -vx
-> ```
->
-> Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 ### Creating a new Database Version
 
 Any time the SQLModel table models are changed in any way, a new migration
@@ -84,6 +63,23 @@ when we want to migrate.
 If the migration is complex or ambiguous, the migration script might have to be
 tweaked manually.
 
+
+## Local Testing
+
+Migrations are not used for local testing with SQLite. To setup local testing, simply define the `DATABASE_URL` environment variable
+
+```bash
+export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+```
+and then invoke the tests
+
+```bash
+pytest -vx
+```
+
+A new SQLite database file will be automatically created for each test session and populated with tables based on the `pangeo_forge_orchestrator.models` module.
+
+> Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 
 ## Heroku Deployment
 
