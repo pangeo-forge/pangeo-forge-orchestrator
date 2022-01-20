@@ -77,9 +77,10 @@ and then invoke the tests
 pytest -vx
 ```
 
-A new SQLite database file will be automatically created for each test session and populated with tables based on the `pangeo_forge_orchestrator.models` module.
-
-> Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
+> If no file exists at the `DATABASE_URL`, a new SQLite database file will be automatically created for the test session and populated
+with tables based on `pangeo_forge_orchestrator.models`. If a file already exists at the at the `DATABASE_URL`, it will be updated
+to refect the tables defined by `pangeo_forge_orchestrator.models`. Note that `.sqlite` files are excluded by `.gitignore`, so you don't
+need to worry about the database file appearing in your commit.
 
 ## Heroku Deployment
 
