@@ -82,6 +82,9 @@ with tables based on `pangeo_forge_orchestrator.models`. If a file already exist
 to refect the tables defined by `pangeo_forge_orchestrator.models`. Note that `.sqlite` files are excluded by `.gitignore`, so you don't
 need to worry about the database file appearing in your commit.
 
+**Note:** Changes to modules in `pangeo_forge_orchestrator/*` may require that the package be re-installed with `pip install '.[dev]'`
+before running local tests.
+
 ## Heroku Deployment
 
 The application is configured to test and deploy on Heroku using Heroku pipelines.
