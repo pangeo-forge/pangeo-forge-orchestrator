@@ -95,6 +95,24 @@ pytest -vx
 
 Note that `.sqlite` files are excluded by `.gitignore`, so you don't need to worry about the database file appearing in your commit.
 
+## Local Testing
+
+Migrations are not used for local testing with SQLite. To setup local testing, simply define the `DATABASE_URL` environment variable
+
+```bash
+export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+```
+and then invoke the tests
+
+```bash
+pytest -vx
+```
+
+> If no file exists at the `DATABASE_URL`, a new SQLite database file will be automatically created for the test session and populated
+with tables based on `pangeo_forge_orchestrator.models`. If a file already exists at the at the `DATABASE_URL`, it will be updated
+to refect the tables defined by `pangeo_forge_orchestrator.models`. Note that `.sqlite` files are excluded by `.gitignore`, so you don't
+need to worry about the database file appearing in your commit.
+
 ## Heroku Deployment
 
 The application is configured to test and deploy on Heroku using Heroku pipelines.

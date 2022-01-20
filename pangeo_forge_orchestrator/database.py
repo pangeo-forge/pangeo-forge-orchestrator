@@ -13,3 +13,9 @@ elif database_url.startswith("postgres://"):  # pragma: no cover
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 engine = create_engine(database_url, echo=True, connect_args=connect_args)
+
+
+def create_sqlite_db_and_tables():
+    # Called from `.api`; requires `.models` import to register metadata
+    # https://sqlmodel.tiangolo.com/tutorial/create-db-and-table/#refactor-data-creation
+    SQLModel.metadata.create_all(engine)
