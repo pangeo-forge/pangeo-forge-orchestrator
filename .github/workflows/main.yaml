@@ -57,9 +57,9 @@ jobs:
         run: |
           conda info
           conda list
-      - name: 📦 Initialize sqlite database for tests
-        shell: bash -l {0}
-        run: python -m alembic upgrade head
+      # - name: 📦 Initialize sqlite database for tests
+      #   shell: bash -l {0}
+      #   run: python -m alembic upgrade head
       - name: Run Tests
         shell: bash -l {0}
         run: |
