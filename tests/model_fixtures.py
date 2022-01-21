@@ -101,11 +101,25 @@ bakery_fixtures = ModelFixtures(
     ],
 )
 
+feedstock_fixtures = ModelFixtures(
+    path="/feedstocks/",
+    required_fields=["github_repo"],
+    create_opts=[dict(github_repo="a"), dict(github_repo="b")],
+    invalid_opts=[
+        dict(github_repo=NOT_STR),  # type: ignore
+    ],
+    update_opts=[{"github_repo": "c"}, {"github_repo": "d"}],
+)
+
 recipe_run_fixtures.requires_relations = [
     RelationFixture("bakery", bakery_fixtures.path, bakery_fixtures.create_opts[0]),
+    RelationFixture("feedstock", feedstock_fixtures.path, feedstock_fixtures.create_opts[0]),
 ]
 bakery_fixtures.requires_relations = [
     RelationFixture("recipe_runs", recipe_run_fixtures.path, recipe_run_fixtures.create_opts[0]),
 ]
+feedstock_fixtures.requires_relations = [
+    RelationFixture("recipe_runs", recipe_run_fixtures.path, recipe_run_fixtures.create_opts[0]),
+]
 
-ALL_MODEL_FIXTURES = [recipe_run_fixtures, bakery_fixtures]
+ALL_MODEL_FIXTURES = [recipe_run_fixtures, bakery_fixtures, feedstock_fixtures]

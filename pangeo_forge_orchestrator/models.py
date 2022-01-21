@@ -6,6 +6,8 @@ from sqlmodel import Field, SQLModel
 
 from .model_builders import MultipleModels, RelationBuilder
 
+# Bakery --------------------------------------------------------------------------------
+
 
 class BakeryBase(SQLModel):
     """
@@ -21,6 +23,26 @@ class BakeryRead(BakeryBase):
     """
 
     id: int
+
+
+# Feedstock -----------------------------------------------------------------------------
+
+
+class FeedstockBase(SQLModel):
+    """
+    """
+
+    github_repo: str
+
+
+class FeedstockRead(FeedstockBase):
+    """
+    """
+
+    id: int
+
+
+# RecipeRun -----------------------------------------------------------------------------
 
 
 class RecipeRunStatus(str, Enum):
@@ -75,7 +97,7 @@ class RecipeRunBase(SQLModel):
 
     recipe_id: str
     bakery_id: int = Field(foreign_key="bakery.id")
-    feedstock_id: int  # TODO: Foreign key
+    feedstock_id: int = Field(foreign_key="feedstock.id")
     head_sha: str
     version: str  # TODO: use `ConstrainedStr`
     started_at: datetime
@@ -104,8 +126,13 @@ class BakeryReadWithRecipeRuns(BakeryRead):
     recipe_runs: List[RecipeRunRead]
 
 
-class RecipeRunReadWithBakery(RecipeRunRead):
+class FeedstockReadWithRecipeRuns(FeedstockRead):
+    recipe_runs: List[RecipeRunRead]
+
+
+class RecipeRunReadWithBakeryAndFeedstock(RecipeRunRead):
     bakery: BakeryRead
+    feedstock: FeedstockRead
 
 
 # Mutliple models -----------------------------------------------------------------------
@@ -124,16 +151,34 @@ bakery_models = MultipleModels(
         ),
     ],
 )
+feedstock_models = MultipleModels(
+    path="/feedstocks/",
+    base=FeedstockBase,
+    response=FeedstockRead,
+    extended_response=FeedstockReadWithRecipeRuns,
+    relations=[
+        RelationBuilder(
+            field="recipe_runs",
+            back_populates="RecipeRun.feedstock",
+            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+        ),
+    ],
+)
 recipe_run_models = MultipleModels(
     path="/recipe_runs/",
     base=RecipeRunBase,
     response=RecipeRunRead,
-    extended_response=RecipeRunReadWithBakery,
+    extended_response=RecipeRunReadWithBakeryAndFeedstock,
     relations=[
         RelationBuilder(
             field="bakery", back_populates="Bakery.recipe_runs", annotation=bakery_models.table,
         ),
+        RelationBuilder(
+            field="feedstock",
+            back_populates="Feedstock.recipe_runs",
+            annotation=feedstock_models.table,
+        ),
     ],
 )
 
-MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models}
+MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models, "feedstock": feedstock_models}
