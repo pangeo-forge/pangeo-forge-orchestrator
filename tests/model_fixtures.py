@@ -107,6 +107,7 @@ feedstock_fixtures = ModelFixtures(
     create_opts=[dict(github_repo="a"), dict(github_repo="b")],
     invalid_opts=[
         dict(github_repo=NOT_STR),  # type: ignore
+        dict(github_org="not a valid GitHubOrg"),
     ],
     update_opts=[{"github_repo": "c"}, {"github_repo": "d"}],
 )
