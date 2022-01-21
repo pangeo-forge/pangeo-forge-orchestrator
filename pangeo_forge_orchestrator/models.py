@@ -38,7 +38,8 @@ class FeedstockBase(SQLModel):
     :param github_repo: The url of the associated GitHub repo.
     """
 
-    github_repo: str  # TODO: Pydantic URL constraint.
+    github_org: str   # org name, e.g pangeo-forge
+    github_repo: str  # just the repo name e.g. staged-recipes
 
 
 class FeedstockRead(FeedstockBase):
