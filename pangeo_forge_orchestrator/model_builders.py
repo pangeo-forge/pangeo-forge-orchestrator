@@ -14,16 +14,18 @@ class RelationBuilder:
     https://sqlmodel.tiangolo.com/tutorial/relationship-attributes/define-relationships-attributes/
 
     :param field: The name of the field to add to the table.
-    :param back_populates: The name of the field in the related table to back populate.
     :param annotation: The type annotation. If the relationship is one-to-one, the annotation will
     be a subclass of ``SQLModel`` corresponding to the table model for the related table. If the
     relationship is one-to-many, the annotation will be ``List[str]`` where ``str`` is the
-    ``__name__`` of the related table model.
+    ``__name__`` of the related table model. In either case, type can be ``Optional``.
+    :param back_populates: The name of the field in the related table to back populate. This field
+      name must exist as a ``sqlmodel.Relationship`` attribute of the model referenced in the
+      provided ``annotation``.
     """
 
     field: str
-    back_populates: str
     annotation: Union[SQLModel, List[str]]
+    back_populates: str
 
 
 # Model generator + container -------------------------------------------------------------
@@ -125,7 +127,7 @@ class MultipleModels:
         attrs.update(dict(__annotations__=annotations))
         if self.relations:
             for r in self.relations:
-                attrs.update({r.field: Relationship(back_populates=r.back_populates.split(".")[1])})
+                attrs.update({r.field: Relationship(back_populates=r.back_populates)})
                 attrs.get("__annotations__").update({r.field: r.annotation})  # type: ignore
         # We are using `typing.new_class` (vs. `type`) b/c it supports the `table=True` kwarg.
         # https://twitter.com/simonw/status/1430255521127305216?s=20

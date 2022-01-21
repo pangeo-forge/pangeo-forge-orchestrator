@@ -153,8 +153,8 @@ bakery_models = MultipleModels(
     relations=[
         RelationBuilder(
             field="recipe_runs",
-            back_populates="RecipeRun.bakery",
             annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            back_populates="bakery",
         ),
     ],
 )
@@ -166,8 +166,8 @@ feedstock_models = MultipleModels(
     relations=[
         RelationBuilder(
             field="recipe_runs",
-            back_populates="RecipeRun.feedstock",
             annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            back_populates="feedstock",
         ),
     ],
 )
@@ -178,12 +178,10 @@ recipe_run_models = MultipleModels(
     extended_response=RecipeRunReadWithBakeryAndFeedstock,
     relations=[
         RelationBuilder(
-            field="bakery", back_populates="Bakery.recipe_runs", annotation=bakery_models.table,
+            field="bakery", annotation=bakery_models.table, back_populates="recipe_runs",
         ),
         RelationBuilder(
-            field="feedstock",
-            back_populates="Feedstock.recipe_runs",
-            annotation=feedstock_models.table,
+            field="feedstock", annotation=feedstock_models.table, back_populates="recipe_runs",
         ),
     ],
 )
