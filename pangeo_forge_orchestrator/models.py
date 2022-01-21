@@ -126,6 +126,7 @@ class RecipeRunRead(RecipeRunBase):
 
 
 # Extended response models --------------------------------------------------------------
+# https://sqlmodel.tiangolo.com/tutorial/fastapi/relationships/#models-with-relationships
 
 
 class BakeryReadWithRecipeRuns(BakeryRead):

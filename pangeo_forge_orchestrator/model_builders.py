@@ -10,7 +10,8 @@ QUERY_LIMIT = Query(default=100, lte=100)
 
 @dataclass
 class RelationBuilder:
-    """Container for data used to generate a ``sqlmodel.Relationship`` in ``MultipleModels``.
+    """Data used to generate ``sqlmodel.Relationship``s in ``MultipleModels``. Based on:
+    https://sqlmodel.tiangolo.com/tutorial/relationship-attributes/define-relationships-attributes/
 
     :param field: The name of the field to add to the table.
     :param back_populates: The name of the field in the related table to back populate.
@@ -53,8 +54,11 @@ class MultipleModels:
       either Python's built-in ``type()`` or ``types.new_class()`` function, therefore the most
       robust option is simply for the user to define and pass it to ``MultipleModels`` manually.
       (Note also that "id" as used here is just another way of saying "primary key".)
-    :param extended_response:
-    :param relations:
+    :param extended_response: An optional response class for returning nested data from related
+      tables in responses to ``read_single`` GET requests. For more information, refer to:
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/relationships/#models-with-relationships.
+    :param relations: An optional list of ``RelationBuilder``s. If present, used to generate
+       ``sqlmodel.Relationship`` attributes on the table class in ``self.make_table_cls``.
     """
 
     path: str
@@ -111,7 +115,9 @@ class MultipleModels:
         https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model,
         the table model is the same as the base model, with the addition of the ``table=True`` class
         creation keyword and an ``id`` attribute of type ``Optional[int]`` set to a default value of
-        ``Field(default=None, primary_key=True)``.
+        ``Field(default=None, primary_key=True)``. If ``self.relations`` are provided, they are
+        defined on the table model as described in the SQLModel documentation:
+        https://sqlmodel.tiangolo.com/tutorial/relationship-attributes/define-relationships-attributes/
         """
         cls_name = self.make_cls_name(self.base, "")
         attrs = dict(id=Field(default=None, primary_key=True))
