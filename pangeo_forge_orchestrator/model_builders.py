@@ -10,11 +10,14 @@ QUERY_LIMIT = Query(default=100, lte=100)
 
 @dataclass
 class RelationBuilder:
-    """
+    """Container for data used to generate a ``sqlmodel.Relationship`` in ``MultipleModels``.
 
-    :param field: The name of the field to create.
-    :param back_populates: The name of the field in the linked table.
-    :param annotation: The annotation.
+    :param field: The name of the field to add to the table.
+    :param back_populates: The name of the field in the related table to back populate.
+    :param annotation: The type annotation. If the relationship is one-to-one, the annotation will
+    be a subclass of ``SQLModel`` corresponding to the table model for the related table. If the
+    relationship is one-to-many, the annotation will be ``List[str]`` where ``str`` is the
+    ``__name__`` of the related table model.
     """
 
     field: str

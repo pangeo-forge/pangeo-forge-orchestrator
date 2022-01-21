@@ -10,16 +10,20 @@ from .model_builders import MultipleModels, RelationBuilder
 
 
 class BakeryBase(SQLModel):
-    """
+    """Information about a Pangeo Forge Bakery.
+
+    :param region: The cloud region.
+    :param name: The bakery name.
+    :param description: A description of this bakery.
     """
 
-    region: str
-    name: str
+    region: str  # TODO: Categorical constraint.
+    name: str  # TODO: Unique constraint.
     description: str
 
 
 class BakeryRead(BakeryBase):
-    """
+    """The bakery read model. See ``RecipeRunRead`` docstring in this module for further detail.
     """
 
     id: int
@@ -29,14 +33,16 @@ class BakeryRead(BakeryBase):
 
 
 class FeedstockBase(SQLModel):
-    """
+    """Information about a Pangeo Forge Feedstock.
+
+    :param github_repo: The url of the associated GitHub repo.
     """
 
-    github_repo: str
+    github_repo: str  # TODO: Pydantic URL constraint.
 
 
 class FeedstockRead(FeedstockBase):
-    """
+    """The feedstock read model. See ``RecipeRunRead`` docstring in this module for further detail.
     """
 
     id: int
