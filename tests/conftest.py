@@ -86,6 +86,10 @@ def uncleared_session(tempdir):
 
 def clear_table(session: Session, table_model: SQLModel):
     session.query(table_model).delete()
+    if session.connection().engine.url.drivername == "postgresql":
+        # if testing against persistent local postgres server, reset primary keys
+        cmd = f"ALTER SEQUENCE {table_model.__name__}_id_seq RESTART WITH 1"
+        session.exec(cmd)
     session.commit()
     assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
