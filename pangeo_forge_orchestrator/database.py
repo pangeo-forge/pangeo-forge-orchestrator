@@ -1,6 +1,6 @@
 import os
 
-from sqlmodel import SQLModel, create_engine, Session  # noqa: F401
+from sqlmodel import Session, SQLModel, create_engine  # noqa: F401
 
 database_url = os.environ["DATABASE_URL"]
 
@@ -18,3 +18,9 @@ engine = create_engine(database_url, echo=True, connect_args=connect_args)
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def create_sqlite_db_and_tables():
+    # Called from `.api`; requires `.models` import to register metadata
+    # https://sqlmodel.tiangolo.com/tutorial/create-db-and-table/#refactor-data-creation
+    SQLModel.metadata.create_all(engine)
