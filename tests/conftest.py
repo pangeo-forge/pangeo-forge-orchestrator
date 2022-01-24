@@ -3,12 +3,15 @@ import signal
 import socket
 import subprocess
 import time
+import uuid
+import hashlib
 
 import pytest
 from fastapi.testclient import TestClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
+from unittest import mock
 
 try:
     _ = os.environ["DATABASE_URL"]
@@ -40,6 +43,30 @@ def get_open_port():
 @pytest.fixture(scope="session")
 def tempdir(tmp_path_factory):
     return tmp_path_factory.mktemp("test-database")
+
+
+@pytest.fixture(scope="session")
+def api_keys():
+    salt = uuid.uuid4().hex
+    raw_key = uuid.uuid4().hex
+    encrypted_key = hashlib.sha256(salt.encode() + raw_key.encode()).hexdigest()
+    return salt, raw_key, encrypted_key
+
+
+@pytest.fixture(autouse=True)
+def required_backend_env_vars(api_keys):
+    salt, _, encrypted_key = api_keys
+    with mock.patch.dict(os.environ, {
+            "ENCRYPTION_SALT": salt,
+            "ADMIN_API_KEY_SHA256": encrypted_key
+        }):
+        yield
+
+
+@pytest.fixture(scope="session")
+def admin_key(api_keys):
+    _, raw_key, _ = api_keys
+    return raw_key
 
 
 @pytest.fixture(scope="session")

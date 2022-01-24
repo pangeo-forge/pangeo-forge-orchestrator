@@ -1,4 +1,8 @@
 import datetime as dt
+import hashlib
+import uuid
+import os
+from datetime import datetime
 
 from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
@@ -10,9 +14,34 @@ from .models import APIKey, APIKeyRead
 X_API_KEY = APIKeyHeader(name="X-API-Key")
 
 
+def get_salt() -> str:
+    return os.environ["ENCRYPTION_SALT"]
+
+
 def encrypt(value: str) -> str:
-    salt = os.environ["ENCRYPTION_SALT"]
+    salt = get_salt()
     return hashlib.sha256(salt.encode() + value.encode()).hexdigest()
+
+
+def create_admin_api_key(session):
+
+    admin_api_key_encrypted = os.environ["ADMIN_API_KEY_SHA256"]
+    api_key = session.get(APIKey, admin_api_key_encrypted)  # already exists
+    if api_key:
+        return api_key
+
+    _ = get_salt()  # if salt is not set, environment is not configured properly
+    api_key = APIKey(
+        encrypted_key=admin_api_key_encrypted,
+        is_admin=True,
+        is_active=True,
+        created_at=datetime.now()
+    )
+
+    session.add(api_key)
+    session.commit()
+    session.refresh(api_key)
+    return api_key
 
 
 def check_authentication_header(
@@ -20,7 +49,7 @@ def check_authentication_header(
 ) -> APIKeyRead:
     """ takes the X-API-Key header and converts it into the matching user object from the database """
 
-    api_key = session.get(table_cls, encrypt(x_api_key))
+    api_key = session.get(APIKey, encrypt(x_api_key))
     if api_key:
         # TODO: implement datetime expiration checking
         if api_key.is_active:
