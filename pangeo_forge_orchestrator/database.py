@@ -1,6 +1,6 @@
 import os
 
-from sqlmodel import SQLModel, create_engine  # noqa: F401
+from sqlmodel import SQLModel, create_engine, Session  # noqa: F401
 
 database_url = os.environ["DATABASE_URL"]
 
@@ -13,3 +13,8 @@ elif database_url.startswith("postgres://"):  # pragma: no cover
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
 engine = create_engine(database_url, echo=True, connect_args=connect_args)
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session

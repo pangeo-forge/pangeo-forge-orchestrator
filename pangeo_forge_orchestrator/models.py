@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, Field
 
 from .model_builders import MultipleModels
 
@@ -84,3 +84,27 @@ class RecipeRunRead(RecipeRunBase):
 MODELS = {
     "recipe_run": MultipleModels(path="/recipe_runs/", base=RecipeRunBase, response=RecipeRunRead)
 }
+
+
+class APIKeyBase(SQLModel):
+    is_active: bool = Field(default=True)
+    is_admin: bool = Field(default=False)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class APIKeyCreate(SQLModel):
+    is_admin: bool = Field(default=False)
+
+
+class APIKeyRead(APIKeyBase):
+    pass
+
+
+# keeping api keys separate because they are special
+class APIKey(APIKeyBase, table=True):
+    # encrypted with SHA-256
+    encrypted_key: str = Field(primary_key=True)
+
+
+class APIKeyNew(APIKeyBase):
+    key: str

@@ -107,7 +107,7 @@ def http_server(http_server_url, session):
 
 @pytest.fixture(scope="session")
 def fastapi_test_client_uncleared():
-    from pangeo_forge_orchestrator.api import get_session
+    from pangeo_forge_orchestrator.database import get_session
 
     with TestClient(app) as client:
         yield client, get_session
