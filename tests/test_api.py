@@ -122,9 +122,6 @@ def test_update_invalid(path: str, create_opts: APIOpts, invalid_arg, client, au
     response = authorized_client.create(path, create_opts)
     id = response["id"]
     with pytest.raises(client.error_cls):
-        # This test is not working because authorized_client and client are actually the same.
-        # Need to figure out a better fixture strategy.
-        print("client.client.headers", client.client.headers)
         with client.auth_required():
             _ = client.update(path, id, invalid_arg)
 

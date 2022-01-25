@@ -13,6 +13,9 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
 
+from pangeo_forge_orchestrator.database import get_session
+
+
 try:
     _ = os.environ["DATABASE_URL"]
 except KeyError:  # pragma: no cover
@@ -103,7 +106,8 @@ def uncleared_session(tempdir):
     # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
     # the session returned by that function resolves the database path via `os.getcwd()`, but
     # our tests are run from a different working directory than the one where the database resides.
-    sqlite_file_path = f"sqlite:////{tempdir}/database.db"
+    #sqlite_file_path = f"sqlite:////{tempdir}/database.db"
+    sqlite_file_path = os.environ['DATABASE_URL']
     connect_args = {"check_same_thread": False}
     engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
     with Session(engine) as session:
@@ -131,34 +135,18 @@ def http_server(http_server_url, session):
     return http_server_url
 
 
-@pytest.fixture
-def fastapi_test_client_uncleared():
-    from pangeo_forge_orchestrator.database import get_session
-
-    with TestClient(app) as client:
-        yield client, get_session
-
+# the next two fixtures use the session fixture to clear the database
 
 @pytest.fixture
-def fastapi_test_client(fastapi_test_client_uncleared):
-    # this might be using a different session (and different database!) from
-    # the session we generated above
-    test_client, get_session = fastapi_test_client_uncleared
-    # this does not feel kosher
-    session = next(iter(get_session()))
-    for k in MODELS:
-        clear_table(session, MODELS[k].table)
-    return test_client
+def fastapi_test_crud_client(session):
+    with TestClient(app) as fastapi_test_client:
+        yield FastAPITestClientCRUD(fastapi_test_client)
 
 
 @pytest.fixture
-def fastapi_test_crud_client(fastapi_test_client):
-    return FastAPITestClientCRUD(fastapi_test_client)
-
-
-@pytest.fixture
-def fastapi_test_crud_client_authorized(fastapi_test_client, admin_key):
-    return FastAPITestClientCRUD(fastapi_test_client, api_key=admin_key)
+def fastapi_test_crud_client_authorized(session, admin_key):
+    with TestClient(app) as fastapi_test_client:
+        return FastAPITestClientCRUD(fastapi_test_client, api_key=admin_key)
 
 
 # alias
