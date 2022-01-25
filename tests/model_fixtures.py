@@ -18,7 +18,7 @@ class ModelFixture:
 
 @dataclass
 class ModelRelationFixture:
-    field_name: str  # Name of the field cooresponding to the related table
+    field_name: str  # Name of the field corresponding to the related table
     model_fixture: ModelFixture
 
 
