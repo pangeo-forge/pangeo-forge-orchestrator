@@ -46,8 +46,8 @@ class FeedstockBase(SQLModel):
       of the options defined in ``GitHubOrgs``.
     """
 
-    github_repo: str
-    github_org: GitHubOrgs = GitHubOrgs.pangeo_forge
+    provider: RepoProvider = RepoProvider.github
+    spec: str
 
 
 class FeedstockRead(FeedstockBase):
