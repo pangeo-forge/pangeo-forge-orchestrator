@@ -28,8 +28,8 @@ def upgrade():
     )
     op.create_table(
         "feedstock",
-        sa.Column("github_repo", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-        sa.Column("github_org", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+        sa.Column("spec", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+        sa.Column("provider", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column("id", sa.Integer(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
