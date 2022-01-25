@@ -13,11 +13,8 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
 
-from pangeo_forge_orchestrator.database import get_session
-
-
 try:
-    _ = os.environ["DATABASE_URL"]
+    DATABASE_URL = os.environ["DATABASE_URL"]
 except KeyError:  # pragma: no cover
     raise ValueError(
         "The DATABASE_URL environment variable must be set and "
@@ -44,11 +41,6 @@ def get_open_port():
 
 
 @pytest.fixture(scope="session")
-def tempdir(tmp_path_factory):
-    return tmp_path_factory.mktemp("test-database")
-
-
-@pytest.fixture(scope="session")
 def api_keys():
     salt = uuid.uuid4().hex
     raw_key = uuid.uuid4().hex
@@ -72,7 +64,7 @@ def admin_key(api_keys):
 
 
 @pytest.fixture(scope="session")
-def http_server_url(tempdir, request):
+def http_server_url(request):
     env_port = os.environ.get("PORT", False)
     port = env_port or get_open_port()
     host = "127.0.0.1"
@@ -90,7 +82,7 @@ def http_server_url(tempdir, request):
     # the setsid allows us to properly clean up the gunicorn child processes
     # otherwise those get zombied
     # https://stackoverflow.com/a/22582602/3266235
-    p = subprocess.Popen(command_list, cwd=tempdir, preexec_fn=os.setsid)
+    p = subprocess.Popen(command_list, preexec_fn=os.setsid)
 
     time.sleep(1)  # let the server start up
 
@@ -100,14 +92,8 @@ def http_server_url(tempdir, request):
 
 
 @pytest.fixture
-def uncleared_session(tempdir):
-    # Cf. `pangeo_forge_orchestrator.database` & `pangeo_forge_orchestrator.api`
-    # Here we are creating a session for the database file which exists in the tempdir.
-    # We can't reuse the `pangeo_forge_orchestrator.api:get_session` function here because
-    # the session returned by that function resolves the database path via `os.getcwd()`, but
-    # our tests are run from a different working directory than the one where the database resides.
-    #sqlite_file_path = f"sqlite:////{tempdir}/database.db"
-    sqlite_file_path = os.environ['DATABASE_URL']
+def uncleared_session():
+    sqlite_file_path = DATABASE_URL
     connect_args = {"check_same_thread": False}
     engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
     with Session(engine) as session:
@@ -136,6 +122,7 @@ def http_server(http_server_url, session):
 
 
 # the next two fixtures use the session fixture to clear the database
+
 
 @pytest.fixture
 def fastapi_test_crud_client(session):
