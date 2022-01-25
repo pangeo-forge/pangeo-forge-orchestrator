@@ -32,22 +32,24 @@ class BakeryRead(BakeryBase):
 # Feedstock -----------------------------------------------------------------------------
 
 
-class GitHubOrgs(str, Enum):
-    """Categorical choices for ``FeedstockBase.github_org``."""
+class RepoProvider(str, Enum):
+    """Categorical choices for ``FeedstockBase.provider``."""
 
-    pangeo_forge = "pangeo-forge"
+    github = "github"
 
 
 class FeedstockBase(SQLModel):
     """Information about a Pangeo Forge Feedstock.
 
-    :param github_repo: The name of the feedstock repo, e.g. ``"noaa-oisst-avhrr-only-feedstock"``.
-    :param github_org: The name of the GitHub org in which this feedstock repo resides. Must be one
-      of the options defined in ``GitHubOrgs``.
+    :param spec: The path to the feedstock repo within the ``provider``. A ``spec`` for a feedstock
+      repo on GitHub might be, e.g., ``"pangeo-forge/noaa-oisst-avhrr-only-feedstock"``. The format
+      of the ``spec`` string is ``provider``-dependent.
+    :param provider: The name of the host site on which this feedstock repo resides. Must be one
+      of the options defined in ``RepoProvider``.
     """
 
-    provider: RepoProvider = RepoProvider.github
     spec: str
+    provider: RepoProvider = RepoProvider.github
 
 
 class FeedstockRead(FeedstockBase):
