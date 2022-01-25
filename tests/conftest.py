@@ -10,16 +10,13 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel
 from typer.testing import CliRunner
 
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.database import get_database_url_from_env
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
-
-DATABASE_URL = get_database_url_from_env()
 
 
 def get_open_port():
@@ -87,9 +84,8 @@ def http_server_url(request):
 
 @pytest.fixture
 def uncleared_session():
-    sqlite_file_path = DATABASE_URL
-    connect_args = {"check_same_thread": False}
-    engine = create_engine(sqlite_file_path, echo=False, connect_args=connect_args)
+    from pangeo_forge_orchestrator.database import engine
+
     with Session(engine) as session:
         yield session
 
