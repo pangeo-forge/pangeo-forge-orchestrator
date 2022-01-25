@@ -39,11 +39,10 @@ def compare_response(response_fixture, reponse_data):
 
 def create_with_dependencies(create_opts, mf, client):
 
-    if hasattr(mf, "dependencies"):
-        for dep in mf.dependencies:
-            dep_create_opts = dep.model_fixture.create_opts[0]  # just use first create_opts
-            dep_create_response = client.create(dep.model_fixture.path, dep_create_opts)
-            compare_response(dep_create_opts, dep_create_response)
+    for dep in mf.dependencies:
+        dep_create_opts = dep.model_fixture.create_opts[0]  # just use first create_opts
+        dep_create_response = client.create(dep.model_fixture.path, dep_create_opts)
+        compare_response(dep_create_opts, dep_create_response)
 
     data = client.create(mf.path, create_opts)
 
@@ -118,7 +117,7 @@ def test_read_single(model_fixture, client):
 
         create_response = create_with_dependencies(create_opts, model_fixture, client)
 
-        if hasattr(model_fixture, "optional_relations"):
+        if model_fixture.optional_relations:
             for rel in model_fixture.optional_relations:
                 create_with_dependencies(
                     rel.model_fixture.create_opts[0], rel.model_fixture, client,
@@ -129,17 +128,14 @@ def test_read_single(model_fixture, client):
         assert read_response["id"] == create_response["id"]
 
         # `compare_response` iterates over fixture keys, so we need to eval relations separately
-        for relation_type in ("dependencies", "optional_relations"):
-            if hasattr(model_fixture, relation_type):
-                for relation in getattr(model_fixture, relation_type):
-                    if isinstance(read_response[relation.field_name], list):  # maybe one-to-many
-                        for resp in read_response[relation.field_name]:  # TODO: Test len(list) > 1
-                            compare_response(relation.model_fixture.create_opts[0], resp)
-                    else:
-                        compare_response(
-                            relation.model_fixture.create_opts[0],
-                            read_response[relation.field_name],
-                        )
+        for relation in model_fixture.all_relations:
+            if isinstance(read_response[relation.field_name], list):  # maybe one-to-many
+                for resp in read_response[relation.field_name]:  # TODO: Test len(list) > 1
+                    compare_response(relation.model_fixture.create_opts[0], resp)
+            else:
+                compare_response(
+                    relation.model_fixture.create_opts[0], read_response[relation.field_name],
+                )
 
 
 @pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)

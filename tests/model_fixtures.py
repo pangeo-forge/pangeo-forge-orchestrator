@@ -14,6 +14,12 @@ class ModelFixture:
     create_opts: Sequence[APIOpts]  # valid ways to create the model
     invalid_opts: Sequence[APIOpts]  # setting these on creation or update should error
     update_opts: Sequence[APIOpts]  # setting these on update should be valid
+    dependencies: List["ModelRelationFixture"] = field(default_factory=list)  # req to create model
+    optional_relations: List["ModelRelationFixture"] = field(default_factory=list)  # not required
+
+    @property
+    def all_relations(self):
+        return self.dependencies + self.optional_relations
 
 
 @dataclass
@@ -22,22 +28,12 @@ class ModelRelationFixture:
     model_fixture: ModelFixture
 
 
-@dataclass
-class ModelFixtureWithDependencies(ModelFixture):
-    dependencies: List[ModelRelationFixture] = field(default_factory=list)  # req'd to create model
-
-
-@dataclass
-class ModelFixtureWithOptionalRelations(ModelFixture):
-    optional_relations: List[ModelRelationFixture] = field(default_factory=list)  # not req'd
-
-
 NOT_STR = {"not parsable": "to str"}
 NOT_INT = "not parsable to int"
 NOT_ISO8601 = "Jan 01 2021 00:00:00"
 
 
-recipe_run_fixture = ModelFixtureWithDependencies(
+recipe_run_fixture = ModelFixture(
     path="/recipe_runs/",
     required_fields=[
         "recipe_id",
@@ -91,7 +87,7 @@ recipe_run_fixture = ModelFixtureWithDependencies(
     ],
 )
 
-bakery_fixture = ModelFixtureWithOptionalRelations(
+bakery_fixture = ModelFixture(
     path="/bakeries/",
     required_fields=["region", "name", "description"],
     create_opts=[
@@ -109,7 +105,7 @@ bakery_fixture = ModelFixtureWithOptionalRelations(
     ],
 )
 
-feedstock_fixture = ModelFixtureWithOptionalRelations(
+feedstock_fixture = ModelFixture(
     path="/feedstocks/",
     required_fields=["spec"],
     create_opts=[dict(spec="a"), dict(spec="b")],
