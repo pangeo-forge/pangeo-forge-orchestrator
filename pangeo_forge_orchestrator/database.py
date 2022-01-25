@@ -12,7 +12,7 @@ elif database_url.startswith("postgres://"):  # pragma: no cover
     # https://stackoverflow.com/a/67754795/3266235
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-engine = create_engine(database_url, echo=True, connect_args=connect_args)
+engine = create_engine(database_url, echo=False, connect_args=connect_args)
 
 
 def get_session():

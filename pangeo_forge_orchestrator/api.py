@@ -1,5 +1,3 @@
-import hashlib
-import os
 import uuid
 from datetime import datetime
 
@@ -22,8 +20,14 @@ def on_startup():
     for session in get_session():
         create_admin_api_key(session)
 
+
 for k in MODELS.keys():
-    register_endpoints(app, models=MODELS[k], get_session=get_session)
+    register_endpoints(
+        app,
+        models=MODELS[k],
+        get_session=get_session,
+        auth_dependency=check_authentication_header_admin,
+    )
 
 
 @app.post("/api-keys/new", response_model=APIKeyNew)
@@ -40,7 +44,7 @@ def new_api_key(
         encrypted_key=encrypted_key,
         created_at=datetime.now,
         is_active=True,
-        ** key_params.dict(),  # should only contain is_admin
+        **key_params.dict(),  # should only contain is_admin
     )
 
     session.add(api_key)

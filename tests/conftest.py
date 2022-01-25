@@ -1,17 +1,17 @@
+import hashlib
 import os
 import signal
 import socket
 import subprocess
 import time
 import uuid
-import hashlib
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
-from unittest import mock
 
 try:
     _ = os.environ["DATABASE_URL"]
@@ -56,10 +56,9 @@ def api_keys():
 @pytest.fixture(autouse=True)
 def required_backend_env_vars(api_keys):
     salt, _, encrypted_key = api_keys
-    with mock.patch.dict(os.environ, {
-            "ENCRYPTION_SALT": salt,
-            "ADMIN_API_KEY_SHA256": encrypted_key
-        }):
+    with mock.patch.dict(
+        os.environ, {"ENCRYPTION_SALT": salt, "ADMIN_API_KEY_SHA256": encrypted_key}
+    ):
         yield
 
 
@@ -132,7 +131,7 @@ def http_server(http_server_url, session):
     return http_server_url
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def fastapi_test_client_uncleared():
     from pangeo_forge_orchestrator.database import get_session
 
@@ -158,13 +157,39 @@ def fastapi_test_crud_client(fastapi_test_client):
 
 
 @pytest.fixture
+def fastapi_test_crud_client_authorized(fastapi_test_client, admin_key):
+    return FastAPITestClientCRUD(fastapi_test_client, api_key=admin_key)
+
+
+# alias
+authorized_client = fastapi_test_crud_client_authorized
+
+
+@pytest.fixture
 def cli_crud_client(http_server_url):
     from pangeo_forge_orchestrator.cli import cli
 
-    runner = CliRunner(env={"PANGEO_FORGE_DATABASE_URL": http_server_url})
+    runner = CliRunner(env={"PANGEO_FORGE_SERVER": http_server_url})
     return CommandLineCRUD(cli, runner)
 
 
-@pytest.fixture(params=[lazy_fixture("fastapi_test_crud_client"), lazy_fixture("cli_crud_client")])
+@pytest.fixture
+def cli_crud_client_authorized(http_server_url, admin_key):
+    from pangeo_forge_orchestrator.cli import cli
+
+    runner = CliRunner(
+        env={"PANGEO_FORGE_SERVER": http_server_url, "PANGEO_FORGE_API_KEY": admin_key}
+    )
+    return CommandLineCRUD(cli, runner)
+
+
+@pytest.fixture(
+    params=[
+        lazy_fixture("fastapi_test_crud_client"),
+        lazy_fixture("fastapi_test_crud_client_authorized"),
+        lazy_fixture("cli_crud_client"),
+        lazy_fixture("cli_crud_client_authorized"),
+    ]
+)
 def client(request):
     return request.param

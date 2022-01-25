@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlmodel import SQLModel, Field
+from sqlmodel import Field, SQLModel
 
 from .model_builders import MultipleModels
 
@@ -101,7 +101,7 @@ class APIKeyRead(APIKeyBase):
 
 
 # keeping api keys separate because they are special
-class APIKey(APIKeyBase, table=True):
+class APIKey(APIKeyBase, table=True):  # type: ignore
     # encrypted with SHA-256
     encrypted_key: str = Field(primary_key=True)
 

@@ -1,6 +1,29 @@
 import json
+from contextlib import contextmanager
 
+import pytest
 from requests.exceptions import HTTPError
+
+
+@contextmanager
+def passthrough(*args, **kwargs):
+    yield
+    return
+
+
+@contextmanager
+def check_error_and_skip(*args, **kwargs):
+    # make sure we get an error if we try an authorized path
+    with pytest.raises(HTTPError, match="403 Client Error") as e:
+        yield e
+    pytest.skip("Test can't proceed without auth")
+
+
+def authorization_context(api_key):
+    if api_key:
+        return passthrough
+    else:
+        return check_error_and_skip
 
 
 class FastAPITestClientCRUD:
@@ -8,8 +31,12 @@ class FastAPITestClientCRUD:
 
     error_cls = HTTPError
 
-    def __init__(self, client):
+    def __init__(self, client, api_key=None):
         self.client = client
+        if api_key:
+            header = {"x-api-key": api_key}
+            self.client.headers.update(header)
+        self.auth_required = authorization_context(api_key)
 
     def create(self, path: str, json: dict) -> dict:
         response = self.client.post(path, json=json)
@@ -64,6 +91,9 @@ class CommandLineCRUD:
     def __init__(self, app, runner):
         self.app = app
         self.runner = runner
+
+        api_key = self.runner.env.get("PANGEO_FORGE_API_KEY", None)
+        self.auth_required = authorization_context(api_key)
 
     def _invoke(self, *cmds: str):
         response = self.runner.invoke(self.app, ["database"] + list(cmds))

@@ -220,6 +220,7 @@ class _RegisterEndpoints:
     api: FastAPI
     get_session: Callable
     models: MultipleModels
+    auth_dependency: Callable
     limit: Query = QUERY_LIMIT
 
     def __post_init__(self):
@@ -236,6 +237,7 @@ class _RegisterEndpoints:
             *,
             session: Session = Depends(self.get_session),
             model: self.models.creation,  # type: ignore
+            authorized_user=Depends(self.auth_dependency),
         ):
             return create(session=session, table_cls=self.models.table, model=model)
 
@@ -263,16 +265,32 @@ class _RegisterEndpoints:
             session: Session = Depends(self.get_session),
             id: int,
             model: self.models.update,  # type: ignore
+            authorized_user=Depends(self.auth_dependency),
         ):
             return update(session=session, table_cls=self.models.table, id=id, model=model)
 
     def register_delete_endpoint(self):
         @self.api.delete(self.models.path + "{id}")
-        def _delete(*, session: Session = Depends(self.get_session), id: int):
+        def _delete(
+            *,
+            session: Session = Depends(self.get_session),
+            id: int,
+            authorized_user=Depends(self.auth_dependency),
+        ):
             return delete(session=session, table_cls=self.models.table, id=id)
 
 
 def register_endpoints(
-    api: FastAPI, get_session: Callable, models: MultipleModels, limit: Query = QUERY_LIMIT,
+    api: FastAPI,
+    get_session: Callable,
+    models: MultipleModels,
+    auth_dependency: Callable,
+    limit: Query = QUERY_LIMIT,
 ):
-    _ = _RegisterEndpoints(api, get_session, models, limit)
+    _RegisterEndpoints(
+        api=api,
+        get_session=get_session,
+        models=models,
+        auth_dependency=auth_dependency,
+        limit=limit,
+    )

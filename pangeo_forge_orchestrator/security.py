@@ -1,6 +1,4 @@
-import datetime as dt
 import hashlib
-import uuid
 import os
 from datetime import datetime
 
@@ -35,7 +33,7 @@ def create_admin_api_key(session):
         encrypted_key=admin_api_key_encrypted,
         is_admin=True,
         is_active=True,
-        created_at=datetime.now()
+        created_at=datetime.now(),
     )
 
     session.add(api_key)
@@ -47,7 +45,8 @@ def create_admin_api_key(session):
 def check_authentication_header(
     x_api_key: str = Depends(X_API_KEY), session=Depends(get_session),
 ) -> APIKeyRead:
-    """ takes the X-API-Key header and converts it into the matching user object from the database """
+    """Takes the X-API-Key header and converts it into the matching user object
+    from the database."""
 
     api_key = session.get(APIKey, encrypt(x_api_key))
     if api_key:
