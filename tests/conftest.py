@@ -13,19 +13,13 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel, create_engine
 from typer.testing import CliRunner
 
-try:
-    DATABASE_URL = os.environ["DATABASE_URL"]
-except KeyError:  # pragma: no cover
-    raise ValueError(
-        "The DATABASE_URL environment variable must be set and "
-        "the corresponding database migrated in order to run the tests. "
-        "See README.md for details."
-    )
-
 from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.database import get_database_url_from_env
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
+
+DATABASE_URL = get_database_url_from_env()
 
 
 def get_open_port():
