@@ -111,13 +111,13 @@ bakery_fixture = ModelFixtureWithOptionalRelations(
 
 feedstock_fixture = ModelFixtureWithOptionalRelations(
     path="/feedstocks/",
-    required_fields=["github_repo"],
-    create_opts=[dict(github_repo="a"), dict(github_repo="b")],
+    required_fields=["spec"],
+    create_opts=[dict(spec="a"), dict(spec="b")],
     invalid_opts=[
-        dict(github_repo=NOT_STR),  # type: ignore
-        dict(github_org="not a valid GitHubOrg"),
+        dict(spec=NOT_STR),  # type: ignore
+        dict(provider="not a valid RepoProvider"),
     ],
-    update_opts=[{"github_repo": "c"}, {"github_repo": "d"}],
+    update_opts=[{"spec": "c"}, {"spec": "d"}],
 )
 
 recipe_run_fixture.dependencies += [
