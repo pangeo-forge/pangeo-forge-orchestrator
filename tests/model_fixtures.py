@@ -27,7 +27,7 @@ class ModelRelationFixture:
     # For models with `sqlmodel.Relationship` attributes, holds data for creating the related table
     # in test database. Related tables may be either be required (i.e. a dependency) or optional.
     field_name: str  # Name of the field corresponding to the related table
-    model_fixture: ModelFixture
+    model_fixture: ModelFixture  # Data for populating the related table
 
 
 NOT_STR = {"not parsable": "to str"}
