@@ -117,11 +117,8 @@ def test_read_single(model_fixture, client):
 
         create_response = create_with_dependencies(create_opts, model_fixture, client)
 
-        if model_fixture.optional_relations:
-            for rel in model_fixture.optional_relations:
-                create_with_dependencies(
-                    rel.model_fixture.create_opts[0], rel.model_fixture, client,
-                )
+        for rel in model_fixture.optional_relations:
+            create_with_dependencies(rel.model_fixture.create_opts[0], rel.model_fixture, client)
 
         read_response = client.read_single(path, create_response["id"])
         compare_response(create_opts, read_response)
