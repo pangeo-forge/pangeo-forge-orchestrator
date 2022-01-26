@@ -1,10 +1,65 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from sqlmodel import Field, SQLModel
 
-from .model_builders import MultipleModels
+from .model_builders import MultipleModels, RelationBuilder
+
+# Bakery --------------------------------------------------------------------------------
+
+
+class BakeryBase(SQLModel):
+    """Information about a Pangeo Forge Bakery.
+
+    :param region: The cloud region.
+    :param name: The bakery name.
+    :param description: A description of this bakery.
+    """
+
+    region: str  # TODO: Categorical constraint.
+    name: str  # TODO: Unique constraint.
+    description: str
+
+
+class BakeryRead(BakeryBase):
+    """The bakery read model. See ``RecipeRunRead`` docstring in this module for further detail.
+    """
+
+    id: int
+
+
+# Feedstock -----------------------------------------------------------------------------
+
+
+class RepoProvider(str, Enum):
+    """Categorical choices for ``FeedstockBase.provider``."""
+
+    github = "github"
+
+
+class FeedstockBase(SQLModel):
+    """Information about a Pangeo Forge Feedstock.
+
+    :param spec: The path to the feedstock repo within the ``provider``. A ``spec`` for a feedstock
+      repo on GitHub might be, e.g., ``"pangeo-forge/noaa-oisst-avhrr-only-feedstock"``. The format
+      of the ``spec`` string is ``provider``-dependent.
+    :param provider: The name of the host site on which this feedstock repo resides. Must be one
+      of the options defined in ``RepoProvider``.
+    """
+
+    spec: str
+    provider: RepoProvider = RepoProvider.github
+
+
+class FeedstockRead(FeedstockBase):
+    """The feedstock read model. See ``RecipeRunRead`` docstring in this module for further detail.
+    """
+
+    id: int
+
+
+# RecipeRun -----------------------------------------------------------------------------
 
 
 class RecipeRunStatus(str, Enum):
@@ -58,8 +113,8 @@ class RecipeRunBase(SQLModel):
     #  3. You cannot change a check run conclusion to stale, only GitHub can set this.
 
     recipe_id: str
-    bakery_id: int  # TODO: Foreign key
-    feedstock_id: int  # TODO: Foreign key
+    bakery_id: int = Field(foreign_key="bakery.id")
+    feedstock_id: int = Field(foreign_key="feedstock.id")
     head_sha: str
     version: str  # TODO: use `ConstrainedStr`
     started_at: datetime
@@ -81,9 +136,68 @@ class RecipeRunRead(RecipeRunBase):
     id: int
 
 
-MODELS = {
-    "recipe_run": MultipleModels(path="/recipe_runs/", base=RecipeRunBase, response=RecipeRunRead)
-}
+# Extended response models --------------------------------------------------------------
+# https://sqlmodel.tiangolo.com/tutorial/fastapi/relationships/#models-with-relationships
+
+
+class BakeryReadWithRecipeRuns(BakeryRead):
+    recipe_runs: List[RecipeRunRead]
+
+
+class FeedstockReadWithRecipeRuns(FeedstockRead):
+    recipe_runs: List[RecipeRunRead]
+
+
+class RecipeRunReadWithBakeryAndFeedstock(RecipeRunRead):
+    bakery: BakeryRead
+    feedstock: FeedstockRead
+
+
+# Mutliple models -----------------------------------------------------------------------
+
+
+bakery_models = MultipleModels(
+    path="/bakeries/",
+    base=BakeryBase,
+    response=BakeryRead,
+    extended_response=BakeryReadWithRecipeRuns,
+    relations=[
+        RelationBuilder(
+            field="recipe_runs",
+            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            back_populates="bakery",
+        ),
+    ],
+)
+feedstock_models = MultipleModels(
+    path="/feedstocks/",
+    base=FeedstockBase,
+    response=FeedstockRead,
+    extended_response=FeedstockReadWithRecipeRuns,
+    relations=[
+        RelationBuilder(
+            field="recipe_runs",
+            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            back_populates="feedstock",
+        ),
+    ],
+)
+recipe_run_models = MultipleModels(
+    path="/recipe_runs/",
+    base=RecipeRunBase,
+    response=RecipeRunRead,
+    extended_response=RecipeRunReadWithBakeryAndFeedstock,
+    relations=[
+        RelationBuilder(
+            field="bakery", annotation=bakery_models.table, back_populates="recipe_runs",
+        ),
+        RelationBuilder(
+            field="feedstock", annotation=feedstock_models.table, back_populates="recipe_runs",
+        ),
+    ],
+)
+
+MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models, "feedstock": feedstock_models}
 
 
 class APIKeyBase(SQLModel):

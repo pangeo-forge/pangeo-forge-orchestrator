@@ -28,7 +28,14 @@ def get_open_port():
     return port
 
 
-# General fixtures ------------------------------------------------------------------------
+def clear_table(session: Session, table_model: SQLModel):
+    session.query(table_model).delete()
+    if session.connection().engine.url.drivername == "postgresql":
+        # if testing against persistent local postgres server, reset primary keys
+        cmd = f"ALTER SEQUENCE {table_model.__name__}_id_seq RESTART WITH 1"
+        session.exec(cmd)
+    session.commit()
+    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
 @pytest.fixture(scope="session")
@@ -75,7 +82,7 @@ def http_server_url(request):
     # https://stackoverflow.com/a/22582602/3266235
     p = subprocess.Popen(command_list, preexec_fn=os.setsid)
 
-    time.sleep(1)  # let the server start up
+    time.sleep(2)  # let the server start up
 
     yield url
 
@@ -83,22 +90,10 @@ def http_server_url(request):
 
 
 @pytest.fixture
-def uncleared_session():
+def session():
     from pangeo_forge_orchestrator.database import engine
 
     with Session(engine) as session:
-        yield session
-
-
-def clear_table(session: Session, table_model: SQLModel):
-    session.query(table_model).delete()
-    session.commit()
-    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
-
-
-@pytest.fixture
-def session(uncleared_session):
-    with uncleared_session as session:
         for k in MODELS:
             clear_table(session, MODELS[k].table)  # make sure the database is empty
         yield session
@@ -107,7 +102,7 @@ def session(uncleared_session):
 @pytest.fixture
 def http_server(http_server_url, session):
     for k in MODELS:
-        clear_table(session, MODELS[k].table)  # make sure the database is empty
+        clear_table(session, MODELS[k].table)
     return http_server_url
 
 
@@ -131,7 +126,7 @@ authorized_client = fastapi_test_crud_client_authorized
 
 
 @pytest.fixture
-def cli_crud_client(http_server_url):
+def cli_crud_client(http_server_url, session):  # pass `session` so that `clear_table` is called
     from pangeo_forge_orchestrator.cli import cli
 
     runner = CliRunner(env={"PANGEO_FORGE_SERVER": http_server_url})

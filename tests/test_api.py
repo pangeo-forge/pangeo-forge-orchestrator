@@ -37,15 +37,25 @@ def compare_response(response_fixture, reponse_data):
             assert actual == expected
 
 
-create_params = [
-    (mf.path, create_opts) for mf in ALL_MODEL_FIXTURES for create_opts in mf.create_opts
-]
+def create_with_dependencies(create_opts, mf, client):
+
+    for dep in mf.dependencies:
+        dep_create_opts = dep.model_fixture.create_opts[0]  # just use first create_opts
+        dep_create_response = client.create(dep.model_fixture.path, dep_create_opts)
+        compare_response(dep_create_opts, dep_create_response)
+
+    data = client.create(mf.path, create_opts)
+
+    return data
+
+
+create_params = [(create_opts, mf) for mf in ALL_MODEL_FIXTURES for create_opts in mf.create_opts]
 
 
 @pytest.mark.parametrize("path,create_opts", create_params)
 def test_create(path: str, create_opts: APIOpts, client):
     with client.auth_required():
-        data = client.create(path, create_opts)
+        data = create_with_dependencies(create_opts, model_fixture, client)
 
     compare_response(create_opts, data)
     assert data["id"] > 0
@@ -69,15 +79,15 @@ def test_create_incomplete(path: str, create_opts: APIOpts, required_arg: str, c
 
 
 create_params_invalid = [
-    (mf.path, create_opts, invalid_opt)
+    (create_opts, invalid_opt, mf)
     for mf in ALL_MODEL_FIXTURES
     for create_opts in mf.create_opts[:1]  # just use the first create fixture
     for invalid_opt in mf.invalid_opts
 ]
 
 
-@pytest.mark.parametrize("path,create_opts,invalid_arg", create_params_invalid)
-def test_create_invalid(path: str, create_opts: APIOpts, invalid_arg, client):
+@pytest.mark.parametrize("create_opts,invalid_arg,model_fixture", create_params_invalid)
+def test_create_invalid(create_opts: APIOpts, invalid_arg, model_fixture, client):
     create_kwargs = create_opts.copy()
     create_kwargs.update(invalid_arg)
     with pytest.raises(client.error_cls, match="422 Client Error: Unprocessable Entity"):
@@ -89,23 +99,41 @@ def test_create_invalid(path: str, create_opts: APIOpts, invalid_arg, client):
 def test_read_range(model_fixtures, client, authorized_client):
     # first create some data
     path = model_fixtures.path
-    for create_opts in model_fixtures.create_opts:
-        authorized_client.create(path, create_opts)
+    for i, create_opts in enumerate(model_fixture.create_opts):
+        if i == 0:  # don't create same dependencies more than once
+            create_with_dependencies(create_opts, model_fixture, authorized_client)
+        else:
+            authorized_client.create(path, create_opts)
     response = client.read_range(path)
-    for expected, actual in zip(model_fixtures.create_opts, response):
+    for expected, actual in zip(model_fixture.create_opts, response):
         compare_response(expected, actual)
         assert actual["id"] > 0
 
 
-@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
-def test_read_single(model_fixtures, client, authorized_client):
+@pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
+def test_read_single(model_fixture, client, authorized_client):
     # first create some data
     path = model_fixtures.path
-    for create_opts in model_fixtures.create_opts:
-        create_response = authorized_client.create(path, create_opts)
+    for create_opts in model_fixture.create_opts:
+
+        create_response = create_with_dependencies(create_opts, model_fixture, authorized_client)
+
+        for rel in model_fixture.optional_relations:
+            create_with_dependencies(rel.model_fixture.create_opts[0], rel.model_fixture, authorized_client)
+
         read_response = client.read_single(path, create_response["id"])
         compare_response(create_opts, read_response)
         assert read_response["id"] == create_response["id"]
+
+        # `compare_response` iterates over fixture keys, so we need to eval relations separately
+        for relation in model_fixture.all_relations:
+            if isinstance(read_response[relation.field_name], list):  # maybe one-to-many
+                for resp in read_response[relation.field_name]:  # TODO: Test len(list) > 1
+                    compare_response(relation.model_fixture.create_opts[0], resp)
+            else:
+                compare_response(
+                    relation.model_fixture.create_opts[0], read_response[relation.field_name],
+                )
 
 
 @pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
@@ -119,7 +147,7 @@ def test_read_nonexistent(model_fixtures, client):
 
 @pytest.mark.parametrize("path,create_opts,invalid_arg", create_params_invalid)
 def test_update_invalid(path: str, create_opts: APIOpts, invalid_arg, client, authorized_client):
-    response = authorized_client.create(path, create_opts)
+    response = create_with_dependencies(create_opts, model_fixture, authorized_client)
     id = response["id"]
     with pytest.raises(client.error_cls):
         with client.auth_required():
@@ -127,7 +155,7 @@ def test_update_invalid(path: str, create_opts: APIOpts, invalid_arg, client, au
 
 
 update_params = [
-    (mf.path, create_opts, invalid_opt)
+    (create_opts, invalid_opt, mf)
     for mf in ALL_MODEL_FIXTURES
     for create_opts in mf.create_opts[:1]  # just use the first create fixture
     for invalid_opt in mf.update_opts
@@ -136,7 +164,7 @@ update_params = [
 
 @pytest.mark.parametrize("path,create_opts,update_opts", update_params)
 def test_update(path: str, create_opts: APIOpts, update_opts, client, authorized_client):
-    create_response = authorized_client.create(path, create_opts)
+    create_response = create_with_dependencies(create_opts, model_fixture, client)
     id = create_response["id"]
     with client.auth_required():
         response = client.update(path, id, update_opts)
@@ -145,12 +173,12 @@ def test_update(path: str, create_opts: APIOpts, update_opts, client, authorized
 
 @pytest.mark.parametrize("path,create_opts", create_params)
 def test_delete(path: str, create_opts: APIOpts, client, authorized_client):
-    data = authorized_client.create(path, create_opts)
+    data = create_with_dependencies(create_opts, model_fixture, authorized_client)
     id = data["id"]
     with client.auth_required():
         _ = client.delete(path, id)
     with pytest.raises(client.error_cls):
-        _ = client.read_single(path, id)
+        _ = client.read_single(model_fixture.path, id)
 
 
 @pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
