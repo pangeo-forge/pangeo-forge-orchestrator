@@ -86,8 +86,9 @@ Our Heroku CI tests (along with the production API) run with a Postgres server. 
 As such, after your local tests passes against the SQLite database, you may want to test against a local Postgres server as a final check.
 To do so:
 
-1. Install https://postgresapp.com and run `psql` to enter an interactive session
-2. Run `CREATE DATABASE test_db;` within the interactive session, then exit
+1. Install https://postgresapp.com 
+2. Start the database using the app
+3. Run `echo "CREATE DATABASE test_db;" | psql` to create a database
 3. Set `export DATABASE_URL=postgresql://localhost/test_db`
 
     > If you are working on a PR that includes changes to `pangeo_forge_orchestrator.models`, you may need to generate a new alembic
