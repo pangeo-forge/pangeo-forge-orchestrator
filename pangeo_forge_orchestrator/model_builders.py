@@ -1,11 +1,31 @@
 import types
 from dataclasses import dataclass
-from typing import Callable, List, Union
+from typing import Callable, List, Optional, Union
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlmodel import Field, Session, SQLModel, select
+from sqlmodel import Field, Relationship, Session, SQLModel, select
 
 QUERY_LIMIT = Query(default=100, lte=100)
+
+
+@dataclass
+class RelationBuilder:
+    """Data used to generate ``sqlmodel.Relationship``s in ``MultipleModels``. Based on:
+    https://sqlmodel.tiangolo.com/tutorial/relationship-attributes/define-relationships-attributes/
+
+    :param field: The name of the field to add to the table.
+    :param annotation: The type annotation. If the relationship is one-to-one, the annotation will
+    be a subclass of ``SQLModel`` corresponding to the table model for the related table. If the
+    relationship is one-to-many, the annotation will be ``List[str]`` where ``str`` is the
+    ``__name__`` of the related table model. In either case, type can be ``Optional``.
+    :param back_populates: The name of the field in the related table to back populate. This field
+      name must exist as a ``sqlmodel.Relationship`` attribute of the model referenced in the
+      provided ``annotation``.
+    """
+
+    field: str
+    annotation: Union[SQLModel, List[str]]
+    back_populates: str
 
 
 # Model generator + container -------------------------------------------------------------
@@ -36,11 +56,18 @@ class MultipleModels:
       either Python's built-in ``type()`` or ``types.new_class()`` function, therefore the most
       robust option is simply for the user to define and pass it to ``MultipleModels`` manually.
       (Note also that "id" as used here is just another way of saying "primary key".)
+    :param extended_response: An optional response class for returning nested data from related
+      tables in responses to ``read_single`` GET requests. For more information, refer to:
+      https://sqlmodel.tiangolo.com/tutorial/fastapi/relationships/#models-with-relationships.
+    :param relations: An optional list of ``RelationBuilder``s. If present, used to generate
+       ``sqlmodel.Relationship`` attributes on the table class in ``self.make_table_cls``.
     """
 
     path: str
     base: SQLModel
     response: SQLModel
+    extended_response: Optional[SQLModel] = None
+    relations: Optional[List[RelationBuilder]] = None
 
     def __post_init__(self):
         self.creation: SQLModel = self.make_creator_cls()
@@ -90,12 +117,18 @@ class MultipleModels:
         https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/#the-hero-table-model,
         the table model is the same as the base model, with the addition of the ``table=True`` class
         creation keyword and an ``id`` attribute of type ``Optional[int]`` set to a default value of
-        ``Field(default=None, primary_key=True)``.
+        ``Field(default=None, primary_key=True)``. If ``self.relations`` are provided, they are
+        defined on the table model as described in the SQLModel documentation:
+        https://sqlmodel.tiangolo.com/tutorial/relationship-attributes/define-relationships-attributes/
         """
         cls_name = self.make_cls_name(self.base, "")
         attrs = dict(id=Field(default=None, primary_key=True))
         annotations = dict(id=Union[int, None])
         attrs.update(dict(__annotations__=annotations))
+        if self.relations:
+            for r in self.relations:
+                attrs.update({r.field: Relationship(back_populates=r.back_populates)})
+                attrs.get("__annotations__").update({r.field: r.annotation})  # type: ignore
         # We are using `typing.new_class` (vs. `type`) b/c it supports the `table=True` kwarg.
         # https://twitter.com/simonw/status/1430255521127305216?s=20
         # https://docs.python.org/3/reference/datamodel.html#customizing-class-creation
@@ -252,7 +285,11 @@ class _RegisterEndpoints:
             )
 
     def register_read_single_endpoint(self):
-        @self.api.get(self.models.path + "{id}", response_model=self.models.response)
+        response_model = (
+            self.models.extended_response if self.models.extended_response else self.models.response
+        )
+
+        @self.api.get(self.models.path + "{id}", response_model=response_model)
         def _read_single(*, session: Session = Depends(self.get_session), id: int):
             return read_single(session=session, table_cls=self.models.table, id=id)
 
