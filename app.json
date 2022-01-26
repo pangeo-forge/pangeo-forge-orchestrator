@@ -18,6 +18,12 @@
         "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
         "test": "pytest -vs tests"
       }
+    },
+    "review": {
+      "env": {
+        "ADMIN_API_KEY_SHA256": "daa46aa28c907fdc91b6c35b816a1de32137aecdd5982a514c983f2917d8e2ef",
+        "ENCRYPTION_SALT": "e296bd453e1c4a09aa52656e1e05f532"
+      }
     }
   }
 }
