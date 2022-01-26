@@ -52,8 +52,8 @@ def create_with_dependencies(create_opts, mf, client):
 create_params = [(create_opts, mf) for mf in ALL_MODEL_FIXTURES for create_opts in mf.create_opts]
 
 
-@pytest.mark.parametrize("path,create_opts", create_params)
-def test_create(path: str, create_opts: APIOpts, client):
+@pytest.mark.parametrize("create_opts,model_fixture", create_params)
+def test_create(create_opts: APIOpts, model_fixture, client):
     with client.auth_required():
         data = create_with_dependencies(create_opts, model_fixture, client)
 
@@ -92,13 +92,13 @@ def test_create_invalid(create_opts: APIOpts, invalid_arg, model_fixture, client
     create_kwargs.update(invalid_arg)
     with pytest.raises(client.error_cls, match="422 Client Error: Unprocessable Entity"):
         with client.auth_required():
-            _ = client.create(path, create_kwargs)
+            _ = client.create(model_fixture.path, create_kwargs)
 
 
-@pytest.mark.parametrize("model_fixtures", ALL_MODEL_FIXTURES)
-def test_read_range(model_fixtures, client, authorized_client):
+@pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
+def test_read_range(model_fixture, client, authorized_client):
     # first create some data
-    path = model_fixtures.path
+    path = model_fixture.path
     for i, create_opts in enumerate(model_fixture.create_opts):
         if i == 0:  # don't create same dependencies more than once
             create_with_dependencies(create_opts, model_fixture, authorized_client)
@@ -113,13 +113,15 @@ def test_read_range(model_fixtures, client, authorized_client):
 @pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
 def test_read_single(model_fixture, client, authorized_client):
     # first create some data
-    path = model_fixtures.path
+    path = model_fixture.path
     for create_opts in model_fixture.create_opts:
 
         create_response = create_with_dependencies(create_opts, model_fixture, authorized_client)
 
         for rel in model_fixture.optional_relations:
-            create_with_dependencies(rel.model_fixture.create_opts[0], rel.model_fixture, authorized_client)
+            create_with_dependencies(
+                rel.model_fixture.create_opts[0], rel.model_fixture, authorized_client
+            )
 
         read_response = client.read_single(path, create_response["id"])
         compare_response(create_opts, read_response)
@@ -145,13 +147,15 @@ def test_read_nonexistent(model_fixtures, client):
         _ = client.read_single(path, id)
 
 
-@pytest.mark.parametrize("path,create_opts,invalid_arg", create_params_invalid)
-def test_update_invalid(path: str, create_opts: APIOpts, invalid_arg, client, authorized_client):
+@pytest.mark.parametrize("create_opts,invalid_arg,model_fixture", create_params_invalid)
+def test_update_invalid(
+    create_opts: APIOpts, invalid_arg, model_fixture, client, authorized_client
+):
     response = create_with_dependencies(create_opts, model_fixture, authorized_client)
     id = response["id"]
     with pytest.raises(client.error_cls):
         with client.auth_required():
-            _ = client.update(path, id, invalid_arg)
+            _ = client.update(model_fixture.path, id, invalid_arg)
 
 
 update_params = [
@@ -162,21 +166,21 @@ update_params = [
 ]
 
 
-@pytest.mark.parametrize("path,create_opts,update_opts", update_params)
-def test_update(path: str, create_opts: APIOpts, update_opts, client, authorized_client):
-    create_response = create_with_dependencies(create_opts, model_fixture, client)
+@pytest.mark.parametrize("create_opts,update_opts,model_fixture", update_params)
+def test_update(create_opts: APIOpts, update_opts, model_fixture, client, authorized_client):
+    create_response = create_with_dependencies(create_opts, model_fixture, authorized_client)
     id = create_response["id"]
     with client.auth_required():
-        response = client.update(path, id, update_opts)
+        response = client.update(model_fixture.path, id, update_opts)
     compare_response(update_opts, response)
 
 
-@pytest.mark.parametrize("path,create_opts", create_params)
-def test_delete(path: str, create_opts: APIOpts, client, authorized_client):
+@pytest.mark.parametrize("create_opts,model_fixture", create_params)
+def test_delete(create_opts: APIOpts, model_fixture, client, authorized_client):
     data = create_with_dependencies(create_opts, model_fixture, authorized_client)
     id = data["id"]
     with client.auth_required():
-        _ = client.delete(path, id)
+        _ = client.delete(model_fixture.path, id)
     with pytest.raises(client.error_cls):
         _ = client.read_single(model_fixture.path, id)
 

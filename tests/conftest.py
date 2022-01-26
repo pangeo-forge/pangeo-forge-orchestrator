@@ -62,7 +62,7 @@ def admin_key(api_keys):
 
 
 @pytest.fixture(scope="session")
-def http_server_url(request):
+def http_server_url():
     env_port = os.environ.get("PORT", False)
     port = env_port or get_open_port()
     host = "127.0.0.1"
@@ -145,10 +145,14 @@ def cli_crud_client_authorized(http_server_url, admin_key):
 
 @pytest.fixture(
     params=[
-        lazy_fixture("fastapi_test_crud_client"),
-        lazy_fixture("fastapi_test_crud_client_authorized"),
+        # Note: the CLI fixtures need to be first because they will trigger
+        # the db to be initialized; otherwise the `session` fixture will
+        # fail because it can't delete a non-existent table.
+        # This feels fragile. Should be fixed by refactoring the fixtures.
         lazy_fixture("cli_crud_client"),
         lazy_fixture("cli_crud_client_authorized"),
+        lazy_fixture("fastapi_test_crud_client"),
+        lazy_fixture("fastapi_test_crud_client_authorized"),
     ]
 )
 def client(request):

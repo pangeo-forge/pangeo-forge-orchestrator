@@ -15,13 +15,13 @@ def get_database_url_from_env():
     return database_url
 
 
-connect_args = {}
+connect_args = {}  # type: dict
 database_url = get_database_url_from_env()
 if database_url.startswith("sqlite:"):
     connect_args = {"check_same_thread": False}
 if database_url.startswith("postgresql:"):
     connect_args = dict(options="-c timezone=utc")
-    
+
 engine = create_engine(database_url, echo=False, connect_args=connect_args)
 
 
