@@ -118,13 +118,32 @@ feedstock_fixture = ModelFixture(
     update_opts=[{"spec": "c"}, {"spec": "d"}],
 )
 
+dataset_fixture = ModelFixture(
+    path="/datasets/",
+    required_fields=["name", "reciperun_id", "type", "public_url"],
+    create_opts=[
+        dict(name="a", reciperun_id=1, type="zarr", public_url="b"),
+        dict(name="c", reciperun_id=1, type="kerchunk", public_url="d"),
+    ],
+    invalid_opts=[
+        dict(name=NOT_STR),  # type: ignore
+        dict(reciperun_id=NOT_INT),
+        dict(type="not a valid dataset type"),
+        dict(public_url=NOT_STR),  # type: ignore
+    ],
+    update_opts=[{"name": "e", "public_url": "f"}, {"name": "g", "public_url": "h"}],
+)
+
 recipe_run_fixture.dependencies += [
     ModelRelationFixture("bakery", bakery_fixture),
     ModelRelationFixture("feedstock", feedstock_fixture),
 ]
+recipe_run_fixture.optional_relations += [ModelRelationFixture("dataset", dataset_fixture)]
+
+dataset_fixture.dependencies += [ModelRelationFixture("produced_by", recipe_run_fixture)]
 
 bakery_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
 
 feedstock_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
 
-ALL_MODEL_FIXTURES = [recipe_run_fixture, bakery_fixture, feedstock_fixture]
+ALL_MODEL_FIXTURES = [recipe_run_fixture, bakery_fixture, feedstock_fixture, dataset_fixture]

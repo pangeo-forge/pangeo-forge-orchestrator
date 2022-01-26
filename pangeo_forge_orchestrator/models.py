@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import ForwardRef, List, Optional, Union
 
 from sqlmodel import Field, SQLModel
 
@@ -54,6 +54,35 @@ class FeedstockBase(SQLModel):
 
 class FeedstockRead(FeedstockBase):
     """The feedstock read model. See ``RecipeRunRead`` docstring in this module for further detail.
+    """
+
+    id: int
+
+
+# RecipeRun -----------------------------------------------------------------------------
+
+
+class DatasetType(str, Enum):
+    """Categorical choices for ``DatasetBase.type``."""
+
+    zarr = "zarr"
+    kerchunk = "kerchunk"
+    parquet = "parquet"
+
+
+class DatasetBase(SQLModel):
+    """
+
+    """
+
+    name: str
+    reciperun_id: int = Field(foreign_key="reciperun.id")
+    type: DatasetType
+    public_url: str
+
+
+class DatasetRead(DatasetBase):
+    """The dataset read model. See ``RecipeRunRead`` docstring in this module for further detail.
     """
 
     id: int
@@ -148,9 +177,14 @@ class FeedstockReadWithRecipeRuns(FeedstockRead):
     recipe_runs: List[RecipeRunRead]
 
 
-class RecipeRunReadWithBakeryAndFeedstock(RecipeRunRead):
+class RecipeRunReadWithBakeryFeedstockDataset(RecipeRunRead):
     bakery: BakeryRead
     feedstock: FeedstockRead
+    dataset: Optional[DatasetRead] = None
+
+
+class DatasetReadWithRecipeRun(DatasetRead):
+    produced_by: RecipeRunRead
 
 
 # Mutliple models -----------------------------------------------------------------------
@@ -182,11 +216,24 @@ feedstock_models = MultipleModels(
         ),
     ],
 )
+
+dataset_models = MultipleModels(
+    path="/datasets/",
+    base=DatasetBase,
+    response=DatasetRead,
+    extended_response=DatasetReadWithRecipeRun,
+    relations=[
+        RelationBuilder(
+            field="produced_by", annotation=ForwardRef("RecipeRun"), back_populates="dataset",
+        )
+    ],
+)
+
 recipe_run_models = MultipleModels(
     path="/recipe_runs/",
     base=RecipeRunBase,
     response=RecipeRunRead,
-    extended_response=RecipeRunReadWithBakeryAndFeedstock,
+    extended_response=RecipeRunReadWithBakeryFeedstockDataset,
     relations=[
         RelationBuilder(
             field="bakery", annotation=bakery_models.table, back_populates="recipe_runs",
@@ -194,7 +241,17 @@ recipe_run_models = MultipleModels(
         RelationBuilder(
             field="feedstock", annotation=feedstock_models.table, back_populates="recipe_runs",
         ),
+        RelationBuilder(
+            field="dataset",
+            annotation=Union[dataset_models.table, None],
+            back_populates="produced_by",
+        ),
     ],
 )
 
-MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models, "feedstock": feedstock_models}
+MODELS = {
+    "recipe_run": recipe_run_models,
+    "bakery": bakery_models,
+    "feedstock": feedstock_models,
+    "dataset": dataset_models,
+}
