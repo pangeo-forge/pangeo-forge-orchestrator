@@ -39,10 +39,21 @@ def compare_response(response_fixture, reponse_data):
 
 def create_with_dependencies(create_opts, mf, client):
 
-    for dep in mf.dependencies:
+    # the dependencies themselves might have "inner" dependencies of their own;
+    # e.g., `dataset` depends on `recipe_run` which depends on `feedstock` and `bakery`
+    dependencies = [dict(inner=d.model_fixture.dependencies, outer=d) for d in mf.dependencies]
+
+    def _create_dep(dep, client):
         dep_create_opts = dep.model_fixture.create_opts[0]  # just use first create_opts
         dep_create_response = client.create(dep.model_fixture.path, dep_create_opts)
         compare_response(dep_create_opts, dep_create_response)
+
+    for deps in dependencies:
+        if deps["inner"]:
+            for d in deps["inner"]:
+                _create_dep(d, client)
+
+        _create_dep(deps["outer"], client)
 
     data = client.create(mf.path, create_opts)
 
