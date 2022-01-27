@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import ForwardRef, List, Optional, Union
+from typing import ForwardRef, List, Optional
 
 from sqlmodel import Field, SQLModel
 
@@ -177,10 +177,10 @@ class FeedstockReadWithRecipeRuns(FeedstockRead):
     recipe_runs: List[RecipeRunRead]
 
 
-class RecipeRunReadWithBakeryFeedstockDataset(RecipeRunRead):
+class RecipeRunReadWithBakeryFeedstockDatasets(RecipeRunRead):
     bakery: BakeryRead
     feedstock: FeedstockRead
-    dataset: Optional[DatasetRead] = None
+    datasets: List[DatasetRead] = []
 
 
 class DatasetReadWithRecipeRun(DatasetRead):
@@ -233,7 +233,7 @@ recipe_run_models = MultipleModels(
     path="/recipe_runs/",
     base=RecipeRunBase,
     response=RecipeRunRead,
-    extended_response=RecipeRunReadWithBakeryFeedstockDataset,
+    extended_response=RecipeRunReadWithBakeryFeedstockDatasets,
     relations=[
         RelationBuilder(
             field="bakery", annotation=bakery_models.table, back_populates="recipe_runs",
@@ -243,15 +243,18 @@ recipe_run_models = MultipleModels(
         ),
         RelationBuilder(
             field="dataset",
-            annotation=Union[dataset_models.table, None],
+            annotation=List[dataset_models.table],  # type: ignore
             back_populates="produced_by",
         ),
     ],
 )
 
 MODELS = {
+    # TODO: We currently list models in dependency order to allow `clear_table` in tests to delete
+    # in the correct order. (Postgres will complain if tables which are referenced by foreign keys
+    # in other tables are deleted.) There should be a more explicit way to handle this in the tests.
+    "dataset": dataset_models,
     "recipe_run": recipe_run_models,
     "bakery": bakery_models,
     "feedstock": feedstock_models,
-    "dataset": dataset_models,
 }
