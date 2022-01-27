@@ -134,16 +134,18 @@ dataset_fixture = ModelFixture(
     update_opts=[{"name": "e", "public_url": "f"}, {"name": "g", "public_url": "h"}],
 )
 
+# Add dependencies first ----------------------------------------------------------------
+
 recipe_run_fixture.dependencies += [
     ModelRelationFixture("bakery", bakery_fixture),
     ModelRelationFixture("feedstock", feedstock_fixture),
 ]
-recipe_run_fixture.optional_relations += [ModelRelationFixture("dataset", dataset_fixture)]
-
 dataset_fixture.dependencies += [ModelRelationFixture("produced_by", recipe_run_fixture)]
 
-bakery_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
+# Add optional_relations after dependencies ---------------------------------------------
 
+recipe_run_fixture.optional_relations += [ModelRelationFixture("datasets", dataset_fixture)]
+bakery_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
 feedstock_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
 
 ALL_MODEL_FIXTURES = [recipe_run_fixture, bakery_fixture, feedstock_fixture, dataset_fixture]
