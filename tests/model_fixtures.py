@@ -30,6 +30,7 @@ class ModelRelationFixture:
     model_fixture: ModelFixture  # Data for populating the related table
 
 
+NOT_BOOL = "not parsable to boolean"
 NOT_STR = {"not parsable": "to str"}
 NOT_INT = "not parsable to int"
 NOT_ISO8601 = "Jan 01 2021 00:00:00"
@@ -79,13 +80,22 @@ recipe_run_fixture = ModelFixture(
         dict(conclusion="not a valid conclusion"),
         dict(status="not a valid status"),
         dict(message=NOT_STR),  # type: ignore
+        dict(is_test=NOT_BOOL),
+        dict(dataset_type="not a valid dataset type"),
+        dict(dataset_public_url=NOT_STR),  # type: ignore
         # the following two options should fail but don't
         # dict(id=100),  # shouldn't be able to pass id at all; instead silently ignored
         # dict(random_field_that_doesnt_exist_and_shouldnt_be_allow="foobar"),
     ],
     update_opts=[
-        {"completed_at": "2021-01-02T01:01:01Z", "status": "completed", "conclusion": "failure"},
-        {"completed_at": "2021-01-02T01:01:01Z", "status": "completed", "conclusion": "success"},
+        dict(completed_at="2021-01-02T01:01:01Z", status="completed", conclusion="failure"),
+        dict(
+            completed_at="2021-01-02T01:01:01Z",
+            status="completed",
+            conclusion="success",
+            dataset_type="zarr",
+            dataset_public_url="http://datahost.org/path-to-dataset",
+        ),
     ],
 )
 
