@@ -6,7 +6,12 @@ from fastapi import Depends, FastAPI
 from .database import create_sqlite_db_and_tables, engine, get_session
 from .model_builders import register_endpoints
 from .models import MODELS, APIKey, APIKeyCreate, APIKeyNew
-from .security import check_authentication_header_admin, create_admin_api_key, encrypt
+from .security import (
+    check_authentication_header,
+    check_authentication_header_admin,
+    create_admin_api_key,
+    encrypt,
+)
 
 app = FastAPI()
 
@@ -22,10 +27,7 @@ def on_startup():
 
 for k in MODELS.keys():
     register_endpoints(
-        app,
-        models=MODELS[k],
-        get_session=get_session,
-        auth_dependency=check_authentication_header_admin,
+        app, models=MODELS[k], get_session=get_session, auth_dependency=check_authentication_header,
     )
 
 
