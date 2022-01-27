@@ -13,7 +13,6 @@ app = FastAPI()
 
 @app.on_event("startup")
 def on_startup():
-    print("STARTUP!")
     if engine.url.drivername == "sqlite":
         create_sqlite_db_and_tables()
 
@@ -57,3 +56,6 @@ def new_api_key(
     api_key_response = APIKeyNew(key=raw_key, **api_key_response_from_db)
 
     return api_key_response
+
+
+# TODO: implement listing, updating, deleting keys

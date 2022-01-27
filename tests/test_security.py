@@ -10,4 +10,5 @@ def test_api_key_create(client, api_key_options):
     assert result["is_active"] is True
     assert result["is_admin"] is api_key_options.get("is_admin", False)
 
-    # TODO check that the key actually works
+    # TODO check that the key actually works - complicated because we would
+    # probably have to create a new client
