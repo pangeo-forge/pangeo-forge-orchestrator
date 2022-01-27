@@ -30,7 +30,7 @@ for k in MODELS.keys():
     )
 
 
-@app.post("/api-keys/new", response_model=APIKeyNew)
+@app.post("/api-keys", response_model=APIKeyNew)
 def new_api_key(
     *,
     key_params: APIKeyCreate,

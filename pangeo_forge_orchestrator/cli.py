@@ -1,4 +1,4 @@
-import ast
+import json
 from dataclasses import dataclass
 
 import typer
@@ -43,11 +43,10 @@ def common(
 def post(
     ctx: typer.Context,
     endpoint: str = typer.Argument(..., help=top_endpoint),
-    json: str = typer.Argument(..., help=json_help),
+    data: str = typer.Argument(..., help=json_help),
 ):
     """Add new entries to the database."""
-    as_dict = ast.literal_eval(json)
-    response = ctx.obj.post(endpoint=endpoint, json=as_dict)
+    response = ctx.obj.post(endpoint=endpoint, json=json.loads(data))
     typer.echo(response.text)
 
 
@@ -71,11 +70,10 @@ def get(
 def patch(
     ctx: typer.Context,
     endpoint: str = typer.Argument(..., help=specific_endpoint),
-    json: str = typer.Argument(..., help=json_help),
+    data: str = typer.Argument(..., help=json_help),
 ):
     """Update entries in the database."""
-    as_dict = ast.literal_eval(json)
-    response = ctx.obj.patch(endpoint=endpoint, json=as_dict)
+    response = ctx.obj.patch(endpoint=endpoint, json=json.loads(data))
     typer.echo(response.text)
 
 
