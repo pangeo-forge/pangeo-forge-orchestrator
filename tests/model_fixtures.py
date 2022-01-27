@@ -137,4 +137,14 @@ bakery_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe
 
 feedstock_fixture.optional_relations += [ModelRelationFixture("recipe_runs", recipe_run_fixture)]
 
+# TODO: Use actual `pytest.fixture`s. In particular, this will allow us to eliminate workarounds in
+# the test suite such as `clear_table` and `create_with_dependencies` helper functions (each of
+# which can be handled with fixture features such as requesting other fixtures, and teardowns). Note
+# also that foreign keys can be assigned at runtime (rather than passed explicitly in `create_opts`)
+# and that teardowns can manage deletion order so as not to raise Postgres `ForeignKeyViolation`s,
+# which occur if rows references by other tables are deleted before the referencing rows. Further
+# details in the following prior discussion:
+# https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/40#issuecomment-1022804987
+# https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/40#issuecomment-1022808293
+
 ALL_MODEL_FIXTURES = [recipe_run_fixture, bakery_fixture, feedstock_fixture]
