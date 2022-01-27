@@ -71,8 +71,12 @@ class DatasetType(str, Enum):
 
 
 class DatasetBase(SQLModel):
-    """
+    """Information about a Pangeo Forge dataset.
 
+    :param name: The name of the dataset.
+    :param reciperun_id: A foreign key for the recipe run which produced this dataset.
+    :param type: An dataset type. Must be one of the options defined in ``DatasetType``.
+    :param public_url: The publically accessible URL at which this dataset can be accessed.
     """
 
     name: str
