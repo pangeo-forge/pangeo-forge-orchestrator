@@ -1,5 +1,4 @@
 import json
-from dataclasses import dataclass
 
 import typer
 
@@ -13,16 +12,10 @@ specific_endpoint = "A unique entry endpoint concluding with an integer id, e.g.
 json_help = "A JSON string, created via with Python's ``json.dumps`` method, for example."
 
 
-def get_client(server, api_key):
+def get_client(server: str, api_key: str) -> Client:
     # Putting this in a function means that the environment variable is checked
     # at evaluation time rather than import time.
     return Client(base_url=server, api_key=(api_key or None))
-
-
-@dataclass
-class Common:
-    server: str
-    api_key: str
 
 
 @db.callback()
@@ -36,7 +29,7 @@ def common(
     api_key: str = typer.Option("", envvar="PANGEO_FORGE_API_KEY", help="Pangeo Forge API Key"),
 ):
     """Common Entry Point"""
-    ctx.obj = get_client(server, api_key)  # Common(server, api_key)
+    ctx.obj = get_client(server, api_key)
 
 
 @db.command()
