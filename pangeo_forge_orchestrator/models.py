@@ -228,7 +228,7 @@ dataset_models = MultipleModels(
     extended_response=DatasetReadWithRecipeRun,
     relations=[
         RelationBuilder(
-            field="produced_by", annotation=ForwardRef("RecipeRun"), back_populates="dataset",
+            field="produced_by", annotation=ForwardRef("RecipeRun"), back_populates="datasets",
         )
     ],
 )
@@ -246,7 +246,7 @@ recipe_run_models = MultipleModels(
             field="feedstock", annotation=feedstock_models.table, back_populates="recipe_runs",
         ),
         RelationBuilder(
-            field="dataset",
+            field="datasets",
             annotation=List[dataset_models.table],  # type: ignore
             back_populates="produced_by",
         ),
