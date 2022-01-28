@@ -86,7 +86,7 @@ class RecipeRunConclusion(str, Enum):
 
 
 class DatasetType(str, Enum):
-    """Categorical choices for ``RecipeRunBase.type``."""
+    """Categorical choices for ``RecipeRunBase.dataset_type``."""
 
     zarr = "zarr"
     kerchunk = "kerchunk"
