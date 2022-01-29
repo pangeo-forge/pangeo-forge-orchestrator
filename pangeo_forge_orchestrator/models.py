@@ -85,6 +85,14 @@ class RecipeRunConclusion(str, Enum):
     timed_out = "timed_out"
 
 
+class DatasetType(str, Enum):
+    """Categorical choices for ``RecipeRunBase.dataset_type``."""
+
+    zarr = "zarr"
+    kerchunk = "kerchunk"
+    parquet = "parquet"
+
+
 class RecipeRunBase(SQLModel):
     """Information about a specific Pangeo Forge recipe run. Fields which are not specific to
     Pangeo Forge are explicitly copied from the GitHub check runs API.
@@ -103,6 +111,11 @@ class RecipeRunBase(SQLModel):
       skipped, stale, or timed_out.
     :param status: The current status. Can be one of queued, in_progress, or completed.
       Default: queued.
+    :param is_test: If ``True``, this run is a test run of a pruned subset of a dataset.
+      Default: ``False``.
+    :param dataset_type: Format of the output dataset. Must be one of the options defined in
+      ``pangeo_forge_orchestrator.models.DatasetType``.
+    :param dataset_public_url: The publicly accessible URL at which the dataset can be accessed.
     :param message: Additional information about this recipe run.
     """
 
@@ -121,6 +134,11 @@ class RecipeRunBase(SQLModel):
     completed_at: Optional[datetime] = None
     conclusion: Optional[RecipeRunConclusion] = None
     status: RecipeRunStatus = RecipeRunStatus.queued
+    is_test: bool = False
+
+    dataset_type: Optional[DatasetType] = None
+    dataset_public_url: Optional[str] = None
+
     message: Optional[str] = None  # TODO: Replace with GitHub check runs `output`.
 
 
