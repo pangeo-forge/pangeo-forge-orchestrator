@@ -1,63 +1,18 @@
-import uuid
-from datetime import datetime
+from fastapi import FastAPI
 
-from fastapi import Depends, FastAPI
-
-from .database import create_sqlite_db_and_tables, engine, get_session
-from .model_builders import register_endpoints
-from .models import MODELS, APIKey, APIKeyCreate, APIKeyNew
-from .security import (
-    check_authentication_header,
-    check_authentication_header_admin,
-    create_admin_api_key,
-    encrypt,
-)
+from .database import maybe_create_db_and_tables
+from .routers.model_router import router as model_router
+from .routers.security import api_key_router
+from .security import create_admin_api_key
 
 app = FastAPI()
 
 
 @app.on_event("startup")
 def on_startup():
-    if engine.url.drivername == "sqlite":
-        create_sqlite_db_and_tables()
-
-    for session in get_session():
-        create_admin_api_key(session)
+    maybe_create_db_and_tables()
+    create_admin_api_key()
 
 
-for k in MODELS.keys():
-    register_endpoints(
-        app, models=MODELS[k], get_session=get_session, auth_dependency=check_authentication_header,
-    )
-
-
-@app.post("/api-keys", response_model=APIKeyNew)
-def new_api_key(
-    *,
-    key_params: APIKeyCreate,
-    session=Depends(get_session),
-    authorized_user=Depends(check_authentication_header_admin)
-):
-    raw_key = uuid.uuid4().hex
-    encrypted_key = encrypt(raw_key)
-
-    api_key = APIKey(
-        encrypted_key=encrypted_key,
-        created_at=datetime.now,
-        is_active=True,
-        **key_params.dict(),  # should only contain is_admin
-    )
-
-    session.add(api_key)
-    session.commit()
-    session.refresh(api_key)
-
-    api_key_response_from_db = api_key.dict()
-    del api_key_response_from_db["encrypted_key"]
-
-    api_key_response = APIKeyNew(key=raw_key, **api_key_response_from_db)
-
-    return api_key_response
-
-
-# TODO: implement listing, updating, deleting keys
+app.include_router(model_router)
+app.include_router(api_key_router)
