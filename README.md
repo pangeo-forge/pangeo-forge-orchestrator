@@ -69,7 +69,7 @@ The two relevant records are:
 
 | name | type | TTL | data |
 |------|------|-----|------|
-| api-staging.pangeo-forge.org | CNAME | 1800 |	ancient-woodland-ma1jj1m5y8687aopzbpq523p.herokudns.com	
+| api-staging.pangeo-forge.org | CNAME | 1800 |	ancient-woodland-ma1jj1m5y8687aopzbpq523p.herokudns.com
 | api.pangeo-forge.org | CNAME |1800 | powerful-harbor-5b6ajvki0ysxoh3gk56ksmi0.herokudns.com
 
 Both staging and prod are set up with [automatic certificate management](https://devcenter.heroku.com/articles/automated-certificate-management).
