@@ -1,9 +1,7 @@
-import types
-from dataclasses import dataclass
-from typing import Callable, List, Optional, Union
+from typing import List
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
-from sqlmodel import Field, Relationship, Session, SQLModel, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlmodel import Session, select
 
 from ..dependencies import check_authentication_header, get_session
 from ..models import MODELS
@@ -12,9 +10,8 @@ QUERY_LIMIT = Query(default=100, lte=100)
 
 router = APIRouter()
 
-for model_name, model in MODELS.items():
 
-    @router.post(model.path, response_model=model.response)
+def make_create_endpoint(model):
     def create(
         *,
         new_model: model.creation,  # type: ignore
@@ -27,20 +24,29 @@ for model_name, model in MODELS.items():
         session.refresh(db_model)
         return db_model
 
-    @router.get(model.path, response_model=List[model.response])
+    return create
+
+
+def make_read_range_endpoint(model):
     def read_range(
-        *, session: Session = Depends(get_session), offset: int = 0, limit: int = QUERY_LIMIT,
+        *, session: Session = Depends(get_session), offset: int = 0, limit: int = QUERY_LIMIT
     ):
         return session.exec(select(model.table).offset(offset).limit(limit)).all()
 
-    @router.get(model.path + "{id}", response_model=model.response)
+    return read_range
+
+
+def make_read_single_endpoint(model):
     def read_single(*, id: int, session: Session = Depends(get_session)):
         db_model = session.get(model.table, id)
         if not db_model:
             raise HTTPException(status_code=404, detail=f"{model_name} not found")
         return db_model
 
-    @router.patch(model.path + "{id}", response_model=model.response)
+    return read_single
+
+
+def make_update_endpoint(model):
     def update(
         *,
         id: int,
@@ -60,17 +66,47 @@ for model_name, model in MODELS.items():
         session.refresh(db_model)
         return db_model
 
-    @router.delete(model.path + "{id}")
+    return update
+
+
+def make_delete_endpoint(model):
     def delete(
         *,
         id: int,
         session: Session = Depends(get_session),
         authorized_user=Depends(check_authentication_header),
     ):
-        return delete(session=session, table_cls=model.table, id=id)
         db_model = session.get(model.table, id)
         if not db_model:
             raise HTTPException(status_code=404, detail=f"{model_name} not found")
         session.delete(db_model)
         session.commit()
         return {"ok": True}
+
+    return delete
+
+
+for model_name, model in MODELS.items():
+    read_response_model = model.extended_response if model.extended_response else model.response
+    router.add_api_route(
+        model.path, make_create_endpoint(model), methods=["POST"], response_model=model.response
+    )
+    router.add_api_route(
+        model.path,
+        make_read_range_endpoint(model),
+        methods=["GET"],
+        response_model=List[model.response],  # type: ignore
+    )
+    router.add_api_route(
+        model.path + "{id}",
+        make_read_single_endpoint(model),
+        methods=["GET"],
+        response_model=read_response_model,
+    )
+    router.add_api_route(
+        model.path + "{id}",
+        make_update_endpoint(model),
+        methods=["PATCH"],
+        response_model=model.response,
+    )
+    router.add_api_route(model.path + "{id}", make_delete_endpoint(model), methods=["DELETE"])
