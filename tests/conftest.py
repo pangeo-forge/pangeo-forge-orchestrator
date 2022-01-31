@@ -57,16 +57,12 @@ def required_backend_env_vars(api_keys):
 
 @pytest.fixture(scope="session")
 def admin_key(api_keys):
-    # return "9cda3399580f464fbba6c46fb91994c3"
     _, raw_key, _ = api_keys
     return raw_key
 
 
 @pytest.fixture(scope="session")
 def http_server_url():
-    # yield "http://127.0.0.1:8000"
-    # return
-
     env_port = os.environ.get("PORT", False)
     port = env_port or get_open_port()
     host = "127.0.0.1"
