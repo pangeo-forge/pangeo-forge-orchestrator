@@ -17,3 +17,8 @@ def on_startup():
 
 app.include_router(model_router)
 app.include_router(api_key_router)
+
+
+@app.get("/", include_in_schema=False)
+def status():
+    return {"status": "ok"}

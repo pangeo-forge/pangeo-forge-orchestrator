@@ -24,6 +24,7 @@ def encrypt(value: str) -> str:
 def create_admin_api_key():
     session = next(get_session())  # is this really the right way to get the session?
     admin_api_key_encrypted = os.environ["ADMIN_API_KEY_SHA256"]
+    print(f"Server starting with {admin_api_key_encrypted}")
     api_key = session.get(APIKey, admin_api_key_encrypted)  # already exists
     if api_key:
         return api_key

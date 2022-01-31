@@ -91,7 +91,6 @@ class CommandLineCRUD:
     def __init__(self, app, runner):
         self.app = app
         self.runner = runner
-
         api_key = self.runner.env.get("PANGEO_FORGE_API_KEY", None)
         self.auth_required = authorization_context(api_key)
 

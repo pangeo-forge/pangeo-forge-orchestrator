@@ -10,7 +10,9 @@ from ..security import encrypt
 api_key_router = APIRouter()
 
 
-@api_key_router.post("/api-keys", response_model=APIKeyNew)
+@api_key_router.post(
+    "/api-keys", response_model=APIKeyNew, summary="Create a new API key", tags=["admin"]
+)
 def new_api_key(
     *,
     key_params: APIKeyCreate,

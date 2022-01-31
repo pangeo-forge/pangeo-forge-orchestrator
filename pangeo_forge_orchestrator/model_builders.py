@@ -1,9 +1,8 @@
 import types
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlmodel import Field, Relationship, Session, SQLModel, select
+from sqlmodel import Field, Relationship, SQLModel
 
 
 @dataclass
@@ -64,6 +63,7 @@ class MultipleModels:
     path: str
     base: SQLModel
     response: SQLModel
+    descriptive_name: str
     extended_response: Optional[SQLModel] = None
     relations: Optional[List[RelationBuilder]] = None
 

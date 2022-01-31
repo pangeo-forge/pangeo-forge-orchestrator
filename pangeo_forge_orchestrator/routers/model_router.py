@@ -89,24 +89,41 @@ def make_delete_endpoint(model):
 for model_name, model in MODELS.items():
     read_response_model = model.extended_response if model.extended_response else model.response
     router.add_api_route(
-        model.path, make_create_endpoint(model), methods=["POST"], response_model=model.response
+        model.path,
+        make_create_endpoint(model),
+        methods=["POST"],
+        response_model=model.response,
+        summary=f"Create a single {model.descriptive_name}",
+        tags=[model.descriptive_name, "admin"],
     )
     router.add_api_route(
         model.path,
         make_read_range_endpoint(model),
         methods=["GET"],
         response_model=List[model.response],  # type: ignore
+        summary=f"Read a range of {model.descriptive_name} objects",
+        tags=[model.descriptive_name, "public"],
     )
     router.add_api_route(
         model.path + "{id}",
         make_read_single_endpoint(model),
         methods=["GET"],
         response_model=read_response_model,
+        summary=f"Read a single {model.descriptive_name}",
+        tags=[model.descriptive_name, "public"],
     )
     router.add_api_route(
         model.path + "{id}",
         make_update_endpoint(model),
         methods=["PATCH"],
         response_model=model.response,
+        summary=f"Update a {model.descriptive_name}",
+        tags=[model.descriptive_name, "admin"],
     )
-    router.add_api_route(model.path + "{id}", make_delete_endpoint(model), methods=["DELETE"])
+    router.add_api_route(
+        model.path + "{id}",
+        make_delete_endpoint(model),
+        methods=["DELETE"],
+        summary=f"Delete a {model.descriptive_name}",
+        tags=[model.descriptive_name, "admin"],
+    )
