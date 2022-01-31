@@ -22,6 +22,7 @@ if database_url.startswith("sqlite:"):
 if database_url.startswith("postgresql:"):
     connect_args = dict(options="-c timezone=utc")
 
+
 engine = create_engine(database_url, echo=False, connect_args=connect_args)
 
 
@@ -30,7 +31,8 @@ def get_session():
         yield session
 
 
-def create_sqlite_db_and_tables():
-    # Called from `.api`; requires `.models` import to register metadata
-    # https://sqlmodel.tiangolo.com/tutorial/create-db-and-table/#refactor-data-creation
-    SQLModel.metadata.create_all(engine)
+def maybe_create_db_and_tables():
+    # sqlite does not really work with migrations, so here we create the db fresh
+    # if we are using sqlite, we are probably in the test environment
+    if engine.url.drivername == "sqlite":
+        SQLModel.metadata.create_all(engine)

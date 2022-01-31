@@ -176,6 +176,7 @@ class RecipeRunReadWithBakeryAndFeedstock(RecipeRunRead):
 
 bakery_models = MultipleModels(
     path="/bakeries/",
+    descriptive_name="bakery",
     base=BakeryBase,
     response=BakeryRead,
     extended_response=BakeryReadWithRecipeRuns,
@@ -189,6 +190,7 @@ bakery_models = MultipleModels(
 )
 feedstock_models = MultipleModels(
     path="/feedstocks/",
+    descriptive_name="feedstock",
     base=FeedstockBase,
     response=FeedstockRead,
     extended_response=FeedstockReadWithRecipeRuns,
@@ -202,6 +204,7 @@ feedstock_models = MultipleModels(
 )
 recipe_run_models = MultipleModels(
     path="/recipe_runs/",
+    descriptive_name="recipe_run",
     base=RecipeRunBase,
     response=RecipeRunRead,
     extended_response=RecipeRunReadWithBakeryAndFeedstock,

@@ -21,8 +21,8 @@ def encrypt(value: str) -> str:
     return hashlib.sha256(salt.encode() + value.encode()).hexdigest()
 
 
-def create_admin_api_key(session):
-
+def create_admin_api_key():
+    session = next(get_session())  # is this really the right way to get the session?
     admin_api_key_encrypted = os.environ["ADMIN_API_KEY_SHA256"]
     api_key = session.get(APIKey, admin_api_key_encrypted)  # already exists
     if api_key:
