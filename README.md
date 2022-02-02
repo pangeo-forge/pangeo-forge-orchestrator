@@ -5,6 +5,9 @@
 | Linting | [![pre-commit](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml) |
 | Testing | [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml) |
 | Coverage | [![codecov](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/branch/main/graph/badge.svg?token=ay8eJ6JUiX)](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator) |
+| Heroku Pipeline | https://dashboard.heroku.com/pipelines/17cc0239-494f-4a68-aa75-3da7c466709c |
+| Staging API | https://api-staging.pangeo-forge.org/docs |
+| Prod API | https://api.pangeo-forge.org/docs |
 
 ## Overview
 
