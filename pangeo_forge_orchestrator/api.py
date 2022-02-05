@@ -6,6 +6,7 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 from .database import maybe_create_db_and_tables
 from .metadata import app_metadata
+from .routers.flow import flow_router
 from .routers.model_router import router as model_router
 from .routers.security import api_key_router
 from .routers.stats import stats_router
@@ -36,6 +37,7 @@ def on_startup():
 app.include_router(model_router)
 app.include_router(api_key_router)
 app.include_router(stats_router)
+app.include_router(flow_router)
 
 
 @app.get("/", include_in_schema=False)
