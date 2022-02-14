@@ -47,7 +47,7 @@ async def register_recipe_flow(
     dispatch_data = dict(
         event_type="register-flow",
         client_payload={
-            "recipe_run_primary_key": id,
+            "recipe_run_id": id,
             "registrar_docker_image": registrar_docker_image,
             "pangeo_forge_api_url": pangeo_forge_api_url,
         },
