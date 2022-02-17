@@ -32,12 +32,7 @@ prefect_router = APIRouter()
     summary="Register a recipe run as a Prefect Flow with Prefect Cloud.",
     tags=["recipe_run", "prefect", "admin"],
 )
-async def register_recipe_flow(
-    id: int,
-    registrar_docker_image: str = "pangeo/pangeo-forge-registrar-images:0.6.1-registrar",
-    pangeo_forge_api_url: str = "https://api-staging.pangeo-forge.org/",
-    authorized_user=Depends(check_authentication_header),
-):
+async def register_recipe_flow(id: int, authorized_user=Depends(check_authentication_header)):
     session = await get_session()
 
     # TODO: Input validation, e.g. make sure `id` is in database, and has appropriate status.
@@ -48,8 +43,7 @@ async def register_recipe_flow(
         event_type="register-flow",
         client_payload={
             "recipe_run_primary_key": id,
-            "registrar_docker_image": registrar_docker_image,
-            "pangeo_forge_api_url": pangeo_forge_api_url,
+            "pangeo_forge_api_url": os.environ["PANGEO_FORGE_API_URL"],
         },
     )
     await gh.post(REGISTRAR_DISPATCH_PATH, data=dispatch_data)
