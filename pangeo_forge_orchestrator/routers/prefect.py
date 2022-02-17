@@ -13,10 +13,7 @@ from ..dependencies import check_authentication_header
 OAUTH_TOKEN = os.environ["GITHUB_TOKEN"]
 REQUESTER = "pangeo-forge-orchestrator"
 REGISTRAR_DISPATCH_PATH = "/repos/pangeo-forge/registrar/dispatches"
-
-pangeo_forge_api_url = "https://api.pangeo-forge.org/"
-if os.environ["PANGEO_FORGE_DEPLOYMENT"] == "staging":
-    pangeo_forge_api_url.replace("api", "api-staging")
+PANGEO_FORGE_API_URL = "https://api.pangeo-forge.org/"
 
 _session = None
 
@@ -46,6 +43,13 @@ async def register_recipe_flow(id: int, authorized_user=Depends(check_authentica
 
     dispatch_data = dict(
         event_type="register-flow",
-        client_payload={"recipe_run_id": id, "pangeo_forge_api_url": pangeo_forge_api_url},
+        client_payload={
+            "recipe_run_id": id,
+            "pangeo_forge_api_url": (
+                PANGEO_FORGE_API_URL.replace("api", "api-staging")
+                if os.environ["PANGEO_FORGE_DEPLOYMENT"] == "staging"
+                else PANGEO_FORGE_API_URL
+            ),
+        },
     )
     await gh.post(REGISTRAR_DISPATCH_PATH, data=dispatch_data)
