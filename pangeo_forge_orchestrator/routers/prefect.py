@@ -42,7 +42,7 @@ async def register_recipe_flow(id: int, authorized_user=Depends(check_authentica
     dispatch_data = dict(
         event_type="register-flow",
         client_payload={
-            "recipe_run_primary_key": id,
+            "recipe_run_id": id,
             "pangeo_forge_api_url": os.environ["PANGEO_FORGE_API_URL"],
         },
     )
