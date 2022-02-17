@@ -47,7 +47,7 @@ async def register_recipe_flow(id: int, authorized_user=Depends(check_authentica
             "recipe_run_id": id,
             "pangeo_forge_api_url": (
                 PANGEO_FORGE_API_URL.replace("api", "api-staging")
-                if os.environ["PANGEO_FORGE_DEPLOYMENT"] == "staging"
+                if os.environ.get("PANGEO_FORGE_DEPLOYMENT", "staging") == "staging"
                 else PANGEO_FORGE_API_URL
             ),
         },
