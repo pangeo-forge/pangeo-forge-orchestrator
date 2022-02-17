@@ -22,6 +22,7 @@ jobs:
     env:
       DATABASE_URL: sqlite:///${{ github.workspace }}/database.sqlite
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PANGEO_FORGE_DEPLOYMENT: staging
     strategy:
       fail-fast: false
       matrix:
