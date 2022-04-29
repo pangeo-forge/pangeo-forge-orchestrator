@@ -102,6 +102,9 @@ class RecipeRunBase(SQLModel):
       defined in the official Pangeo Forge bakery database.
     :param feedstock_id: The name of the Pangeo Forge feedstock repository containing this recipe.
     :param head_sha: The feedstock repository commit from which this recipe run was executed.
+    :param recipe_hash: The hash of the recipe object itself, as calculated by ``recipe.sha256()``.
+    :param pattern_hash: The hash of the file pattern for this recipe, as calculated by
+      ``recipe.file_pattern.sha256()``.
     :param version: The two-element, dot-delimited semantic version of the feedstock in which the
       executed recipe resides. Versions begin at 1.0 and are of format {MAJ_VERSION}.{MIN_VERSION}.
     :param started_at: Time the run began, as an ISO 8601 timestamp: YYYY-MM-DDTHH:MM:SSZ.
@@ -129,6 +132,8 @@ class RecipeRunBase(SQLModel):
     bakery_id: int = Field(foreign_key="bakery.id")
     feedstock_id: int = Field(foreign_key="feedstock.id")
     head_sha: str
+    recipe_hash: str
+    pattern_hash: str
     version: str  # TODO: use `ConstrainedStr`
     started_at: datetime
     completed_at: Optional[datetime] = None
