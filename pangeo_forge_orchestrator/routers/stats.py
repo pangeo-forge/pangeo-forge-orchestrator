@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlmodel import Session
 
 from ..dependencies import get_session
@@ -65,3 +65,22 @@ def get_dataset_stats(*, session: Session = Depends(get_session)):
         count=session.query(func.count(model.table.dataset_public_url)).scalar()
     )
     return response
+
+
+@stats_router.get(
+    "/stats/production_datasets",
+    response_model=StatsResponse,
+    summary="Get statistics for production datasets",
+    tags=["stats"],
+)
+def get_production_dataset_stats(*, session: Session = Depends(get_session)):
+    model = MODELS["recipe_run"]
+    statement = and_(
+        model.table.dataset_public_url.isnot(None),
+        model.table.is_test.is_(False),
+        model.table.status.is_("completed"),
+        model.table.conclusion.is_("success"),
+    )
+
+    results = session.query(model.table).filter(statement).count()
+    return StatsResponse(count=results)
