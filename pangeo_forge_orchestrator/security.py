@@ -43,7 +43,8 @@ def create_admin_api_key():
 
 
 def check_authentication_header(
-    x_api_key: str = Depends(X_API_KEY), session=Depends(get_session),
+    x_api_key: str = Depends(X_API_KEY),
+    session=Depends(get_session),
 ) -> APIKeyRead:
     """Takes the X-API-Key header and converts it into the matching user object
     from the database."""
@@ -55,7 +56,8 @@ def check_authentication_header(
             return APIKeyRead.from_orm(api_key)  # don't inclue the actual key
 
     raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key",
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid API Key",
     )
 
 
@@ -67,5 +69,6 @@ def check_authentication_header_admin(
         return authorized_user
 
     raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key",
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid API Key",
     )

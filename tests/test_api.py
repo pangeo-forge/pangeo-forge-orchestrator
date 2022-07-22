@@ -134,7 +134,8 @@ def test_read_single(model_fixture, client, authorized_client):
                     compare_response(relation.model_fixture.create_opts[0], resp)
             else:
                 compare_response(
-                    relation.model_fixture.create_opts[0], read_response[relation.field_name],
+                    relation.model_fixture.create_opts[0],
+                    read_response[relation.field_name],
                 )
 
 

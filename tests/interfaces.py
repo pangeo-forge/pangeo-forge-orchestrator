@@ -54,7 +54,12 @@ class FastAPITestClientCRUD:
         data = response.json()
         return data
 
-    def update(self, path: str, id: int, update_with: dict,) -> dict:
+    def update(
+        self,
+        path: str,
+        id: int,
+        update_with: dict,
+    ) -> dict:
         response = self.client.patch(f"{path}{id}", json=update_with)
         response.raise_for_status()
         data = response.json()
@@ -107,7 +112,12 @@ class CommandLineCRUD:
     def read_single(self, path: str, id: int) -> dict:
         return self._invoke("get", f"{path}{id}")
 
-    def update(self, path: str, id: int, update_with: dict,) -> dict:
+    def update(
+        self,
+        path: str,
+        id: int,
+        update_with: dict,
+    ) -> dict:
         return self._invoke("patch", f"{path}{id}", json.dumps(update_with))
 
     def delete(self, path: str, id: int) -> None:
