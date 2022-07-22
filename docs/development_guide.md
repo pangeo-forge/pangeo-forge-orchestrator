@@ -32,8 +32,13 @@ Calling `uvicorn --help` provides various options you can add to this command. T
 
 - **`--reload`**: Enables hot reloads. Because our `uvicorn` process is not running in the package repository, enabling hot
   reloads requires specifying the package repository path via the `--reload-dir` option. Enabling hot reloading might therefore look like
-  `bash uvicorn pangeo_forge_orchestrator.api:api --reload --reload-dir=$PFO_REPO_PATH `
+
+  ```bash
+  uvicorn pangeo_forge_orchestrator.api:api --reload --reload-dir=$PFO_REPO_PATH
+  ```
+
   where `PFO_REPO_PATH` is an environment variable pointing to the absolute path for `~/pangeo-forge-orchestrator/pangeo_forge_orchestrator/`.
+
 - **`--port`**: The API server starts at `http://127.0.0.1:8000` by default. If your local port `8000` is occupied you can pass an alternate port number here.
 
 ## Checkout the API in a browser
