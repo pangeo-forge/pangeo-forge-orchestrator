@@ -1,13 +1,13 @@
 # Pangeo Forge API
 
-| Check | Status |
-|-------|--------|
-| Linting | [![pre-commit](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml) |
-| Testing | [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml) |
-| Coverage | [![codecov](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/branch/main/graph/badge.svg?token=ay8eJ6JUiX)](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator) |
-| Heroku Pipeline | https://dashboard.heroku.com/pipelines/17cc0239-494f-4a68-aa75-3da7c466709c |
-| Staging API | https://api-staging.pangeo-forge.org/docs |
-| Prod API | https://api.pangeo-forge.org/docs |
+| Check           | Status                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linting         | [![pre-commit](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml) |
+| Testing         | [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml)                  |
+| Coverage        | [![codecov](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/branch/main/graph/badge.svg?token=ay8eJ6JUiX)](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator)                               |
+| Heroku Pipeline | https://dashboard.heroku.com/pipelines/17cc0239-494f-4a68-aa75-3da7c466709c                                                                                                                                         |
+| Staging API     | https://api-staging.pangeo-forge.org/docs                                                                                                                                                                           |
+| Prod API        | https://api.pangeo-forge.org/docs                                                                                                                                                                                   |
 
 ## Overview
 
@@ -32,7 +32,7 @@ Pipeline main link: [pangeo-forge-api-flow](https://dashboard.heroku.com/pipelin
 
 - `runtime.txt` - tells Heroku which runtime to use to build the app.
 - `requirements.txt` - used to build the app's environment. Versions are pinned for stability.
-   We will need to manually update these on a regular schedule.
+  We will need to manually update these on a regular schedule.
 - `Procfile` - tells Heroku how to deploy the app.
 - `app.json` - more configuration, including the test scripts run by Heroku CI
 
@@ -55,7 +55,6 @@ This is currently the only deployment configured in Heroku.
 It app is configured with a `heroku-postgresql:hobby-0` add-on.
 ([Database control panel](https://data.heroku.com/datastores/1eae941d-caa0-405b-8e41-08f8959f7db2))
 
-
 ### Production Deployment
 
 Changes merged to `prod` will deploy the [pangeo-forge-api-prod](https://dashboard.heroku.com/apps/pangeo-forge-api-prod) app to the "staging" environment.
@@ -63,17 +62,16 @@ This is currently the only deployment configured in Heroku.
 It app is configured with a `heroku-postgresql:standard-0` add-on.
 ([Database control panel](https://data.heroku.com/datastores/bcd81fa2-0601-4882-b439-d5cefc63dfe3))
 
-
 ### DNS
 
 DNS is managed at https://dns.he.net/ under Ryan's account.
 It was configured following the [Heroku custom domains docs](https://devcenter.heroku.com/articles/custom-domains).
 The two relevant records are:
 
-| name | type | TTL | data |
-|------|------|-----|------|
-| api-staging.pangeo-forge.org | CNAME | 1800 |	ancient-woodland-ma1jj1m5y8687aopzbpq523p.herokudns.com
-| api.pangeo-forge.org | CNAME |1800 | powerful-harbor-5b6ajvki0ysxoh3gk56ksmi0.herokudns.com
+| name                         | type  | TTL  | data                                                    |
+| ---------------------------- | ----- | ---- | ------------------------------------------------------- |
+| api-staging.pangeo-forge.org | CNAME | 1800 | ancient-woodland-ma1jj1m5y8687aopzbpq523p.herokudns.com |
+| api.pangeo-forge.org         | CNAME | 1800 | powerful-harbor-5b6ajvki0ysxoh3gk56ksmi0.herokudns.com  |
 
 Both staging and prod are set up with [automatic certificate management](https://devcenter.heroku.com/articles/automated-certificate-management).
 
@@ -133,7 +131,6 @@ when we want to migrate.
 If the migration is complex or ambiguous, the migration script might have to be
 tweaked manually.
 
-
 ## Local Testing
 
 Migrations are not used for local testing with SQLite. To setup local testing, simply define the `DATABASE_URL` environment variable
@@ -141,6 +138,7 @@ Migrations are not used for local testing with SQLite. To setup local testing, s
 ```bash
 export DATABASE_URL=sqlite:///`pwd`/database.sqlite
 ```
+
 and then invoke the tests
 
 ```bash
@@ -148,22 +146,23 @@ pytest -vx
 ```
 
 > If no file exists at the `DATABASE_URL`, a new SQLite database file will be automatically created for the test session and populated
-with tables based on `pangeo_forge_orchestrator.models`. If a file already exists at the at the `DATABASE_URL`, it will be updated
-to refect the tables defined by `pangeo_forge_orchestrator.models`. Note that `.sqlite` files are excluded by `.gitignore`, so you don't
-need to worry about the database file appearing in your commit. **You may, however, need to manually `rm database.sqlite` in between test
-sessions.**
+> with tables based on `pangeo_forge_orchestrator.models`. If a file already exists at the at the `DATABASE_URL`, it will be updated
+> to refect the tables defined by `pangeo_forge_orchestrator.models`. Note that `.sqlite` files are excluded by `.gitignore`, so you don't
+> need to worry about the database file appearing in your commit. **You may, however, need to manually `rm database.sqlite` in between test
+> sessions.**
 
 Our Heroku CI tests (along with the production API) run with a Postgres server. Postgres implements certain features not present in SQLite.
 As such, after your local tests passes against the SQLite database, you may want to test against a local Postgres server as a final check.
 To do so:
 
-1. Install https://postgresapp.com
-2. Start the database using the app
-3. Run `echo "CREATE DATABASE test_db;" | psql` to create a database
-4. Set `export DATABASE_URL=postgresql://localhost/test_db`
+1.  Install https://postgresapp.com
+2.  Start the database using the app
+3.  Run `echo "CREATE DATABASE test_db;" | psql` to create a database
+4.  Set `export DATABASE_URL=postgresql://localhost/test_db`
 
-    > If you are working on a PR that includes changes to `pangeo_forge_orchestrator.models`, you may need to generate a new alembic
-migration version before proceeding to Step 4. Refer to **Running Migrations** above for details.
+        > If you are working on a PR that includes changes to `pangeo_forge_orchestrator.models`, you may need to generate a new alembic
 
-5. Run `python -m alembic upgrade head` to execute alembic migration against the new Postgres `DATABASE_URL`
-6. `pytest -vx`
+    migration version before proceeding to Step 4. Refer to **Running Migrations** above for details.
+
+5.  Run `python -m alembic upgrade head` to execute alembic migration against the new Postgres `DATABASE_URL`
+6.  `pytest -vx`
