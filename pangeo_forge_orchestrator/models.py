@@ -23,8 +23,7 @@ class BakeryBase(SQLModel):
 
 
 class BakeryRead(BakeryBase):
-    """The bakery read model. See ``RecipeRunRead`` docstring in this module for further detail.
-    """
+    """The bakery read model. See ``RecipeRunRead`` docstring in this module for further detail."""
 
     id: int
 
@@ -53,8 +52,7 @@ class FeedstockBase(SQLModel):
 
 
 class FeedstockRead(FeedstockBase):
-    """The feedstock read model. See ``RecipeRunRead`` docstring in this module for further detail.
-    """
+    """The feedstock read model. See ``RecipeRunRead`` docstring in this module for further detail."""
 
     id: int
 
@@ -63,8 +61,7 @@ class FeedstockRead(FeedstockBase):
 
 
 class RecipeRunStatus(str, Enum):
-    """Categorical choices for ``RecipeRunBase.status``. Copied from the GitHub check runs API.
-    """
+    """Categorical choices for ``RecipeRunBase.status``. Copied from the GitHub check runs API."""
 
     queued = "queued"
     in_progress = "in_progress"
@@ -72,8 +69,7 @@ class RecipeRunStatus(str, Enum):
 
 
 class RecipeRunConclusion(str, Enum):
-    """Categorical choices for ``RecipeRunBase.conclusion``. Copied from the GitHub check runs API.
-    """
+    """Categorical choices for ``RecipeRunBase.conclusion``. Copied from the GitHub check runs API."""
 
     action_required = "action_required"
     cancelled = "cancelled"
@@ -215,10 +211,14 @@ recipe_run_models = MultipleModels(
     extended_response=RecipeRunReadWithBakeryAndFeedstock,
     relations=[
         RelationBuilder(
-            field="bakery", annotation=bakery_models.table, back_populates="recipe_runs",
+            field="bakery",
+            annotation=bakery_models.table,
+            back_populates="recipe_runs",
         ),
         RelationBuilder(
-            field="feedstock", annotation=feedstock_models.table, back_populates="recipe_runs",
+            field="feedstock",
+            annotation=feedstock_models.table,
+            back_populates="recipe_runs",
         ),
     ],
 )

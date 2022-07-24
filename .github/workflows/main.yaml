@@ -4,16 +4,16 @@ name: Tests
 
 on:
   push:
-    branches: "*"
+    branches: '*'
     paths-ignore:
-    - 'docs/**'
+      - 'docs/**'
   pull_request:
     branches: main
     paths-ignore:
-    - 'docs/**'
+      - 'docs/**'
 
 env:
-  PYTEST_ADDOPTS: "--color=yes"
+  PYTEST_ADDOPTS: '--color=yes'
 
 jobs:
   test:
@@ -36,7 +36,7 @@ jobs:
       # - name: Cache conda
       #  uses: actions/cache@v1
       #  env:
-          # Increase this value to reset cache if ci/py${{ matrix.python-version }}.yml has not changed
+      # Increase this value to reset cache if ci/py${{ matrix.python-version }}.yml has not changed
       #    CACHE_NUMBER: 0
       #  with:
       #    path: ~/conda_pkgs_dir
@@ -45,7 +45,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: pfo
-      #    environment-file: ci/py${{ matrix.python-version }}.yml
+          #    environment-file: ci/py${{ matrix.python-version }}.yml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
       #    use-only-tar-bz2: true

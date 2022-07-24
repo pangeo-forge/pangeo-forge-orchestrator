@@ -4,6 +4,7 @@ aiohttp==3.8.1
 fastapi==0.71.0
 gidgethub==5.1.0
 sqlmodel==0.0.6
+sqlalchemy == 1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
 typer==0.4.0
 alembic==1.7.5
 
