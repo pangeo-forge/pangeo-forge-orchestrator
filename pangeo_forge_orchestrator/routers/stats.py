@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlmodel import Session
 
 from ..dependencies import get_session
@@ -59,9 +59,24 @@ def get_feedstock_stats(*, session: Session = Depends(get_session)):
     summary="Get statistics for datasets",
     tags=["stats"],
 )
-def get_dataset_stats(*, session: Session = Depends(get_session)):
+def get_dataset_stats(
+    *,
+    session: Session = Depends(get_session),
+    exclude_test_runs: bool = Query(False, description="Exclude test runs"),
+) -> StatsResponse:
     model = MODELS["recipe_run"]
-    response = StatsResponse(
-        count=session.query(func.count(model.table.dataset_public_url)).scalar()
-    )
-    return response
+
+    if exclude_test_runs:
+        statement = and_(
+            model.table.dataset_public_url.isnot(None),
+            model.table.is_test.isnot(True),
+            model.table.status == "completed",
+            model.table.conclusion == "success",
+        )
+
+        results = session.query(model.table).filter(statement).count()
+
+    else:
+        results = session.query(func.count(model.table.dataset_public_url)).scalar()
+
+    return StatsResponse(count=results)

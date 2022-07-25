@@ -16,5 +16,5 @@ coverage:
     changes: off
 
 ignore:
-  - "tests/*"
-  - "**/__init__.py"
+  - 'tests/*'
+  - '**/__init__.py'

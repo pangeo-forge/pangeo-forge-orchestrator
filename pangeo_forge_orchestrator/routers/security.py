@@ -17,7 +17,7 @@ def new_api_key(
     *,
     key_params: APIKeyCreate,
     session=Depends(get_session),
-    authorized_user=Depends(check_authentication_header_admin)
+    authorized_user=Depends(check_authentication_header_admin),
 ):
     raw_key = uuid.uuid4().hex
     encrypted_key = encrypt(raw_key)

@@ -1,5 +1,7 @@
 [tool.black]
 line-length = 100
+target-version = ['py38']
+skip-string-normalization = false
 
 [build-system]
 requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]

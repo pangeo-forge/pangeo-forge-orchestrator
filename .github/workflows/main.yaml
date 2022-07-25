@@ -1,30 +1,50 @@
-# Compare: https://github.com/pangeo-forge/pangeo-forge-recipes/blob/master/.github/workflows/main.yaml
-
 name: Tests
 
 on:
   push:
-    branches: "*"
+    branches: 'main'
     paths-ignore:
-    - 'docs/**'
+      - 'docs/**'
   pull_request:
     branches: main
     paths-ignore:
-    - 'docs/**'
+      - 'docs/**'
 
 env:
-  PYTEST_ADDOPTS: "--color=yes"
+  PYTEST_ADDOPTS: '--color=yes'
 
 jobs:
   test:
-    name: ${{ matrix.python-version }}-build
+    name: ${{ matrix.python-version }}-${{ matrix.database }}
     runs-on: ubuntu-latest
+
+    # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
+    # See also https://remarkablemark.org/blog/2021/03/14/setup-postgresql-in-github-actions/
+    # and https://github.com/actions/example-services/blob/master/.github/workflows/postgres-service.yml
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_DB: postgres_db
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres_user
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: sqlite:///${{ github.workspace }}/database.sqlite
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.8, 3.9]
+        python-version: [3.9]
+        database: ['sqlite', 'postgres']
+
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python
@@ -32,22 +52,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
-      # - name: Cache conda
-      #  uses: actions/cache@v1
-      #  env:
-          # Increase this value to reset cache if ci/py${{ matrix.python-version }}.yml has not changed
-      #    CACHE_NUMBER: 0
-      #  with:
-      #    path: ~/conda_pkgs_dir
-      #    key: ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('ci/py${{ matrix.python-version }}.yml') }}
       - name: setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: pfo
-      #    environment-file: ci/py${{ matrix.python-version }}.yml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
-      #    use-only-tar-bz2: true
       - name: install pangeo-forge-orchestrator plus deps
         shell: bash -l {0}
         run: |
@@ -57,9 +67,22 @@ jobs:
         run: |
           conda info
           conda list
-      # - name: 📦 Initialize sqlite database for tests
-      #   shell: bash -l {0}
-      #   run: python -m alembic upgrade head
+
+      - name: Set DATABASE_URL
+        shell: bash -l {0}
+        run: |
+          if [[ "${{ matrix.database }}" == "sqlite" ]]; then \
+            echo "DATABASE_URL=sqlite:///${{ github.workspace }}/database.sqlite" >> $GITHUB_ENV; \
+          else \
+            echo "DATABASE_URL=postgres://postgres_user:postgres_password@localhost:5432/postgres_db" >> $GITHUB_ENV; \
+          fi
+
+      - name: Maybe run migrations on postgres database
+        if: matrix.database == 'postgres'
+        shell: bash -l {0}
+        run: |
+          python -m alembic upgrade head
+
       - name: Run Tests
         shell: bash -l {0}
         run: |
