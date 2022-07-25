@@ -1,3 +1,8 @@
+import pytest
+
+from ..model_fixtures import recipe_run_fixture
+
+
 def test_bakery_stats(fastapi_test_crud_client):
     client = fastapi_test_crud_client.client
     response = client.get("/stats/bakeries")
@@ -12,7 +17,10 @@ def test_recipe_run_stats(fastapi_test_crud_client):
     assert response.json() == {"count": 0}
 
 
-def test_dataset_stats(fastapi_test_crud_client):
+@pytest.mark.parametrize("model_fixture", [recipe_run_fixture])
+def test_dataset_stats(fastapi_test_crud_client, model_fixture):
+
+    print(model_fixture.path)
     client = fastapi_test_crud_client.client
     path = "/stats/datasets"
     response = client.get(path)
