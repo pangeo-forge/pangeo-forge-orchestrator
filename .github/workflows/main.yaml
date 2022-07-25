@@ -20,6 +20,7 @@ jobs:
 
     # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
     # See also https://remarkablemark.org/blog/2021/03/14/setup-postgresql-in-github-actions/
+    # and https://github.com/actions/example-services/blob/master/.github/workflows/postgres-service.yml
     services:
       postgres:
         image: postgres
@@ -73,7 +74,7 @@ jobs:
           if [[ "${{ matrix.database }}" == "sqlite" ]]; then \
             echo "DATABASE_URL=sqlite:///${{ github.workspace }}/database.sqlite" >> $GITHUB_ENV; \
           else \
-            echo "DATABASE_URL=postgres://postgres_user:postgres_password@postgres:5432/postgres_db" >> $GITHUB_ENV; \
+            echo "DATABASE_URL=postgres://postgres_user:postgres_password@localhost:5432/postgres_db" >> $GITHUB_ENV; \
           fi
 
       - name: Maybe run migrations on postgres database
