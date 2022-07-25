@@ -67,7 +67,7 @@ def get_dataset_stats(
     if exclude_test_runs:
         statement = and_(
             model.table.dataset_public_url.isnot(None),
-            model.table.is_test == False,
+            model.table.is_test.isnot(True),
             model.table.status == "completed",
             model.table.conclusion == "success",
         )
