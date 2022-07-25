@@ -17,7 +17,7 @@ env:
 
 jobs:
   test:
-    name: ${{ matrix.python-version }}-build
+    name: ${{ matrix.python-version }}-${{ matrix.database }}-build
     runs-on: ubuntu-latest
 
     # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
@@ -73,11 +73,11 @@ jobs:
           fi
 
       - name: Maybe initialize postgres database
-        if: ${{ matrix.database }} == 'postgres'
+        if: matrix.database == 'postgres'
         shell: bash -l {0}
         run: |
-          apt-get update && \
-          apt-get install --yes --no-install-recommends postgresql-client && \
+          sudo apt-get update && \
+          sudo apt-get install --yes --no-install-recommends postgresql-client && \
           echo "CREATE DATABASE test_db;" | psql && \
           python -m alembic upgrade head
 
