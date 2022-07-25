@@ -29,6 +29,9 @@ def test_dataset_stats(client, authorized_client, model_fixture):
         model_fixture.create_opts[0], model_fixture, authorized_client
     )
 
+    response = client.read_range("/stats/datasets")
+    assert response == {"count": 0}
+
     response = authorized_client.update(
         model_fixture.path, create_response["id"], model_fixture.update_opts[1]
     )
