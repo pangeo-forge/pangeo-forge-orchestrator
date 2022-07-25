@@ -19,13 +19,27 @@ jobs:
   test:
     name: ${{ matrix.python-version }}-build
     runs-on: ubuntu-latest
+
+    # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     env:
-      DATABASE_URL: sqlite:///${{ github.workspace }}/database.sqlite
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
         python-version: [3.9]
+        database: ['sqlite', 'postgres']
+
     steps:
       - uses: actions/checkout@v2
       - name: Setup Python
@@ -33,22 +47,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
-      # - name: Cache conda
-      #  uses: actions/cache@v1
-      #  env:
-      # Increase this value to reset cache if ci/py${{ matrix.python-version }}.yml has not changed
-      #    CACHE_NUMBER: 0
-      #  with:
-      #    path: ~/conda_pkgs_dir
-      #    key: ${{ runner.os }}-conda-${{ env.CACHE_NUMBER }}-${{ hashFiles('ci/py${{ matrix.python-version }}.yml') }}
       - name: setup miniconda
         uses: conda-incubator/setup-miniconda@v2
         with:
           activate-environment: pfo
-          #    environment-file: ci/py${{ matrix.python-version }}.yml
           python-version: ${{ matrix.python-version }}
           auto-activate-base: false
-      #    use-only-tar-bz2: true
       - name: install pangeo-forge-orchestrator plus deps
         shell: bash -l {0}
         run: |
@@ -58,9 +62,25 @@ jobs:
         run: |
           conda info
           conda list
-      # - name: 📦 Initialize sqlite database for tests
-      #   shell: bash -l {0}
-      #   run: python -m alembic upgrade head
+
+      - name: Set DATABASE_URL
+        shell: bash -l {0}
+        run: |
+          if [[ "${{ matrix.database }}" == "sqlite" ]]; then \
+            export DATABASE_URL="sqlite:///${{ github.workspace }}/database.sqlite"; \
+          else \
+            export DATABASE_URL="postgresql://postgres:postgres@postgres:5432/test_db"; \
+          fi
+
+      - name: Maybe initialize postgres database
+        if: ${{ matrix.database }} == 'postgres'
+        shell: bash -l {0}
+        run: |
+          apt-get update && \
+          apt-get install --yes --no-install-recommends postgresql-client && \
+          echo "CREATE DATABASE test_db;" | psql && \
+          python -m alembic upgrade head
+
       - name: Run Tests
         shell: bash -l {0}
         run: |
