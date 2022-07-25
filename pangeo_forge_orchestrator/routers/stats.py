@@ -67,9 +67,9 @@ def get_dataset_stats(
     if exclude_test_runs:
         statement = and_(
             model.table.dataset_public_url.isnot(None),
-            model.table.is_test.is_(False),
-            model.table.status.is_("completed"),
-            model.table.conclusion.is_("success"),
+            model.table.is_test == False,
+            model.table.status == "completed",
+            model.table.conclusion == "success",
         )
 
         results = session.query(model.table).filter(statement).count()
