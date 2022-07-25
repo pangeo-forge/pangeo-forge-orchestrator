@@ -1,5 +1,3 @@
-# Compare: https://github.com/pangeo-forge/pangeo-forge-recipes/blob/master/.github/workflows/main.yaml
-
 name: Tests
 
 on:
@@ -21,11 +19,17 @@ jobs:
     runs-on: ubuntu-latest
 
     # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
+    # See also https://remarkablemark.org/blog/2021/03/14/setup-postgresql-in-github-actions/
     services:
       postgres:
         image: postgres
         env:
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres_db
+          POSTGRES_PASSWORD: postgres_password
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres_user
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -69,16 +73,13 @@ jobs:
           if [[ "${{ matrix.database }}" == "sqlite" ]]; then \
             echo "DATABASE_URL=sqlite:///${{ github.workspace }}/database.sqlite" >> $GITHUB_ENV; \
           else \
-            echo "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/test_db" >> $GITHUB_ENV; \
+            echo "DATABASE_URL=postgres://postgres_user:postgres_password@postgres:5432/postgres_db" >> $GITHUB_ENV; \
           fi
 
-      - name: Maybe initialize postgres database
+      - name: Maybe run migrations on postgres database
         if: matrix.database == 'postgres'
         shell: bash -l {0}
         run: |
-          sudo apt-get update && \
-          sudo apt-get install --yes --no-install-recommends postgresql-client && \
-          echo "CREATE DATABASE test_db;" | psql --host=${{ env.DATABASE_URL }} && \
           python -m alembic upgrade head
 
       - name: Run Tests
