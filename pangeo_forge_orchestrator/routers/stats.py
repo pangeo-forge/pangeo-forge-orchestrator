@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import and_, func
 from sqlmodel import Session
@@ -60,7 +60,9 @@ def get_feedstock_stats(*, session: Session = Depends(get_session)):
     tags=["stats"],
 )
 def get_dataset_stats(
-    *, session: Session = Depends(get_session), exclude_test_runs: bool = False
+    *,
+    session: Session = Depends(get_session),
+    exclude_test_runs: bool = Query(False, description="Exclude test runs"),
 ) -> StatsResponse:
     model = MODELS["recipe_run"]
 
