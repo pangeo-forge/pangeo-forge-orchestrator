@@ -78,7 +78,7 @@ jobs:
         run: |
           sudo apt-get update && \
           sudo apt-get install --yes --no-install-recommends postgresql-client && \
-          echo "CREATE DATABASE test_db;" | psql --hostname=${{ env.DATABASE_URL }} && \
+          echo "CREATE DATABASE test_db;" | psql --host=${{ env.DATABASE_URL }} && \
           python -m alembic upgrade head
 
       - name: Run Tests
