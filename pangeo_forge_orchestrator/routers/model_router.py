@@ -44,9 +44,7 @@ def make_read_range_endpoint(model):
                 else desc(getattr(model.table, order_by))
             )
             statement = statement.order_by(column)
-        else:
-            statement = statement.offset(offset).limit(limit)
-
+        statement = statement.offset(offset).limit(limit)
         return session.exec(statement).all()
 
     return read_range
