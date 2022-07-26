@@ -1,7 +1,7 @@
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, asc, desc, select
 
 from ..dependencies import check_authentication_header, get_session
 from ..models import MODELS
@@ -29,9 +29,25 @@ def make_create_endpoint(model):
 
 def make_read_range_endpoint(model):
     def read_range(
-        *, session: Session = Depends(get_session), offset: int = 0, limit: int = QUERY_LIMIT
+        *,
+        session: Session = Depends(get_session),
+        offset: int = 0,
+        limit: int = QUERY_LIMIT,
+        order_by: str = Query(None, description="Order by this column"),
+        sort: Literal["asc", "desc"] = Query("asc", description="Sort in this direction"),
     ):
-        return session.exec(select(model.table).offset(offset).limit(limit)).all()
+        statement = select(model.table)
+        if order_by:
+            column = (
+                asc(getattr(model.table, order_by))
+                if sort == "asc"
+                else desc(getattr(model.table, order_by))
+            )
+            statement = statement.order_by(column)
+        else:
+            statement = statement.offset(offset).limit(limit)
+
+        return session.exec(statement).all()
 
     return read_range
 
