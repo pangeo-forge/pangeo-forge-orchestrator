@@ -6,7 +6,7 @@ from sqlmodel import Session, asc, desc, select
 from ..dependencies import check_authentication_header, get_session
 from ..models import MODELS
 
-QUERY_LIMIT = Query(default=100, lte=100)
+QUERY_LIMIT = Query(default=100, lte=100, description="Limit the number of results")
 
 router = APIRouter()
 

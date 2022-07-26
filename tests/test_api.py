@@ -64,6 +64,24 @@ def test_read_range(model_fixture, client, authorized_client):
         assert actual["id"] > 0
 
 
+@pytest.mark.parametrize("sort", ["asc", "desc"])
+@pytest.mark.parametrize("order_by", ["id"])
+@pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
+def test_read_range_with_sort_ordering(model_fixture, client, authorized_client, sort, order_by):
+    # first create some data
+    path = model_fixture.path
+    for i, create_opts in enumerate(model_fixture.create_opts):
+        if i == 0:  # don't create same dependencies more than once
+            create_with_dependencies(create_opts, model_fixture, authorized_client)
+        else:
+            authorized_client.create(path, create_opts)
+
+    path = f"{path}?offset=0&limit=100&order_by={order_by}&sort={sort}"
+    response = client.read_range(path)
+    for _, actual in zip(model_fixture.create_opts, response):
+        assert actual["id"] > 0
+
+
 @pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
 def test_read_single(model_fixture, client, authorized_client):
     # first create some data
