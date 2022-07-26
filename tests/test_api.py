@@ -78,8 +78,8 @@ def test_read_range_with_sort_ordering(model_fixture, client, authorized_client,
 
     path = f"{path}?offset=0&limit=100&order_by={order_by}&sort={sort}"
     response = client.read_range(path)
-    for _, actual in zip(model_fixture.create_opts, response):
-        assert actual["id"] > 0
+    for item in response:
+        assert item["id"] > 0
 
 
 @pytest.mark.parametrize("model_fixture", ALL_MODEL_FIXTURES)
