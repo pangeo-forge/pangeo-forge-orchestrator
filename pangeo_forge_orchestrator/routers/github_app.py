@@ -14,9 +14,11 @@ from sqlmodel import Session
 
 from ..dependencies import get_session
 
-GH_APP_ID = 222382
-# For now, we're only installed in the `pangeo-forge` org, so this is a constant.
+# For now, we only have one app, installed in one place (the `pangeo-forge` org), so these are
+# constants. Eventually, we'll have multiple apps (`staging`, etc.) installed in potentially
+# multiple locations (> 1 account), at which point these will need to be determined dynamically.
 # https://docs.github.com/en/rest/apps/apps#list-installations-for-the-authenticated-app
+GH_APP_ID = 222382
 INSTALLATION_ID = 27724604
 ACCEPT = "application/vnd.github+json"
 
