@@ -7,12 +7,13 @@ import time
 
 import aiohttp
 import jwt
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
 
 from ..dependencies import get_session
+from ..models import MODELS
 
 # For now, we only have one app, installed in one place (the `pangeo-forge` org), so these are
 # constants. Eventually, we'll have multiple apps (`staging`, etc.) installed in potentially
@@ -65,10 +66,13 @@ async def get_repo_id(repo_full_name: str):
     "/feedstocks/{id}/deliveries",
     summary="",
 )
-async def get_feedstock_hook_deliveries(id: int, session: Session = Depends(get_session)):
+async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(get_session)):
 
-    repo_full_name = "pangeo-forge/github-app-sandbox-repository"
-    repo_id = await get_repo_id(repo_full_name)
+    feedstock = db_session.get(MODELS["feedstock"].table, id)
+    if not feedstock:
+        raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
+
+    repo_id = await get_repo_id(repo_full_name=feedstock.spec)
 
     async with aiohttp.ClientSession() as session:
         gh = GitHubAPI(session, "pangeo-forge")
