@@ -137,11 +137,16 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
         print(f"hello world, I'm synchronizing {html_url} at {head_sha}.")
 
     payload = await request.json()
-    if payload["event"] == "pull_request" and payload["action"] == "synchronize":
-        pr = payload["request"]["payload"]["pull_request"]
+    if payload["action"] == "synchronize":
+        pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
         background_tasks.add_task(synchronize_pr, *args)
-        return {"status": "ok", "background_tasks": {"func": "synchronize_pr", "args": args}}
+        return {"status": "ok", "background_tasks": [{"task": "synchronize_pr", "args": args}]}
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="No handling implemented for this event type.",
+        )
 
 
 @github_app_router.get(
