@@ -26,6 +26,11 @@ INSTALLATION_ID = 27724604
 ACCEPT = "application/vnd.github+json"
 
 github_app_router = APIRouter()
+# Based on https://github.com/tiangolo/fastapi/issues/236#issuecomment-493873907, it looks like
+# starting a single global aiohttp session outside of a context manager is fine. Encouraged, even.
+# We currently don't have a "close on shutdown" mechanism, but I'm not clear that's needed.
+http_session = aiohttp.ClientSession()  # TODO: Maybe share this across all routers.
+gh = GitHubAPI(http_session, "pangeo-forge")
 
 
 def get_jwt():
@@ -40,43 +45,35 @@ def get_jwt():
 
 
 async def get_access_token():
-    async with aiohttp.ClientSession() as session:
-        gh = GitHubAPI(session, "pangeo-forge")
-        token_response = await get_installation_access_token(
-            gh,
-            installation_id=INSTALLATION_ID,
-            app_id=GH_APP_ID,
-            private_key=os.getenv("PEM_FILE"),
-        )
+    token_response = await get_installation_access_token(
+        gh,
+        installation_id=INSTALLATION_ID,
+        app_id=GH_APP_ID,
+        private_key=os.getenv("PEM_FILE"),
+    )
     return token_response["token"]
 
 
 async def get_repo_id(repo_full_name: str):
     token = await get_access_token()
-    async with aiohttp.ClientSession() as session:
-        gh = GitHubAPI(session, "pangeo-forge")
-
-        repo_response = await gh.getitem(
-            f"/repos/{repo_full_name}",
-            oauth_token=token,
-            accept=ACCEPT,
-        )
-        return repo_response["id"]
+    repo_response = await gh.getitem(
+        f"/repos/{repo_full_name}",
+        oauth_token=token,
+        accept=ACCEPT,
+    )
+    return repo_response["id"]
 
 
 async def list_accessible_repos():
     """Get all repos accessible to the GitHub App installation."""
 
     token = await get_access_token()
-    async with aiohttp.ClientSession() as session:
-        gh = GitHubAPI(session, "pangeo-forge")
-
-        repo_response = await gh.getitem(
-            "/installation/repositories",
-            oauth_token=token,
-            accept=ACCEPT,
-        )
-        return [r["full_name"] for r in repo_response["repositories"]]
+    repo_response = await gh.getitem(
+        "/installation/repositories",
+        oauth_token=token,
+        accept=ACCEPT,
+    )
+    return [r["full_name"] for r in repo_response["repositories"]]
 
 
 @github_app_router.get(
@@ -98,15 +95,12 @@ async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(g
             detail=f"Pangeo Forge GitHub App not installed in '{feedstock.spec}' repository.",
         )
 
-    async with aiohttp.ClientSession() as session:
-        gh = GitHubAPI(session, "pangeo-forge")
+    deliveries = []
+    async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
+        if d["repository_id"] == repo_id:
+            deliveries.append(d)
 
-        deliveries = []
-        async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
-            if d["repository_id"] == repo_id:
-                deliveries.append(d)
-
-        return deliveries
+    return deliveries
 
 
 @github_app_router.post(
@@ -143,14 +137,11 @@ async def receive_github_hook(request: Request):
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
 )
 async def get_deliveries():
-    async with aiohttp.ClientSession() as session:
-        gh = GitHubAPI(session, "pangeo-forge")
+    deliveries = []
+    async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
+        deliveries.append(d)
 
-        deliveries = []
-        async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
-            deliveries.append(d)
-
-        return deliveries
+    return deliveries
 
 
 @github_app_router.get(
