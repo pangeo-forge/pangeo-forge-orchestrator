@@ -7,7 +7,6 @@ import hmac
 import os
 import time
 
-import aiohttp
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
@@ -15,6 +14,7 @@ from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
 
 from ..dependencies import get_session
+from ..http import HttpSession, http_session
 from ..models import MODELS
 
 # For now, we only have one app, installed in one place (the `pangeo-forge` org), so these are
@@ -26,11 +26,10 @@ INSTALLATION_ID = 27724604
 ACCEPT = "application/vnd.github+json"
 
 github_app_router = APIRouter()
-# Based on https://github.com/tiangolo/fastapi/issues/236#issuecomment-493873907, it looks like
-# starting a single global aiohttp session outside of a context manager is fine. Encouraged, even.
-# We currently don't have a "close on shutdown" mechanism, but I'm not clear that's needed.
-http_session = aiohttp.ClientSession()  # TODO: Maybe share this across all routers.
-gh = GitHubAPI(http_session, "pangeo-forge")
+
+
+def get_github_session(http_session: HttpSession):
+    return GitHubAPI(http_session, "pangeo-forge")
 
 
 def get_jwt():
@@ -44,7 +43,7 @@ def get_jwt():
     return bearer_token
 
 
-async def get_access_token():
+async def get_access_token(gh: GitHubAPI):
     token_response = await get_installation_access_token(
         gh,
         installation_id=INSTALLATION_ID,
@@ -54,8 +53,8 @@ async def get_access_token():
     return token_response["token"]
 
 
-async def get_repo_id(repo_full_name: str):
-    token = await get_access_token()
+async def get_repo_id(repo_full_name: str, gh: GitHubAPI):
+    token = await get_access_token(gh)
     repo_response = await gh.getitem(
         f"/repos/{repo_full_name}",
         oauth_token=token,
@@ -64,10 +63,10 @@ async def get_repo_id(repo_full_name: str):
     return repo_response["id"]
 
 
-async def list_accessible_repos():
+async def list_accessible_repos(gh: GitHubAPI):
     """Get all repos accessible to the GitHub App installation."""
 
-    token = await get_access_token()
+    token = await get_access_token(gh)
     repo_response = await gh.getitem(
         "/installation/repositories",
         oauth_token=token,
@@ -80,15 +79,21 @@ async def list_accessible_repos():
     "/feedstocks/{id}/deliveries",
     summary="Get a list of webhook deliveries originating from a particular feedstock.",
 )
-async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(get_session)):
+async def get_feedstock_hook_deliveries(
+    id: int,
+    db_session: Session = Depends(get_session),
+    http_session: HttpSession = Depends(http_session),
+):
 
     feedstock = db_session.get(MODELS["feedstock"].table, id)
     if not feedstock:
         raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
 
-    accessible_repos = await list_accessible_repos()
+    gh = get_github_session(http_session)
+    accessible_repos = await list_accessible_repos(gh)
+
     if feedstock.spec in accessible_repos:
-        repo_id = await get_repo_id(repo_full_name=feedstock.spec)
+        repo_id = await get_repo_id(repo_full_name=feedstock.spec, gh=gh)
     else:
         raise HTTPException(
             status_code=404,
@@ -136,7 +141,9 @@ async def receive_github_hook(request: Request):
     "/github/hooks/deliveries",
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
 )
-async def get_deliveries():
+async def get_deliveries(http_session: HttpSession = Depends(http_session)):
+    gh = get_github_session(http_session)
+
     deliveries = []
     async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
         deliveries.append(d)
@@ -151,6 +158,8 @@ async def get_deliveries():
 async def get_delivery(
     id: int,
     response_only: bool = Query(True, description="Return only response body, excluding request."),
+    http_session: HttpSession = Depends(http_session),
 ):
+    gh = get_github_session(http_session)
     delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
     return delivery["response"] if response_only else delivery
