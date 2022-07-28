@@ -9,7 +9,7 @@ import time
 
 import aiohttp
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
@@ -148,5 +148,9 @@ async def get_deliveries():
     "/github/hooks/deliveries/{id}",
     summary="Get details about a particular webhook delivery.",
 )
-async def get_delivery(id: int):
-    return {"status": "ok"}
+async def get_delivery(
+    id: int,
+    response_only: bool = Query(True, description="Return only response body, excluding request."),
+):
+    delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
+    return delivery["response"] if response_only else delivery
