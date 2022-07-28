@@ -104,7 +104,7 @@ async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(g
 
 
 @github_app_router.post(
-    "/github-hooks/",
+    "/github/hooks/",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
@@ -133,7 +133,7 @@ async def receive_github_hook(request: Request):
 
 
 @github_app_router.get(
-    "/github-hooks/deliveries",
+    "/github/hooks/deliveries",
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
 )
 async def get_deliveries():
@@ -145,7 +145,7 @@ async def get_deliveries():
 
 
 @github_app_router.get(
-    "/github-hooks/deliveries/{id}",
+    "/github/hooks/deliveries/{id}",
     summary="Get details about a particular webhook delivery.",
 )
 async def get_delivery(id: int):
