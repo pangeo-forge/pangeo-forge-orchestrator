@@ -7,7 +7,7 @@ import time
 
 import aiohttp
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
@@ -79,7 +79,7 @@ async def list_accessible_repos():
 
 @github_app_router.get(
     "/feedstocks/{id}/deliveries",
-    summary="Get a list of webhook deliveries to a particular feedstock.",
+    summary="Get a list of webhook deliveries originating from a particular feedstock.",
 )
 async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(get_session)):
 
@@ -105,3 +105,37 @@ async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(g
                 deliveries.append(d)
 
         return deliveries
+
+
+@github_app_router.post(
+    "/github-hooks/",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
+)
+async def receive_github_hook(payload: dict):
+    print(payload)
+    # TODO: Custom response per payload type, will be useful for deliveries log.
+    return {"status": "ok"}
+
+
+@github_app_router.get(
+    "/github-hooks/deliveries",
+    summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
+)
+async def get_deliveries():
+    async with aiohttp.ClientSession() as session:
+        gh = GitHubAPI(session, "pangeo-forge")
+
+        deliveries = []
+        async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
+            deliveries.append(d)
+
+        return deliveries
+
+
+@github_app_router.get(
+    "/github-hooks/deliveries/{id}",
+    summary="Get details about a particular webhook delivery.",
+)
+async def get_delivery(id: int):
+    return {"status": "ok"}
