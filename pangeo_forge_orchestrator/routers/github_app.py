@@ -62,9 +62,24 @@ async def get_repo_id(repo_full_name: str):
         return repo_response["id"]
 
 
+async def list_accessible_repos():
+    """Get all repos accessible to the GitHub App installation."""
+
+    token = await get_access_token()
+    async with aiohttp.ClientSession() as session:
+        gh = GitHubAPI(session, "pangeo-forge")
+
+        repo_response = await gh.getitem(
+            "/installation/repositories",
+            oauth_token=token,
+            accept=ACCEPT,
+        )
+        return [r["full_name"] for r in repo_response["repositories"]]
+
+
 @github_app_router.get(
     "/feedstocks/{id}/deliveries",
-    summary="",
+    summary="Get a list of webhook deliveries to a particular feedstock.",
 )
 async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(get_session)):
 
@@ -72,7 +87,14 @@ async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(g
     if not feedstock:
         raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
 
-    repo_id = await get_repo_id(repo_full_name=feedstock.spec)
+    accessible_repos = await list_accessible_repos()
+    if feedstock.spec in accessible_repos:
+        repo_id = await get_repo_id(repo_full_name=feedstock.spec)
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Pangeo Forge GitHub App not installed in '{feedstock.spec}' repository.",
+        )
 
     async with aiohttp.ClientSession() as session:
         gh = GitHubAPI(session, "pangeo-forge")
