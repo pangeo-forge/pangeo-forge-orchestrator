@@ -122,7 +122,7 @@ async def receive_github_hook(request: Request):
     payload_bytes = await request.body()
     webhook_secret = bytes(os.environ["GITHUB_WEBHOOK_SECRET"], encoding="utf-8")  # type: ignore
     h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
-    if not hash_signature == f"sha256={h.hexdigest()}":
+    if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
         )
