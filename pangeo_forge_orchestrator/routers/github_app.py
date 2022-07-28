@@ -2,12 +2,14 @@
 by Mariatta Wijaya and licensed under Apache 2.0.
 """
 
+import hashlib
+import hmac
 import os
 import time
 
 import aiohttp
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
@@ -112,8 +114,26 @@ async def get_feedstock_hook_deliveries(id: int, db_session: Session = Depends(g
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
-async def receive_github_hook(payload: dict):
-    print(payload)
+async def receive_github_hook(request: Request):
+    # Hash signature validation documentation:
+    # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
+
+    hash_signature = request.headers.get("X-Hub-Signature-256", None)
+    if not hash_signature:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Request does not include a GitHub hash signature header.",
+        )
+
+    payload_bytes = await request.body()
+    webhook_secret = bytes(os.environ["GITHUB_WEBHOOK_SECRET"], encoding="utf-8")  # type: ignore
+    h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
+    if not hash_signature == f"sha256={h.hexdigest()}":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
+        )
+
+    # payload_json = await request.json()
     # TODO: Custom response per payload type, will be useful for deliveries log.
     return {"status": "ok"}
 
