@@ -8,7 +8,7 @@ import os
 import time
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session
@@ -113,7 +113,7 @@ async def get_feedstock_hook_deliveries(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
-async def receive_github_hook(request: Request):
+async def receive_github_hook(request: Request, background_tasks: BackgroundTasks):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
 
@@ -132,9 +132,16 @@ async def receive_github_hook(request: Request):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
         )
 
-    # payload_json = await request.json()
-    # TODO: Custom response per payload type, will be useful for deliveries log.
-    return {"status": "ok"}
+    def synchronize_pr(html_url, head_sha):
+        # TODO: post to github checks API here, and link check to delivery
+        print(f"hello world, I'm synchronizing {html_url} at {head_sha}.")
+
+    payload = await request.json()
+    if payload["event"] == "pull_request" and payload["action"] == "synchronize":
+        pr = payload["request"]["payload"]["pull_request"]
+        args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
+        background_tasks.add_task(synchronize_pr, *args)
+        return {"status": "ok", "background_tasks": {"func": "synchronize_pr", "args": args}}
 
 
 @github_app_router.get(
