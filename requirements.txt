@@ -8,7 +8,7 @@ sqlalchemy==1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
 typer==0.4.0
 click==8.0.4  # https://github.com/tiangolo/typer/issues/377
 alembic==1.7.5
-"git+https://github.com/cisaacstern/pangeo-forge-runner.git@support-stdout"
+git+https://github.com/cisaacstern/pangeo-forge-runner.git@support-stdout
 
 # for deployment
 gunicorn==20.1.0
