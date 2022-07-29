@@ -149,9 +149,10 @@ async def receive_github_hook(
     async def synchronize(html_url, head_sha, gh=gh):
         logger.info(f"Synchronizing {html_url} at {head_sha}.")
         api_url = html_to_api_url(html_url)
+        token = await get_access_token(gh)
         checks_response = await gh.post(
             f"{api_url}/check_runs",
-            oauth_token=get_access_token(gh),
+            oauth_token=token,
             accept=ACCEPT,
             data=dict(
                 name="synchronize",
@@ -183,7 +184,7 @@ async def receive_github_hook(
         # TODO: post notification back to github with created recipe runs
         _ = await gh.patch(
             f"{api_url}/check_runs/{checks_response['id']}",
-            oauth_token=get_access_token(gh),
+            oauth_token=token,
             accept=ACCEPT,
             data=dict(
                 status="completed",
