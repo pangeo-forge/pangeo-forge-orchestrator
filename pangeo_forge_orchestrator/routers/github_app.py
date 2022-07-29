@@ -185,7 +185,7 @@ async def receive_github_hook(
         for line in out.splitlines():
             p = json.loads(line)
             if p["status"] == "completed":
-                meta = p
+                meta = p["meta"]
         logger.debug(meta)
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
