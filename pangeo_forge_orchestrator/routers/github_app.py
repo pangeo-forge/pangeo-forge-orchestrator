@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import time
+from datetime import datetime
 
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
@@ -116,7 +117,11 @@ async def get_feedstock_hook_deliveries(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
-async def receive_github_hook(request: Request, background_tasks: BackgroundTasks):
+async def receive_github_hook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    http_session: HttpSession = Depends(http_session),
+):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
 
@@ -135,9 +140,23 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
         )
 
-    def synchronize(html_url, head_sha):
-        # TODO: post to github checks API here, and link check to delivery
+    gh = get_github_session(http_session)
+
+    async def synchronize(html_url, head_sha, gh=gh):
         logger.info(f"Synchronizing {html_url} at {head_sha}.")
+        checks_response = await gh.post(
+            f"{html_url}/check_runs",
+            oauth_token=get_access_token(gh),
+            accept=ACCEPT,
+            data=dict(
+                name="synchronize",
+                head_sha=head_sha,
+                status="in_progress",
+                started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                output=dict(title="sync latest commit to pangeo forge cloud"),
+                details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
+            ),
+        )
         # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
         # image from meta.yaml, without importing the recipe. this will be used when we replace
         # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
@@ -157,6 +176,16 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
         logger.debug(meta)
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
+        _ = await gh.patch(
+            f"{html_url}/check_runs/{checks_response['id']}",
+            oauth_token=get_access_token(gh),
+            accept=ACCEPT,
+            data=dict(
+                status="completed",
+                conclusion="success",
+                completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            ),
+        )
 
     payload = await request.json()
     if payload["action"] == "synchronize":
