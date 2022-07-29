@@ -4,7 +4,9 @@ by Mariatta Wijaya and licensed under Apache 2.0.
 
 import hashlib
 import hmac
+import json
 import os
+import subprocess
 import time
 
 import jwt
@@ -15,6 +17,7 @@ from sqlmodel import Session
 
 from ..dependencies import get_session
 from ..http import HttpSession, http_session
+from ..logging import logger
 from ..models import MODELS
 
 # For now, we only have one app, installed in one place (the `pangeo-forge` org), so these are
@@ -132,16 +135,35 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
         )
 
-    def synchronize_pr(html_url, head_sha):
+    def synchronize(html_url, head_sha):
         # TODO: post to github checks API here, and link check to delivery
-        print(f"hello world, I'm synchronizing {html_url} at {head_sha}.")
+        logger.info(f"Synchronizing {html_url} at {head_sha}.")
+        # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
+        # image from meta.yaml, without importing the recipe. this will be used when we replace
+        # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
+        # TODO: make sure that `expand-meta` command verifies if python objects in recipe module
+        # for each recipe in meta.yaml (i.e., that meta.yaml doesn't contain "null pointers").
+        cmd = [
+            "pangeo-forge-runner",
+            "--repo",
+            html_url,
+            "--ref",
+            head_sha,
+            "--no-logs",
+            "expand-meta",
+        ]
+        out = subprocess.check_output(cmd)
+        meta = json.loads(out)
+        logger.debug(meta)
+        # TODO: create recipe runs in database for each recipe in expanded meta
+        # TODO: post notification back to github with created recipe runs
 
     payload = await request.json()
     if payload["action"] == "synchronize":
         pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
-        background_tasks.add_task(synchronize_pr, *args)
-        return {"status": "ok", "background_tasks": [{"task": "synchronize_pr", "args": args}]}
+        background_tasks.add_task(synchronize, *args)
+        return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
