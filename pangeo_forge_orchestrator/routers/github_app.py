@@ -61,6 +61,20 @@ async def get_access_token(gh: GitHubAPI):
     return token_response["token"]
 
 
+async def create_check_run(gh: GitHubAPI, api_url: str, data: dict):
+    token = await get_access_token(gh)
+    kw = dict(oauth_token=token, accept=ACCEPT, data=data)
+    response = await gh.post(f"{api_url}/check-runs", **kw)
+    return response
+
+
+async def update_check_run(gh: GitHubAPI, api_url: str, id_: str, data: dict):
+    token = await get_access_token(gh)
+    kw = dict(oauth_token=token, accept=ACCEPT, data=data)
+    response = await gh.patch(f"{api_url}/check-runs/{id_}", **kw)
+    return response
+
+
 async def get_repo_id(repo_full_name: str, gh: GitHubAPI):
     token = await get_access_token(gh)
     repo_response = await gh.getitem(
@@ -149,24 +163,19 @@ async def receive_github_hook(
     async def synchronize(html_url, head_sha, gh=gh):
         logger.info(f"Synchronizing {html_url} at {head_sha}.")
         api_url = html_to_api_url(html_url)
-        token = await get_access_token(gh)
-        checks_response = await gh.post(
-            f"{api_url}/check-runs",
-            oauth_token=token,
-            accept=ACCEPT,
-            data=dict(
-                name="synchronize",
-                head_sha=head_sha,
-                status="in_progress",
-                started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                output=dict(
-                    title="sync latest commit to pangeo forge cloud",
-                    summary="",  # required
-                    text="",  # required
-                ),
-                details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
+        create_request = dict(
+            name="synchronize",
+            head_sha=head_sha,
+            status="in_progress",
+            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            output=dict(
+                title="sync latest commit to pangeo forge cloud",
+                summary="",  # required
+                text="",  # required
             ),
+            details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
         )
+        checks_response = await create_check_run(gh, api_url, create_request)
         # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
         # image from meta.yaml, without importing the recipe. this will be used when we replace
         # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
@@ -189,16 +198,12 @@ async def receive_github_hook(
         logger.debug(meta)
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
-        _ = await gh.patch(
-            f"{api_url}/check-runs/{checks_response['id']}",
-            oauth_token=token,
-            accept=ACCEPT,
-            data=dict(
-                status="completed",
-                conclusion="success",
-                completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-            ),
+        update_request = dict(
+            status="completed",
+            conclusion="success",
+            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
         )
+        _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
 
     payload = await request.json()
     if payload["action"] == "synchronize":
