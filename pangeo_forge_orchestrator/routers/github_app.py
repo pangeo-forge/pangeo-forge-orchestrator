@@ -36,6 +36,10 @@ def get_github_session(http_session: HttpSession):
     return GitHubAPI(http_session, "pangeo-forge")
 
 
+def html_to_api_url(html_url: str) -> str:
+    return html_url.replace("github.com", "api.github.com/repos/")
+
+
 def get_jwt():
     payload = {
         "iat": int(time.time()),
@@ -144,8 +148,9 @@ async def receive_github_hook(
 
     async def synchronize(html_url, head_sha, gh=gh):
         logger.info(f"Synchronizing {html_url} at {head_sha}.")
+        api_url = html_to_api_url(html_url)
         checks_response = await gh.post(
-            f"{html_url}/check_runs",
+            f"{api_url}/check_runs",
             oauth_token=get_access_token(gh),
             accept=ACCEPT,
             data=dict(
@@ -177,7 +182,7 @@ async def receive_github_hook(
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
         _ = await gh.patch(
-            f"{html_url}/check_runs/{checks_response['id']}",
+            f"{api_url}/check_runs/{checks_response['id']}",
             oauth_token=get_access_token(gh),
             accept=ACCEPT,
             data=dict(
