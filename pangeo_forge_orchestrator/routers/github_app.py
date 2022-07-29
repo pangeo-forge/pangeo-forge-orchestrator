@@ -37,7 +37,7 @@ def get_github_session(http_session: HttpSession):
 
 
 def html_to_api_url(html_url: str) -> str:
-    return html_url.replace("github.com", "api.github.com/repos/")
+    return html_url.replace("github.com", "api.github.com/repos")
 
 
 def get_jwt():
@@ -151,7 +151,7 @@ async def receive_github_hook(
         api_url = html_to_api_url(html_url)
         token = await get_access_token(gh)
         checks_response = await gh.post(
-            f"{api_url}/check_runs",
+            f"{api_url}/check-runs",
             oauth_token=token,
             accept=ACCEPT,
             data=dict(
@@ -159,7 +159,11 @@ async def receive_github_hook(
                 head_sha=head_sha,
                 status="in_progress",
                 started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                output=dict(title="sync latest commit to pangeo forge cloud"),
+                output=dict(
+                    title="sync latest commit to pangeo forge cloud",
+                    summary="",  # required
+                    text="",  # required
+                ),
                 details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
             ),
         )
@@ -183,7 +187,7 @@ async def receive_github_hook(
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
         _ = await gh.patch(
-            f"{api_url}/check_runs/{checks_response['id']}",
+            f"{api_url}/check-runs/{checks_response['id']}",
             oauth_token=token,
             accept=ACCEPT,
             data=dict(
