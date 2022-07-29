@@ -174,15 +174,18 @@ async def receive_github_hook(
         # for each recipe in meta.yaml (i.e., that meta.yaml doesn't contain "null pointers").
         cmd = [
             "pangeo-forge-runner",
+            "expand-meta",
             "--repo",
             html_url,
             "--ref",
             head_sha,
-            "--no-logs",
-            "expand-meta",
+            "--json",
         ]
         out = subprocess.check_output(cmd)
-        meta = json.loads(out)
+        for line in out.splitlines():
+            p = json.loads(line)
+            if p["status"] == "completed":
+                meta = p
         logger.debug(meta)
         # TODO: create recipe runs in database for each recipe in expanded meta
         # TODO: post notification back to github with created recipe runs
