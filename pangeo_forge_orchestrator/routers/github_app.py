@@ -9,12 +9,13 @@ import os
 import subprocess
 import time
 from datetime import datetime
+from textwrap import dedent
 
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..dependencies import get_session
 from ..http import HttpSession, http_session
@@ -38,6 +39,10 @@ def get_github_session(http_session: HttpSession):
 
 def html_to_api_url(html_url: str) -> str:
     return html_url.replace("github.com", "api.github.com/repos")
+
+
+def html_url_to_repo_full_name(html_url: str) -> str:
+    return html_url.replace("https://github.com/", "")
 
 
 def get_jwt():
@@ -139,6 +144,7 @@ async def receive_github_hook(
     request: Request,
     background_tasks: BackgroundTasks,
     http_session: HttpSession = Depends(http_session),
+    db_session: Session = Depends(get_session),
 ):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
@@ -169,9 +175,8 @@ async def receive_github_hook(
             status="in_progress",
             started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             output=dict(
-                title="sync latest commit to pangeo forge cloud",
+                title="Syncing latest commit to Pangeo Forge Cloud",
                 summary="",  # required
-                text="",  # required
             ),
             details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
         )
@@ -197,11 +202,70 @@ async def receive_github_hook(
                 meta = p["meta"]
         logger.debug(meta)
         # TODO: create recipe runs in database for each recipe in expanded meta
+        try:
+            feedstock_statement = select(MODELS["feedstock"].table).where(
+                MODELS["feedstock"].table.spec == html_url_to_repo_full_name(html_url)
+            )
+            feedstock_id = [result.id for result in db_session.exec(feedstock_statement)].pop(0)
+            bakery_statement = select(MODELS["bakery"].table).where(
+                MODELS["bakery"].table.name == meta["bakery"]["id"]
+            )
+            bakery_id = [result.id for result in db_session.exec(bakery_statement)].pop(0)
+        except IndexError as e:
+            update_request = dict(
+                status="completed",
+                conclusion="failure",
+                completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                output=dict(
+                    title="Feedstock and/or bakery not present in database.",
+                    summary=dedent(
+                        f"""\
+                        To resolve, a maintainer must ensure both of the following are in database:
+                        - **Feedstock**: {html_url}
+                        - **Bakery**: `{meta["bakery"]["id"]}`
+                        """
+                    ),
+                ),
+            )
+            _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+            raise ValueError(
+                f"Feedstock {html_url} and/or bakery {meta['bakery']['id']} not in database."
+            ) from e
+
+        new_models = [
+            MODELS["recipe_run"].creation(
+                recipe_id=recipe["id"],
+                bakery_id=bakery_id,
+                feedstock_id=feedstock_id,
+                head_sha=head_sha,
+                version="",  # TODO: Are we using this?
+                started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                is_test=True,
+                # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
+                # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
+                # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
+                dataset_type="zarr",
+            )
+            for recipe in meta["recipes"]
+        ]
+        for nm in new_models:
+            db_model = MODELS["recipe_run"].table.from_orm(nm)
+            db_session.add(db_model)
+            db_session.commit()
+            db_session.refresh(db_model)
         # TODO: post notification back to github with created recipe runs
         update_request = dict(
             status="completed",
             conclusion="success",
             completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            output=dict(
+                title="Recipe runs queued for latest commit",
+                summary=dedent(
+                    """\
+                    TODO: Links to recipe runs (requires knowing deployment base url)
+                    """
+                ),
+            ),
         )
         _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
 
