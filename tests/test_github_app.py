@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
+    get_access_token,
     get_jwt,
     html_to_api_url,
     html_url_to_repo_full_name,
@@ -86,6 +87,38 @@ def test_get_jwt(rsa_key_pair):
     decoded = jwt.decode(encoded_jwt, public_key, algorithms=["RS256"])
     assert list(decoded.keys()) == ["iat", "exp", "iss"]
     assert all([isinstance(v, int) for v in decoded.values()])
+
+
+@pytest.fixture
+def mock_access_token():
+    # return value copied from example given here:
+    # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
+    return "ghs_16C7e42F292c6912E7710c838347Ae178B4a"
+
+
+@pytest.fixture
+def get_mock_installation_access_token(mock_access_token):
+    async def _get_mock_installation_access_token(
+        gh: MockGitHubAPI,
+        installation_id: int,
+        app_id: int,
+        private_key: str,
+    ):
+        return {"token": mock_access_token}
+
+    return _get_mock_installation_access_token
+
+
+@pytest.mark.asyncio
+async def test_get_access_token(mocker, get_mock_installation_access_token, mock_access_token):
+    mock_gh = get_mock_github_session(http_session)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_installation_access_token",
+        get_mock_installation_access_token,
+    )
+    token = await get_access_token(mock_gh)
+    assert token == mock_access_token
 
 
 # @pytest.mark.anyio
