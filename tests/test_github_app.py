@@ -16,6 +16,7 @@ from pangeo_forge_orchestrator.routers.github_app import (
     get_jwt,
     html_to_api_url,
     html_url_to_repo_full_name,
+    update_check_run,
 )
 
 
@@ -55,6 +56,9 @@ class MockGitHubAPI(_MockGitHubBackend):
 
     async def post(self, path: str, oauth_token: str, accept: str, data: dict):
         return {"id": 1}  # TODO: set `id` dynamically
+
+    async def patch(self, path: str, oauth_token: str, accept: str, data: dict):
+        return {}  # TODO: return something
 
 
 @pytest.fixture
@@ -201,6 +205,27 @@ async def test_create_check_run(
     data = dict()
     response = await create_check_run(mock_gh, api_url, data)
     assert isinstance(response["id"], int)
+
+
+@pytest.mark.asyncio
+async def test_update_check_run(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    get_mock_installation_access_token,
+    api_url,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mock_gh = get_mock_github_session(http_session)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_installation_access_token",
+        get_mock_installation_access_token,
+    )
+    data = dict()
+    _ = await update_check_run(mock_gh, api_url, 1, data)
+    # TODO: assert something here. currently, just a smoke test.
 
 
 # @pytest.mark.anyio
