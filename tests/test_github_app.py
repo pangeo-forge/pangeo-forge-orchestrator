@@ -66,6 +66,9 @@ class MockGitHubAPI(_MockGitHubBackend):
             return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
         elif path == "/installation/repositories":
             return {"repositories": self.accessible_repos}
+        elif path.startswith("/app/hook/deliveries/"):
+            id_ = int(path.replace("/app/hook/deliveries/", ""))
+            return [{"response": d} for d in self.app_hook_deliveries if d["id"] == id_].pop(0)
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -359,3 +362,25 @@ async def test_get_deliveries(
     response = await async_app_client.get("/github/hooks/deliveries")
     assert response.status_code == 200
     assert response.json() == app_hook_deliveries
+
+
+@pytest.mark.asyncio
+async def test_get_delivery(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    app_hook_deliveries,
+    async_app_client,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+    for delivery in app_hook_deliveries:
+        id_ = delivery["id"]
+        response = await async_app_client.get(f"/github/hooks/deliveries/{id_}")
+        assert response.status_code == 200
+        assert response.json() == delivery
