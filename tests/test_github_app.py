@@ -11,6 +11,7 @@ import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
     get_access_token,
+    get_app_webhook_url,
     get_jwt,
     html_to_api_url,
     html_url_to_repo_full_name,
@@ -36,16 +37,42 @@ def rsa_key_pair():
 
 
 @dataclass
-class MockGitHubAPI:
+class _MockGitHubBackend:
+    app_hook_config_url: str
+
+
+@dataclass
+class MockGitHubAPI(_MockGitHubBackend):
     http_session: HttpSession
     username: str
 
+    async def getitem(self, path: str, jwt: str, accept: str) -> dict:
+        if path == "/app/hook/config":
+            return {"url": self.app_hook_config_url}
+        else:
+            raise NotImplementedError(f"Path '{path}' not supported.")
 
-def get_mock_github_session(http_session: HttpSession):
-    return MockGitHubAPI(http_session, "pangeo-forge")
+
+@pytest.fixture
+def app_hook_config_url():
+    """In production, this might be configured to point to a different url, for example for
+    testing new features on a review deployment."""
+
+    return "https://api.pangeo-forge.org/github/hooks/"
 
 
-def test_get_github_session(mocker):
+@pytest.fixture
+def get_mock_github_session(app_hook_config_url):
+    def _get_mock_github_session(http_session: HttpSession):
+        backend_kws = {
+            "app_hook_config_url": app_hook_config_url,
+        }
+        return MockGitHubAPI(http_session=http_session, username="pangeo-forge", **backend_kws)
+
+    return _get_mock_github_session
+
+
+def test_get_github_session(mocker, get_mock_github_session):
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
@@ -110,7 +137,12 @@ def get_mock_installation_access_token(mock_access_token):
 
 
 @pytest.mark.asyncio
-async def test_get_access_token(mocker, get_mock_installation_access_token, mock_access_token):
+async def test_get_access_token(
+    mocker,
+    get_mock_github_session,
+    get_mock_installation_access_token,
+    mock_access_token,
+):
     mock_gh = get_mock_github_session(http_session)
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
@@ -119,6 +151,15 @@ async def test_get_access_token(mocker, get_mock_installation_access_token, mock
     )
     token = await get_access_token(mock_gh)
     assert token == mock_access_token
+
+
+@pytest.mark.asyncio
+async def test_get_app_webhook_url(rsa_key_pair, get_mock_github_session):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mock_gh = get_mock_github_session(http_session)
+    url = await get_app_webhook_url(mock_gh)
+    assert url == "https://api.pangeo-forge.org/github/hooks/"
 
 
 # @pytest.mark.anyio
