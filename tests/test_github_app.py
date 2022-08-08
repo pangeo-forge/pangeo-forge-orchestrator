@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 
 import jwt
 import pytest
@@ -18,6 +18,7 @@ from pangeo_forge_orchestrator.routers.github_app import (
     get_repo_id,
     html_to_api_url,
     html_url_to_repo_full_name,
+    list_accessible_repos,
     update_check_run,
 )
 
@@ -43,6 +44,7 @@ def rsa_key_pair():
 @dataclass
 class _MockGitHubBackend:
     app_hook_config_url: str
+    accessible_repos: List[dict]
 
 
 @dataclass
@@ -60,7 +62,9 @@ class MockGitHubAPI(_MockGitHubBackend):
         if path == "/app/hook/config":
             return {"url": self.app_hook_config_url}
         elif path.startswith("/repos/"):
-            return {"id": 123456789}
+            return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
+        elif path == "/installation/repositories":
+            return {"repositories": self.accessible_repos}
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -85,10 +89,18 @@ def app_hook_config_url(api_url):
 
 
 @pytest.fixture
-def get_mock_github_session(app_hook_config_url):
+def accessible_repos():
+    """The repositories in which the app has been installed."""
+
+    return [{"full_name": "pangeo-forge/staged-recipes"}]
+
+
+@pytest.fixture
+def get_mock_github_session(app_hook_config_url, accessible_repos):
     def _get_mock_github_session(http_session: HttpSession):
         backend_kws = {
             "app_hook_config_url": app_hook_config_url,
+            "accessible_repos": accessible_repos,
         }
         return MockGitHubAPI(http_session=http_session, username="pangeo-forge", **backend_kws)
 
@@ -257,6 +269,26 @@ async def test_get_repo_id(
     )
     repo_id = await get_repo_id(repo_full_name, mock_gh)
     assert isinstance(repo_id, int)
+
+
+@pytest.mark.asyncio
+async def test_list_accessible_repos(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    get_mock_installation_access_token,
+    accessible_repos,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mock_gh = get_mock_github_session(http_session)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_installation_access_token",
+        get_mock_installation_access_token,
+    )
+    repos = await list_accessible_repos(mock_gh)
+    assert repos == [r["full_name"] for r in accessible_repos]
 
 
 # @pytest.mark.anyio
