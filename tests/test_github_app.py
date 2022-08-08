@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
+    create_check_run,
     get_access_token,
     get_app_webhook_url,
     get_jwt,
@@ -52,13 +53,21 @@ class MockGitHubAPI(_MockGitHubBackend):
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
+    async def post(self, path: str, oauth_token: str, accept: str, data: dict):
+        return {"id": 1}  # TODO: set `id` dynamically
+
 
 @pytest.fixture
-def app_hook_config_url():
+def api_url():
     """In production, this might be configured to point to a different url, for example for
     testing new features on a review deployment."""
 
-    return "https://api.pangeo-forge.org/github/hooks/"
+    return "https://api.pangeo-forge.org"
+
+
+@pytest.fixture
+def app_hook_config_url(api_url):
+    return f"{api_url}/github/hooks/"
 
 
 @pytest.fixture
@@ -131,6 +140,14 @@ def get_mock_installation_access_token(mock_access_token):
         app_id: int,
         private_key: str,
     ):
+        # Set this in the function body (rather than as a default) so it's evaluated at call time,
+        # not during fixture collection.
+        private_key = os.environ["PEM_FILE"]
+        # Our mock function does not actually use the private key, but the real function requires
+        # it, so we check here that it exists in the test session, to enhance realism.
+        assert private_key is not None
+        assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
+
         return {"token": mock_access_token}
 
     return _get_mock_installation_access_token
@@ -139,10 +156,13 @@ def get_mock_installation_access_token(mock_access_token):
 @pytest.mark.asyncio
 async def test_get_access_token(
     mocker,
+    rsa_key_pair,
     get_mock_github_session,
     get_mock_installation_access_token,
     mock_access_token,
 ):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
@@ -160,6 +180,27 @@ async def test_get_app_webhook_url(rsa_key_pair, get_mock_github_session):
     mock_gh = get_mock_github_session(http_session)
     url = await get_app_webhook_url(mock_gh)
     assert url == "https://api.pangeo-forge.org/github/hooks/"
+
+
+@pytest.mark.asyncio
+async def test_create_check_run(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    get_mock_installation_access_token,
+    api_url,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mock_gh = get_mock_github_session(http_session)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_installation_access_token",
+        get_mock_installation_access_token,
+    )
+    data = dict()
+    response = await create_check_run(mock_gh, api_url, data)
+    assert isinstance(response["id"], int)
 
 
 # @pytest.mark.anyio
