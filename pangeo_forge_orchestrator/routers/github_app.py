@@ -66,6 +66,11 @@ async def get_access_token(gh: GitHubAPI):
     return token_response["token"]
 
 
+async def get_app_webhook_url(gh: GitHubAPI):
+    response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
+    return response["url"]
+
+
 async def create_check_run(gh: GitHubAPI, api_url: str, data: dict):
     token = await get_access_token(gh)
     kw = dict(oauth_token=token, accept=ACCEPT, data=data)
