@@ -14,9 +14,17 @@ from sqlmodel import Session, SQLModel
 from typer.testing import CliRunner
 
 from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
+
+
+@pytest.fixture(autouse=True, scope="session")
+def session_setup_and_teardown():
+    http_session.start()
+    yield
+    # await http_session.stop()
 
 
 def get_open_port():

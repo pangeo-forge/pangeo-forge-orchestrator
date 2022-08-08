@@ -7,8 +7,10 @@ import pytest
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from httpx import AsyncClient
 
 import pangeo_forge_orchestrator
+from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
     create_check_run,
@@ -45,6 +47,7 @@ def rsa_key_pair():
 class _MockGitHubBackend:
     app_hook_config_url: str
     accessible_repos: List[dict]
+    app_hook_deliveries: List[dict]
 
 
 @dataclass
@@ -55,7 +58,7 @@ class MockGitHubAPI(_MockGitHubBackend):
     async def getitem(
         self,
         path: str,
-        accept: str,
+        accept: Optional[str] = None,
         jwt: Optional[str] = None,
         oauth_token: Optional[str] = None,
     ) -> dict:
@@ -65,6 +68,18 @@ class MockGitHubAPI(_MockGitHubBackend):
             return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
         elif path == "/installation/repositories":
             return {"repositories": self.accessible_repos}
+        else:
+            raise NotImplementedError(f"Path '{path}' not supported.")
+
+    async def getiter(
+        self,
+        path: str,
+        accept: Optional[str] = None,
+        jwt: Optional[str] = None,
+    ):
+        if path == "/app/hook/deliveries":
+            for delivery in self.app_hook_deliveries:
+                yield delivery
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -96,11 +111,48 @@ def accessible_repos():
 
 
 @pytest.fixture
-def get_mock_github_session(app_hook_config_url, accessible_repos):
+def app_hook_deliveries():
+    """Webhook deliveries to the GitHub App. Examples copied from real delivieres to the app."""
+
+    return [
+        {
+            "id": 24081517883,
+            "guid": "04d4b7f0-0f85-11ed-8539-b846a7d005af",
+            "delivered_at": "2022-07-29T21:25:50Z",
+            "redelivery": "false",
+            "duration": 0.03,
+            "status": "Invalid HTTP Response: 501",
+            "status_code": 501,
+            "event": "check_suite",
+            "action": "requested",
+            "installation_id": 27724604,
+            "repository_id": 518221894,
+            "url": "",
+        },
+        {
+            "id": 24081517383,
+            "guid": "04460c80-0f85-11ed-8fc2-f8b6d8b7d25d",
+            "delivered_at": "2022-07-29T21:25:50Z",
+            "redelivery": "false",
+            "duration": 0.04,
+            "status": "OK",
+            "status_code": 202,
+            "event": "pull_request",
+            "action": "synchronize",
+            "installation_id": 27724604,
+            "repository_id": 518221894,
+            "url": "",
+        },
+    ]
+
+
+@pytest.fixture
+def get_mock_github_session(app_hook_config_url, accessible_repos, app_hook_deliveries):
     def _get_mock_github_session(http_session: HttpSession):
         backend_kws = {
             "app_hook_config_url": app_hook_config_url,
             "accessible_repos": accessible_repos,
+            "app_hook_deliveries": app_hook_deliveries,
         }
         return MockGitHubAPI(http_session=http_session, username="pangeo-forge", **backend_kws)
 
@@ -291,9 +343,21 @@ async def test_list_accessible_repos(
     assert repos == [r["full_name"] for r in accessible_repos]
 
 
-# @pytest.mark.anyio
-# async def test_root():
-#    async with AsyncClient(app=app, base_url="http://test") as ac:
-#        response = await ac.get("/")
-#    assert response.status_code == 200
-#    assert response.json() == {"message": "Tomato"}
+@pytest.mark.asyncio
+async def test_get_deliveries(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    app_hook_deliveries,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.get("/github/hooks/deliveries")
+    assert response.status_code == 200
+    assert response.json() == app_hook_deliveries
