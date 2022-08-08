@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 import jwt
 import pytest
@@ -14,6 +15,7 @@ from pangeo_forge_orchestrator.routers.github_app import (
     get_access_token,
     get_app_webhook_url,
     get_jwt,
+    get_repo_id,
     html_to_api_url,
     html_url_to_repo_full_name,
     update_check_run,
@@ -48,9 +50,17 @@ class MockGitHubAPI(_MockGitHubBackend):
     http_session: HttpSession
     username: str
 
-    async def getitem(self, path: str, jwt: str, accept: str) -> dict:
+    async def getitem(
+        self,
+        path: str,
+        accept: str,
+        jwt: Optional[str] = None,
+        oauth_token: Optional[str] = None,
+    ) -> dict:
         if path == "/app/hook/config":
             return {"url": self.app_hook_config_url}
+        elif path.startswith("/repos/"):
+            return {"id": 123456789}
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -226,6 +236,27 @@ async def test_update_check_run(
     data = dict()
     _ = await update_check_run(mock_gh, api_url, 1, data)
     # TODO: assert something here. currently, just a smoke test.
+
+
+@pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
+@pytest.mark.asyncio
+async def test_get_repo_id(
+    mocker,
+    rsa_key_pair,
+    get_mock_github_session,
+    get_mock_installation_access_token,
+    repo_full_name,
+):
+    private_key, _ = rsa_key_pair
+    os.environ["PEM_FILE"] = private_key
+    mock_gh = get_mock_github_session(http_session)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_installation_access_token",
+        get_mock_installation_access_token,
+    )
+    repo_id = await get_repo_id(repo_full_name, mock_gh)
+    assert isinstance(repo_id, int)
 
 
 # @pytest.mark.anyio
