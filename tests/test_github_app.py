@@ -7,10 +7,8 @@ import pytest
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from httpx import AsyncClient
 
 import pangeo_forge_orchestrator
-from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
     create_check_run,
@@ -349,6 +347,7 @@ async def test_get_deliveries(
     rsa_key_pair,
     get_mock_github_session,
     app_hook_deliveries,
+    async_app_client,
 ):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
@@ -357,7 +356,6 @@ async def test_get_deliveries(
         "get_github_session",
         get_mock_github_session,
     )
-    async with AsyncClient(app=app, base_url="http://test") as ac:
-        response = await ac.get("/github/hooks/deliveries")
+    response = await async_app_client.get("/github/hooks/deliveries")
     assert response.status_code == 200
     assert response.json() == app_hook_deliveries
