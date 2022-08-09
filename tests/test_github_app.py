@@ -3,6 +3,7 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -43,6 +44,14 @@ def rsa_key_pair():
         crypto_serialization.Encoding.OpenSSH, crypto_serialization.PublicFormat.OpenSSH
     )
     return [k.decode(encoding="utf-8") for k in (private_key, public_key)]
+
+
+@pytest.fixture(scope="session")
+def private_key(rsa_key_pair):
+    """Convenience fixture so we don't have to unpack ``rsa_key_pair`` in every test function."""
+
+    private_key, _ = rsa_key_pair
+    return private_key
 
 
 def mock_access_token_from_jwt(jwt: str):
@@ -242,8 +251,7 @@ def test_get_jwt(rsa_key_pair):
 
 
 @pytest.mark.asyncio
-async def test_get_access_token(rsa_key_pair, get_mock_github_session):
-    private_key, _ = rsa_key_pair
+async def test_get_access_token(private_key, get_mock_github_session):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     token = await get_access_token(mock_gh)
@@ -251,8 +259,7 @@ async def test_get_access_token(rsa_key_pair, get_mock_github_session):
 
 
 @pytest.mark.asyncio
-async def test_get_app_webhook_url(rsa_key_pair, get_mock_github_session):
-    private_key, _ = rsa_key_pair
+async def test_get_app_webhook_url(private_key, get_mock_github_session):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     url = await get_app_webhook_url(mock_gh)
@@ -260,8 +267,7 @@ async def test_get_app_webhook_url(rsa_key_pair, get_mock_github_session):
 
 
 @pytest.mark.asyncio
-async def test_create_check_run(rsa_key_pair, get_mock_github_session, api_url):
-    private_key, _ = rsa_key_pair
+async def test_create_check_run(private_key, get_mock_github_session, api_url):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     data = dict()
@@ -270,8 +276,7 @@ async def test_create_check_run(rsa_key_pair, get_mock_github_session, api_url):
 
 
 @pytest.mark.asyncio
-async def test_update_check_run(rsa_key_pair, get_mock_github_session, api_url):
-    private_key, _ = rsa_key_pair
+async def test_update_check_run(private_key, get_mock_github_session, api_url):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     data = dict()
@@ -281,8 +286,7 @@ async def test_update_check_run(rsa_key_pair, get_mock_github_session, api_url):
 
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
 @pytest.mark.asyncio
-async def test_get_repo_id(rsa_key_pair, get_mock_github_session, repo_full_name):
-    private_key, _ = rsa_key_pair
+async def test_get_repo_id(private_key, get_mock_github_session, repo_full_name):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     repo_id = await get_repo_id(repo_full_name, mock_gh)
@@ -290,8 +294,7 @@ async def test_get_repo_id(rsa_key_pair, get_mock_github_session, repo_full_name
 
 
 @pytest.mark.asyncio
-async def test_list_accessible_repos(rsa_key_pair, get_mock_github_session, accessible_repos):
-    private_key, _ = rsa_key_pair
+async def test_list_accessible_repos(private_key, get_mock_github_session, accessible_repos):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     repos = await list_accessible_repos(mock_gh)
@@ -301,12 +304,11 @@ async def test_list_accessible_repos(rsa_key_pair, get_mock_github_session, acce
 @pytest.mark.asyncio
 async def test_get_deliveries(
     mocker,
-    rsa_key_pair,
+    private_key,
     get_mock_github_session,
     app_hook_deliveries,
     async_app_client,
 ):
-    private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
@@ -321,12 +323,11 @@ async def test_get_deliveries(
 @pytest.mark.asyncio
 async def test_get_delivery(
     mocker,
-    rsa_key_pair,
+    private_key,
     get_mock_github_session,
     app_hook_deliveries,
     async_app_client,
 ):
-    private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
@@ -373,6 +374,33 @@ def webhook_secret():
     return secrets.token_hex(20)
 
 
+def mock_subprocess_check_output(cmd: List[str]):
+    """ """
+
+    if cmd[0] == "pangeo-forge-runner":
+        if cmd[1] == "expand-meta":
+            # As a first step, we are not accounting for any arguments passed to expand-meta.
+            # This return value was obtained by running, with pangeo-forge-runner==0.3
+            #  ```
+            #  subprocess.check_output(
+            #      "pangeo-forge-runner expand-meta --repo https://github.com/pangeo-forge/github-app-sandbox-repository --ref 0fd9b13f0d718772e78fc2b53fd7e9da82a522f3 --json".split()
+            #  )
+            #  ```
+            return (
+                '{"message": "Picked Git content provider.\\n", "status": "fetching"}\n'
+                '{"message": "Cloning into \'/var/folders/tt/4f941hdn0zq549zdwhcgg98c0000gn/T/tmp10gezh_p\'...\\n", "status": "fetching"}\n'
+                '{"message": "HEAD is now at 0fd9b13 Update foo.txt\\n", "status": "fetching"}\n'
+                '{"message": "Expansion complete", "status": "completed", "meta": {"title": "Global Precipitation Climatology Project", "description": "Global Precipitation Climatology Project (GPCP) Daily Version 1.3 gridded, merged ty satellite/gauge precipitation Climate data Record (CDR) from 1996 to present.\\n", "pangeo_forge_version": "0.9.0", "pangeo_notebook_version": "2022.06.02", "recipes": [{"id": "gpcp", "object": "recipe:recipe"}], "provenance": {"providers": [{"name": "NOAA NCEI", "description": "National Oceanographic & Atmospheric Administration National Centers for Environmental Information", "roles": ["host", "licensor"], "url": "https://www.ncei.noaa.gov/products/global-precipitation-climatology-project"}, {"name": "University of Maryland", "description": "University of Maryland College Park Earth System Science Interdisciplinary Center (ESSIC) and Cooperative Institute for Climate and Satellites (CICS).\\n", "roles": ["producer"], "url": "http://gpcp.umd.edu/"}], "license": "No constraints on data access or use."}, "maintainers": [{"name": "Ryan Abernathey", "orcid": "0000-0001-5999-4917", "github": "rabernat"}], "bakery": {"id": "pangeo-ldeo-nsf-earthcube"}}}\n'
+            )
+        else:
+            raise NotImplementedError(f"Command {cmd} not implemented in tests.")
+    else:
+        raise NotImplementedError(
+            f"Command {cmd} does not begin with 'pangeo-forge-runner'. Currently, "
+            "'pangeo-forge-runner' is the only command line mock implemented."
+        )
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -394,7 +422,7 @@ async def test_receive_github_hook(
     webhook_secret,
     async_app_client,
     payload,
-    rsa_key_pair,
+    private_key,
 ):
     os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
     mocker.patch.object(
@@ -402,7 +430,7 @@ async def test_receive_github_hook(
         "get_github_session",
         get_mock_github_session,
     )
-    private_key, _ = rsa_key_pair
+    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
     # PEM_FILE is used to authenticate with github in background tasks
     os.environ["PEM_FILE"] = private_key
 
