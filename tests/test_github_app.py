@@ -1,5 +1,8 @@
+import hashlib
+import hmac
 import json
 import os
+import secrets
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -24,7 +27,7 @@ from pangeo_forge_orchestrator.routers.github_app import (
 )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def rsa_key_pair():
     """Simulates keys generated for the GitHub App. See https://stackoverflow.com/a/39126754."""
 
@@ -40,6 +43,18 @@ def rsa_key_pair():
         crypto_serialization.Encoding.OpenSSH, crypto_serialization.PublicFormat.OpenSSH
     )
     return [k.decode(encoding="utf-8") for k in (private_key, public_key)]
+
+
+def mock_access_token_from_jwt(jwt: str):
+    """Certain GitHub API actions are authenticated via JWT and others are authenticated with an
+    access token. For the latter case, we exchange a JWT to obtain an access token. The code in
+    this function is almost definitely not how that works on GitHub's backend, but for the purposes
+    of testing, it simulates the process of exchanging one token for another. All GitHub access
+    tokens appear to begin with ``'ghs_'``, so we replicate that here for realism.
+    """
+
+    sha256 = hashlib.sha256(bytes(jwt, encoding="utf-8")).hexdigest()[:36]
+    return f"ghs_{sha256}"
 
 
 @dataclass
@@ -85,8 +100,29 @@ class MockGitHubAPI(_MockGitHubBackend):
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
-    async def post(self, path: str, oauth_token: str, accept: str, data: dict):
-        return {"id": 1}  # TODO: set `id` dynamically
+    async def post(
+        self,
+        path: str,
+        data: dict,
+        accept: Optional[str] = None,
+        jwt: Optional[str] = None,
+        oauth_token: Optional[str] = None,
+    ):
+        if path.endswith("/check-runs"):
+            # creating a new check run
+            return {"id": 1}  # TODO: set `id` dynamically
+        elif path.startswith("/app/installations/") and path.endswith("/access_tokens"):
+            # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
+            # We can't get a JWT without our private key. If we didn't have these checks here, and the
+            # key was missing, we would get an error in the call to ``get_jwt``, but checking for the
+            # private_key here allows us to catch errors faster, and more clearly illustrates the
+            # relationship of these secrets in the tests.
+            private_key = os.environ["PEM_FILE"]
+            assert private_key is not None
+            assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
+            return {"token": mock_access_token_from_jwt(jwt=get_jwt())}
+        else:
+            raise NotImplementedError(f"Path '{path}' not supported.")
 
     async def patch(self, path: str, oauth_token: str, accept: str, data: dict):
         return {}  # TODO: return something
@@ -205,52 +241,13 @@ def test_get_jwt(rsa_key_pair):
     assert all([isinstance(v, int) for v in decoded.values()])
 
 
-@pytest.fixture
-def mock_access_token():
-    # return value copied from example given here:
-    # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
-    return "ghs_16C7e42F292c6912E7710c838347Ae178B4a"
-
-
-@pytest.fixture
-def get_mock_installation_access_token(mock_access_token):
-    async def _get_mock_installation_access_token(
-        gh: MockGitHubAPI,
-        installation_id: int,
-        app_id: int,
-        private_key: str,
-    ):
-        # Set this in the function body (rather than as a default) so it's evaluated at call time,
-        # not during fixture collection.
-        private_key = os.environ["PEM_FILE"]
-        # Our mock function does not actually use the private key, but the real function requires
-        # it, so we check here that it exists in the test session, to enhance realism.
-        assert private_key is not None
-        assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
-
-        return {"token": mock_access_token}
-
-    return _get_mock_installation_access_token
-
-
 @pytest.mark.asyncio
-async def test_get_access_token(
-    mocker,
-    rsa_key_pair,
-    get_mock_github_session,
-    get_mock_installation_access_token,
-    mock_access_token,
-):
+async def test_get_access_token(rsa_key_pair, get_mock_github_session):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_installation_access_token",
-        get_mock_installation_access_token,
-    )
     token = await get_access_token(mock_gh)
-    assert token == mock_access_token
+    assert token == mock_access_token_from_jwt(jwt=get_jwt())
 
 
 @pytest.mark.asyncio
@@ -263,42 +260,20 @@ async def test_get_app_webhook_url(rsa_key_pair, get_mock_github_session):
 
 
 @pytest.mark.asyncio
-async def test_create_check_run(
-    mocker,
-    rsa_key_pair,
-    get_mock_github_session,
-    get_mock_installation_access_token,
-    api_url,
-):
+async def test_create_check_run(rsa_key_pair, get_mock_github_session, api_url):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_installation_access_token",
-        get_mock_installation_access_token,
-    )
     data = dict()
     response = await create_check_run(mock_gh, api_url, data)
     assert isinstance(response["id"], int)
 
 
 @pytest.mark.asyncio
-async def test_update_check_run(
-    mocker,
-    rsa_key_pair,
-    get_mock_github_session,
-    get_mock_installation_access_token,
-    api_url,
-):
+async def test_update_check_run(rsa_key_pair, get_mock_github_session, api_url):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_installation_access_token",
-        get_mock_installation_access_token,
-    )
     data = dict()
     _ = await update_check_run(mock_gh, api_url, 1, data)
     # TODO: assert something here. currently, just a smoke test.
@@ -306,41 +281,19 @@ async def test_update_check_run(
 
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
 @pytest.mark.asyncio
-async def test_get_repo_id(
-    mocker,
-    rsa_key_pair,
-    get_mock_github_session,
-    get_mock_installation_access_token,
-    repo_full_name,
-):
+async def test_get_repo_id(rsa_key_pair, get_mock_github_session, repo_full_name):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_installation_access_token",
-        get_mock_installation_access_token,
-    )
     repo_id = await get_repo_id(repo_full_name, mock_gh)
     assert isinstance(repo_id, int)
 
 
 @pytest.mark.asyncio
-async def test_list_accessible_repos(
-    mocker,
-    rsa_key_pair,
-    get_mock_github_session,
-    get_mock_installation_access_token,
-    accessible_repos,
-):
+async def test_list_accessible_repos(rsa_key_pair, get_mock_github_session, accessible_repos):
     private_key, _ = rsa_key_pair
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_installation_access_token",
-        get_mock_installation_access_token,
-    )
     repos = await list_accessible_repos(mock_gh)
     assert repos == [r["full_name"] for r in accessible_repos]
 
@@ -413,3 +366,56 @@ async def test_receive_github_hook_unauthorized(
     )
     assert response.status_code == 401
     assert json.loads(response.text)["detail"] == expected_response_detail
+
+
+@pytest.fixture
+def webhook_secret():
+    return secrets.token_hex(20)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {
+            "action": "synchronize",
+            "pull_request": {
+                "base": {
+                    "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
+                },
+                "head": {"sha": "abc"},
+            },
+        },
+    ],
+)
+@pytest.mark.asyncio
+async def test_receive_github_hook(
+    mocker,
+    get_mock_github_session,
+    webhook_secret,
+    async_app_client,
+    payload,
+    rsa_key_pair,
+):
+    os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+    private_key, _ = rsa_key_pair
+    # PEM_FILE is used to authenticate with github in background tasks
+    os.environ["PEM_FILE"] = private_key
+
+    payload_bytes = bytes(json.dumps(payload), "utf-8")
+    hash_signature = hmac.new(
+        bytes(webhook_secret, encoding="utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+
+    response = await async_app_client.post(
+        "/github/hooks/",
+        json=payload,
+        headers={"X-Hub-Signature-256": f"sha256={hash_signature}"},
+    )
+    assert response.status_code == 200
