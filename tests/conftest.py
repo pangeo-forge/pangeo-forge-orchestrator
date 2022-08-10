@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 import pytest_asyncio
+from asgi_lifespan import LifespanManager
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from pytest_lazyfixture import lazy_fixture
@@ -16,24 +17,18 @@ from sqlmodel import Session, SQLModel
 from typer.testing import CliRunner
 
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def session_setup_and_teardown():
-    http_session.start()
-    yield
-    await http_session.stop()
-
-
-# See https://tonybaloney.github.io/posts/async-test-patterns-for-pytest-and-unittest.html
-# With this adjustment https://stackoverflow.com/a/73019163
+# For this general pattern, see
+# https://tonybaloney.github.io/posts/async-test-patterns-for-pytest-and-unittest.html
+# which is adjustmented according to https://stackoverflow.com/a/73019163.
+# And for LifespanManager, see https://github.com/tiangolo/fastapi/issues/2003#issuecomment-801140731.
 @pytest_asyncio.fixture
 async def async_app_client():
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(app=app, base_url="http://test") as client, LifespanManager(app):
         yield client
 
 

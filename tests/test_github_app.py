@@ -401,28 +401,40 @@ def mock_subprocess_check_output(cmd: List[str]):
         )
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {
-            "action": "synchronize",
-            "pull_request": {
-                "base": {
-                    "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
-                },
-                "head": {"sha": "abc"},
+@pytest.fixture
+def synchronize_payload():
+    return {
+        "action": "synchronize",
+        "pull_request": {
+            "base": {
+                "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
             },
+            "head": {"sha": "abc"},
         },
+    }
+
+
+@pytest.fixture(
+    scope="session",
+    params=[
+        pytest.lazy_fixture("synchronize_payload"),
     ],
 )
+def github_webhook_payload(request):
+    return request.param
+
+
+@pytest.mark.parametrize("raises_missing_database_dependencies_error", [True, False])
 @pytest.mark.asyncio
 async def test_receive_github_hook(
     mocker,
     get_mock_github_session,
     webhook_secret,
     async_app_client,
-    payload,
+    github_webhook_payload,
     private_key,
+    raises_missing_database_dependencies_error,
+    admin_key,
 ):
     os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
     mocker.patch.object(
@@ -434,16 +446,69 @@ async def test_receive_github_hook(
     # PEM_FILE is used to authenticate with github in background tasks
     os.environ["PEM_FILE"] = private_key
 
-    payload_bytes = bytes(json.dumps(payload), "utf-8")
+    payload_bytes = bytes(json.dumps(github_webhook_payload), "utf-8")
     hash_signature = hmac.new(
         bytes(webhook_secret, encoding="utf-8"),
         payload_bytes,
         hashlib.sha256,
     ).hexdigest()
+    webhook_headers = {"X-Hub-Signature-256": f"sha256={hash_signature}"}
 
-    response = await async_app_client.post(
-        "/github/hooks/",
-        json=payload,
-        headers={"X-Hub-Signature-256": f"sha256={hash_signature}"},
-    )
-    assert response.status_code == 200
+    if raises_missing_database_dependencies_error:
+        with pytest.raises(ValueError, match=r"Feedstock .* and\/or bakery .* not in database."):
+            response = await async_app_client.post(
+                "/github/hooks/",
+                json=github_webhook_payload,
+                headers=webhook_headers,
+            )
+    else:
+        # In order for the recipe run creation process to succeed, both the bakery and feedstock
+        # specified in the meta.yaml must already exist in the database.
+        admin_headers = {"X-API-Key": admin_key}
+        bakery_create_response = await async_app_client.post(
+            "/bakeries/",
+            json={  # TODO: set dynamically
+                "region": "us-central1",
+                "name": "pangeo-ldeo-nsf-earthcube",
+                "description": "A great bakery to test with!",
+            },
+            headers=admin_headers,
+        )
+        assert bakery_create_response.status_code == 200
+        feedstock_create_response = await async_app_client.post(
+            "/feedstocks/",
+            json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+            headers=admin_headers,
+        )
+        assert feedstock_create_response.status_code == 200
+
+        # Now that the database is pre-populated with pre-requisites, we can actually test.
+        response = await async_app_client.post(
+            "/github/hooks/",
+            json=github_webhook_payload,
+            headers=webhook_headers,
+        )
+        assert response.status_code == 202
+
+        # Teardown. TODO: move this into a fixture, with a teardown block after `yield`.
+        # If we don't delete, they'll persist in session-scoped database, and mess up other tests.
+        # NOTE: Must delete recipe runs first, otherwise null-pointing foreign keys cause errors.
+        created_recipe_runs_response = await async_app_client.get("/recipe_runs/")
+        assert created_recipe_runs_response.status_code == 200
+        for r in created_recipe_runs_response.json():
+            delete_response = await async_app_client.delete(
+                f"/recipe_runs/{r['id']}",
+                headers=admin_headers,
+            )
+            assert delete_response.status_code == 200
+
+        bakery_delete_response = await async_app_client.delete(
+            f"/bakeries/{bakery_create_response.json()['id']}",
+            headers=admin_headers,
+        )
+        assert bakery_delete_response.status_code == 200
+        feedstock_delete_response = await async_app_client.delete(
+            f"/feedstocks/{feedstock_create_response.json()['id']}",
+            headers=admin_headers,
+        )
+        assert feedstock_delete_response.status_code == 200
