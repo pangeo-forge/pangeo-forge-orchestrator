@@ -11,12 +11,11 @@ import pytest
 from fastapi.testclient import TestClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel
-from typer.testing import CliRunner
 
 from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.models import MODELS
 
-from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
+from .interfaces import FastAPITestClientCRUD
 
 
 def get_open_port():
@@ -125,32 +124,8 @@ def fastapi_test_crud_client_authorized(session, admin_key):
 authorized_client = fastapi_test_crud_client_authorized
 
 
-@pytest.fixture
-def cli_crud_client(http_server_url, session):  # pass `session` so that `clear_table` is called
-    from pangeo_forge_orchestrator.cli import cli
-
-    runner = CliRunner(env={"PANGEO_FORGE_SERVER": http_server_url})
-    return CommandLineCRUD(cli, runner)
-
-
-@pytest.fixture
-def cli_crud_client_authorized(http_server_url, admin_key):
-    from pangeo_forge_orchestrator.cli import cli
-
-    runner = CliRunner(
-        env={"PANGEO_FORGE_SERVER": http_server_url, "PANGEO_FORGE_API_KEY": admin_key}
-    )
-    return CommandLineCRUD(cli, runner)
-
-
 @pytest.fixture(
     params=[
-        # Note: the CLI fixtures need to be first because they will trigger
-        # the db to be initialized; otherwise the `session` fixture will
-        # fail because it can't delete a non-existent table.
-        # This feels fragile. Should be fixed by refactoring the fixtures.
-        lazy_fixture("cli_crud_client"),
-        lazy_fixture("cli_crud_client_authorized"),
         lazy_fixture("fastapi_test_crud_client"),
         lazy_fixture("fastapi_test_crud_client_authorized"),
     ]
