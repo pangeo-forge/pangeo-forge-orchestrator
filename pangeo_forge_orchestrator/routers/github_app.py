@@ -33,6 +33,9 @@ ACCEPT = "application/vnd.github+json"
 github_app_router = APIRouter()
 
 
+# Helpers -----------------------------------------------------------------------------------------
+
+
 def get_github_session(http_session: HttpSession):
     return GitHubAPI(http_session, "pangeo-forge")
 
@@ -105,6 +108,9 @@ async def list_accessible_repos(gh: GitHubAPI):
         accept=ACCEPT,
     )
     return [r["full_name"] for r in repo_response["repositories"]]
+
+
+# Routes ------------------------------------------------------------------------------------------
 
 
 @github_app_router.get(
