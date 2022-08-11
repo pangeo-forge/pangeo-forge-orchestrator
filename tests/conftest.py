@@ -22,6 +22,18 @@ from pangeo_forge_orchestrator.models import MODELS
 from .interfaces import CommandLineCRUD, FastAPITestClientCRUD
 
 
+@pytest.fixture(autouse=True, scope="session")
+def setup_and_teardown():
+    if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
+        # Assumes tests are invoked from repo root (not within tests/ directory).
+        raise ValueError(
+            "Prexisting file `./database.sqlite` may cause test failures. Please remove this file "
+            "then restart test session."
+        )
+    yield
+    # teardown here (none for now)
+
+
 # For this general pattern, see
 # https://tonybaloney.github.io/posts/async-test-patterns-for-pytest-and-unittest.html
 # which is adjustmented according to https://stackoverflow.com/a/73019163.

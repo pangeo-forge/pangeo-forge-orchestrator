@@ -268,8 +268,10 @@ async def synchronize(html_url, head_sha):
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
     # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
-    # TODO: make sure that `expand-meta` command verifies if python objects in recipe module
+    # TODO: make sure that `expand-meta` command verifies if python objects in recipe module exist
     # for each recipe in meta.yaml (i.e., that meta.yaml doesn't contain "null recipe pointers").
+    # TODO: Also have pangeo-forge-runner raise descriptive effor for structure errors in the PR
+    # (i.e., incorrect directory structure), and translate that here to failed check run.
     cmd = [
         "pangeo-forge-runner",
         "expand-meta",

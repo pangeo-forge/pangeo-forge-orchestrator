@@ -91,7 +91,6 @@ class MockGitHubAPI:
         jwt: Optional[str] = None,
         oauth_token: Optional[str] = None,
     ) -> dict:
-        print(path)
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
         elif path.startswith("/repos/"):
@@ -609,14 +608,70 @@ async def test_receive_github_hook(
         )
         assert response.status_code == 202
 
-        # TODO: assert that recipe runs and check runs were correctly created
-        created_recipe_runs_response = await async_app_client.get("/recipe_runs/")
+        # first assert that the recipe runs were created as expected
+        recipe_runs_response = await async_app_client.get("/recipe_runs/")
+        assert recipe_runs_response.status_code == 200
+        # TODO: fixturize expected_recipe_runs_response
+        expected_recipe_runs_response = [
+            {
+                "recipe_id": "gpcp",
+                "bakery_id": 1,
+                "feedstock_id": 1,
+                "head_sha": "abc",
+                "version": "",
+                "started_at": "2022-08-11T21:03:56",
+                "completed_at": None,
+                "conclusion": None,
+                "status": "queued",
+                "is_test": True,
+                "dataset_type": "zarr",
+                "dataset_public_url": None,
+                "message": None,
+                "id": 1,
+            }
+        ]
+        for k in expected_recipe_runs_response[0]:
+            if not k == "started_at" and not k == "completed_at":
+                assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
+
+        # then assert that the check runs were created as expected
+        fstock_id = feedstock_create_response.json()["id"]
+        commit_sha = recipe_runs_response.json()[0]["head_sha"]
+        check_runs_response = await async_app_client.get(
+            f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
+        )
+        # TODO: fixturize expected_check_runs_response
+        expected_check_runs_response = {
+            "total_count": 1,
+            "check_runs": [
+                {
+                    "name": "synchronize",
+                    "head_sha": "abc",
+                    "status": "completed",
+                    "started_at": "2022-08-11T21:22:51Z",
+                    "output": {
+                        "title": "Recipe runs queued for latest commit",
+                        "summary": "TODO: Links to recipe runs (requires knowing deployment base url)\n",
+                    },
+                    "details_url": "https://pangeo-forge.org/",
+                    "id": 0,
+                    "conclusion": "success",
+                    "completed_at": "2022-08-11T21:22:51Z",
+                }
+            ],
+        }
+        assert expected_check_runs_response["total_count"] == 1
+        for k in expected_check_runs_response["check_runs"][0]:
+            if not k == "started_at" and not k == "completed_at":
+                assert (
+                    expected_check_runs_response["check_runs"][0][k]
+                    == check_runs_response.json()["check_runs"][0][k]
+                )
 
         # Teardown. TODO: move this into a fixture, with a teardown block after `yield`.
         # If we don't delete, they'll persist in session-scoped database, and mess up other tests.
         # NOTE: Must delete recipe runs first, otherwise null-pointing foreign keys cause errors.
-        assert created_recipe_runs_response.status_code == 200
-        for r in created_recipe_runs_response.json():
+        for r in recipe_runs_response.json():
             delete_response = await async_app_client.delete(
                 f"/recipe_runs/{r['id']}",
                 headers=admin_headers,
