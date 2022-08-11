@@ -255,7 +255,8 @@ async def test_get_access_token(private_key, get_mock_github_session):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
     token = await get_access_token(mock_gh)
-    assert token == mock_access_token_from_jwt(jwt=get_jwt())
+    assert token.startswith("ghs_")
+    assert len(token) == 40  # "ghs_" (4 chars) + 36 character token
 
 
 @pytest.mark.asyncio
