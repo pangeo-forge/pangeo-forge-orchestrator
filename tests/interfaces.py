@@ -1,4 +1,3 @@
-import json
 from contextlib import contextmanager
 
 import pytest
@@ -72,53 +71,3 @@ class FastAPITestClientCRUD:
         # `TestDelete.test_delete_nonexistent`
         delete_response.raise_for_status()
         return delete_response
-
-
-def parse_cli_response(response):
-    # useful for debugging:
-    # for prop in ["stdout_bytes", "stderr_bytes", "return_value", "exit_code", "exception", "exc_info"]:  # noqa: E501
-    #    print(f'response.{prop}', getattr(response, prop))
-    if response.exit_code:
-        raise response.exception
-    if response.stdout:
-        return json.loads(response.stdout_bytes)
-
-
-class CLIError(Exception):
-    pass
-
-
-class CommandLineCRUD:
-    """CLI interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
-
-    error_cls = HTTPError
-
-    def __init__(self, app, runner):
-        self.app = app
-        self.runner = runner
-        api_key = self.runner.env.get("PANGEO_FORGE_API_KEY", None)
-        self.auth_required = authorization_context(api_key)
-
-    def _invoke(self, *cmds: str):
-        response = self.runner.invoke(self.app, ["database"] + list(cmds))
-        return parse_cli_response(response)
-
-    def create(self, path: str, request: dict) -> dict:
-        return self._invoke("post", path, json.dumps(request))
-
-    def read_range(self, path: str) -> dict:
-        return self._invoke("get", path)
-
-    def read_single(self, path: str, id: int) -> dict:
-        return self._invoke("get", f"{path}{id}")
-
-    def update(
-        self,
-        path: str,
-        id: int,
-        update_with: dict,
-    ) -> dict:
-        return self._invoke("patch", f"{path}{id}", json.dumps(update_with))
-
-    def delete(self, path: str, id: int) -> None:
-        return self._invoke("delete", f"{path}{id}")
