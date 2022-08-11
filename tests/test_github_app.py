@@ -68,9 +68,10 @@ def mock_access_token_from_jwt(jwt: str):
 
 @dataclass
 class _MockGitHubBackend:
-    app_hook_config_url: str
-    accessible_repos: List[dict]
-    app_hook_deliveries: List[dict]
+    _app_hook_config_url: str
+    _accessible_repos: List[dict]
+    _app_hook_deliveries: List[dict]
+    _check_runs: List[dict]
 
 
 @dataclass
@@ -86,14 +87,14 @@ class MockGitHubAPI(_MockGitHubBackend):
         oauth_token: Optional[str] = None,
     ) -> dict:
         if path == "/app/hook/config":
-            return {"url": self.app_hook_config_url}
+            return {"url": self._app_hook_config_url}
         elif path.startswith("/repos/"):
             return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
         elif path == "/installation/repositories":
-            return {"repositories": self.accessible_repos}
+            return {"repositories": self._accessible_repos}
         elif path.startswith("/app/hook/deliveries/"):
             id_ = int(path.replace("/app/hook/deliveries/", ""))
-            return [{"response": d} for d in self.app_hook_deliveries if d["id"] == id_].pop(0)
+            return [{"response": d} for d in self._app_hook_deliveries if d["id"] == id_].pop(0)
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -104,7 +105,7 @@ class MockGitHubAPI(_MockGitHubBackend):
         jwt: Optional[str] = None,
     ):
         if path == "/app/hook/deliveries":
-            for delivery in self.app_hook_deliveries:
+            for delivery in self._app_hook_deliveries:
                 yield delivery
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
@@ -118,8 +119,11 @@ class MockGitHubAPI(_MockGitHubBackend):
         oauth_token: Optional[str] = None,
     ):
         if path.endswith("/check-runs"):
-            # creating a new check run
-            return {"id": 1}  # TODO: set `id` dynamically
+            # create a new check run
+            id_ = len(self._check_runs) + 1
+            new_check_run = data | {"id": id_}  # type: ignore
+            self._check_runs.append(new_check_run)
+            return new_check_run
         elif path.startswith("/app/installations/") and path.endswith("/access_tokens"):
             # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
             # We can't get a JWT without our private key. If we didn't have these checks here, and the
@@ -197,9 +201,10 @@ def app_hook_deliveries():
 def get_mock_github_session(app_hook_config_url, accessible_repos, app_hook_deliveries):
     def _get_mock_github_session(http_session: HttpSession):
         backend_kws = {
-            "app_hook_config_url": app_hook_config_url,
-            "accessible_repos": accessible_repos,
-            "app_hook_deliveries": app_hook_deliveries,
+            "_app_hook_config_url": app_hook_config_url,
+            "_accessible_repos": accessible_repos,
+            "_app_hook_deliveries": app_hook_deliveries,
+            "_check_runs": list(),
         }
         return MockGitHubAPI(http_session=http_session, username="pangeo-forge", **backend_kws)
 
@@ -340,6 +345,9 @@ async def test_get_delivery(
         response = await async_app_client.get(f"/github/hooks/deliveries/{id_}")
         assert response.status_code == 200
         assert response.json() == delivery
+
+
+# TODO: test get_feedstock_check_runs
 
 
 @pytest.mark.parametrize(
@@ -491,10 +499,12 @@ async def test_receive_github_hook(
         )
         assert response.status_code == 202
 
+        # TODO: assert that recipe runs and check runs were correctly created
+        created_recipe_runs_response = await async_app_client.get("/recipe_runs/")
+
         # Teardown. TODO: move this into a fixture, with a teardown block after `yield`.
         # If we don't delete, they'll persist in session-scoped database, and mess up other tests.
         # NOTE: Must delete recipe runs first, otherwise null-pointing foreign keys cause errors.
-        created_recipe_runs_response = await async_app_client.get("/recipe_runs/")
         assert created_recipe_runs_response.status_code == 200
         for r in created_recipe_runs_response.json():
             delete_response = await async_app_client.delete(

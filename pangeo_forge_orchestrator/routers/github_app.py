@@ -110,6 +110,33 @@ async def list_accessible_repos(gh: GitHubAPI):
     return [r["full_name"] for r in repo_response["repositories"]]
 
 
+async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session: Session):
+    """Given a feedstock id, return the corresponding GitHub repo id and feedstock spec.
+
+    In the process, confirm that the feedstock exists in the database and verify that the Pangeo
+    Forge GitHub App is installed in the corresponding GitHub repo. Routes that query GitHub App
+    details (e.g. ``/feedstocks/{id}/deliveries``, ``/feedstocks/{id}/{commit_sha}/check-runs``)
+    will error if either of these conditions is not met.
+
+    :param id: The feedstock's id in the Pangeo Forge database.
+    """
+
+    feedstock = db_session.get(MODELS["feedstock"].table, id)
+    if not feedstock:
+        raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
+
+    accessible_repos = await list_accessible_repos(gh)
+
+    if feedstock.spec in accessible_repos:
+        repo_id = await get_repo_id(repo_full_name=feedstock.spec, gh=gh)
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Pangeo Forge GitHub App not installed in '{feedstock.spec}' repository.",
+        )
+    return repo_id, feedstock.spec
+
+
 # Routes ------------------------------------------------------------------------------------------
 
 
@@ -122,28 +149,36 @@ async def get_feedstock_hook_deliveries(
     db_session: Session = Depends(get_database_session),
     http_session: HttpSession = Depends(http_session),
 ):
-
-    feedstock = db_session.get(MODELS["feedstock"].table, id)
-    if not feedstock:
-        raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
-
     gh = get_github_session(http_session)
-    accessible_repos = await list_accessible_repos(gh)
-
-    if feedstock.spec in accessible_repos:
-        repo_id = await get_repo_id(repo_full_name=feedstock.spec, gh=gh)
-    else:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Pangeo Forge GitHub App not installed in '{feedstock.spec}' repository.",
-        )
-
+    repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
     deliveries = []
     async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
         if d["repository_id"] == repo_id:
             deliveries.append(d)
 
     return deliveries
+
+
+@github_app_router.get(
+    "/feedstocks/{id}/commits/{commit_sha}/check-runs",
+    summary="Get a list of check runs for a given commit sha on a feedstock.",
+)
+async def get_feedstock_check_runs(
+    id: int,
+    commit_sha: str,
+    db_session: Session = Depends(get_database_session),
+    http_session: HttpSession = Depends(http_session),
+):
+    gh = get_github_session(http_session)
+    _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
+
+    token = await get_access_token(gh)
+    check_runs = await gh.getitem(
+        f"/repos/{feedstock_spec}/commits/{commit_sha}/check-runs",
+        accept=ACCEPT,
+        oauth_token=token,
+    )
+    return check_runs
 
 
 @github_app_router.post(

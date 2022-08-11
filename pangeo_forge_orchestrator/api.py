@@ -38,6 +38,8 @@ def on_startup():
 
 @app.on_event("shutdown")
 def on_shutdown():
+    # TODO: make this function async, and await .stop() below
+    # Something about the two testing paradigms (sync + async) breaks when I do this now
     http_session.stop()
 
 
