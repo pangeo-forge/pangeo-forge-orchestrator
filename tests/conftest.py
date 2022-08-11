@@ -9,9 +9,29 @@ from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel
 
 from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import FastAPITestClientCRUD
+
+
+@pytest.fixture(autouse=True, scope="session")
+def setup_and_teardown():
+    if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
+        # Assumes tests are invoked from repo root (not within tests/ directory).
+        raise ValueError(
+            "Preexisting `./database.sqlite` may cause test failures. Please remove this file "
+            "then restart test session."
+        )
+    # TODO: remove this call to `maybe_create_db_and_tables`. This function is called on app
+    # start-up, so we really shouldn't need to call it manually. However, given how we are handling
+    # keeping the tables empty via the ``session`` fixture below, if we do not call this function
+    # here, there will not be a ``database.sqlite`` file available when ``session`` is collected.
+    # A forthcoming refactor of the test fixtures can resolve this, but for now it's okay to have
+    # this called twice (once now and once at app start-up), because it should be idempotent.
+    maybe_create_db_and_tables()
+    yield
+    # teardown here (none for now)
 
 
 def clear_table(session: Session, table_model: SQLModel):
