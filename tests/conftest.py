@@ -1,9 +1,5 @@
 import hashlib
 import os
-import signal
-import socket
-import subprocess
-import time
 import uuid
 from unittest import mock
 
@@ -16,15 +12,6 @@ from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.models import MODELS
 
 from .interfaces import FastAPITestClientCRUD
-
-
-def get_open_port():
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("", 0))
-    s.listen(1)
-    port = str(s.getsockname()[1])
-    s.close()
-    return port
 
 
 def clear_table(session: Session, table_model: SQLModel):
@@ -60,34 +47,6 @@ def admin_key(api_keys):
     return raw_key
 
 
-@pytest.fixture(scope="session")
-def http_server_url():
-    env_port = os.environ.get("PORT", False)
-    port = env_port or get_open_port()
-    host = "127.0.0.1"
-    url = f"http://{host}:{port}"
-    command_list = [
-        "gunicorn",
-        f"--bind={host}:{port}",
-        "--workers=1",
-        "-k",
-        "uvicorn.workers.UvicornWorker",
-        "pangeo_forge_orchestrator.api:app",
-        "--log-level=info",
-    ]
-
-    # the setsid allows us to properly clean up the gunicorn child processes
-    # otherwise those get zombied
-    # https://stackoverflow.com/a/22582602/3266235
-    p = subprocess.Popen(command_list, preexec_fn=os.setsid)
-
-    time.sleep(2)  # let the server start up
-
-    yield url
-
-    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-
-
 @pytest.fixture
 def session():
     from pangeo_forge_orchestrator.database import engine
@@ -96,13 +55,6 @@ def session():
         for k in MODELS:
             clear_table(session, MODELS[k].table)  # make sure the database is empty
         yield session
-
-
-@pytest.fixture
-def http_server(http_server_url, session):
-    for k in MODELS:
-        clear_table(session, MODELS[k].table)
-    return http_server_url
 
 
 # the next two fixtures use the session fixture to clear the database
