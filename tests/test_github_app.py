@@ -5,6 +5,7 @@ import os
 import secrets
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime
 from typing import List, Optional
 
 import jwt
@@ -75,9 +76,13 @@ class _MockGitHubBackend:
 
 
 @dataclass
-class MockGitHubAPI(_MockGitHubBackend):
+class MockGitHubAPI:
     http_session: HttpSession
     username: str
+
+    # ``_backend`` is not part of the actual GitHubAPI interface which this object mocks.
+    # it is added here so that we have a way to persist data throughout the test session.
+    _backend: _MockGitHubBackend
 
     async def getitem(
         self,
@@ -86,15 +91,25 @@ class MockGitHubAPI(_MockGitHubBackend):
         jwt: Optional[str] = None,
         oauth_token: Optional[str] = None,
     ) -> dict:
+        print(path)
         if path == "/app/hook/config":
-            return {"url": self._app_hook_config_url}
+            return {"url": self._backend._app_hook_config_url}
         elif path.startswith("/repos/"):
-            return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
+            if "/commits/" in path and path.endswith("/check-runs"):
+                # mocks getting a check run from the github api
+                commit_sha = path.split("/commits/")[-1].split("/check-runs")[0]
+                check_runs = [c for c in self._backend._check_runs if c["head_sha"] == commit_sha]
+                return {"total_count": len(check_runs), "check_runs": check_runs}
+            else:
+                # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
+                return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
         elif path == "/installation/repositories":
-            return {"repositories": self._accessible_repos}
+            return {"repositories": self._backend._accessible_repos}
         elif path.startswith("/app/hook/deliveries/"):
             id_ = int(path.replace("/app/hook/deliveries/", ""))
-            return [{"response": d} for d in self._app_hook_deliveries if d["id"] == id_].pop(0)
+            return [
+                {"response": d} for d in self._backend._app_hook_deliveries if d["id"] == id_
+            ].pop(0)
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -105,7 +120,7 @@ class MockGitHubAPI(_MockGitHubBackend):
         jwt: Optional[str] = None,
     ):
         if path == "/app/hook/deliveries":
-            for delivery in self._app_hook_deliveries:
+            for delivery in self._backend._app_hook_deliveries:
                 yield delivery
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
@@ -120,9 +135,9 @@ class MockGitHubAPI(_MockGitHubBackend):
     ):
         if path.endswith("/check-runs"):
             # create a new check run
-            id_ = len(self._check_runs) + 1
+            id_ = len(self._backend._check_runs)
             new_check_run = data | {"id": id_}  # type: ignore
-            self._check_runs.append(new_check_run)
+            self._backend._check_runs.append(new_check_run)
             return new_check_run
         elif path.startswith("/app/installations/") and path.endswith("/access_tokens"):
             # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
@@ -138,7 +153,16 @@ class MockGitHubAPI(_MockGitHubBackend):
             raise NotImplementedError(f"Path '{path}' not supported.")
 
     async def patch(self, path: str, oauth_token: str, accept: str, data: dict):
-        return {}  # TODO: return something
+        if "/check-runs/" in path and not path.endswith("/check-runs/"):
+            id_ = int(path.split("/check-runs/")[-1])
+            # In the mock ``.post`` method for the "/check-runs" path above, we add check runs
+            # sequentially, so we (should) be able to index the self._backend._check_runs list like this.
+            # This is shorthand for the mock. In reality, the GitHub check runs ids are longer,
+            # non-sequential integers.
+            self._backend._check_runs[id_].update(data)
+            return self._backend._check_runs[id_]
+        else:
+            raise NotImplementedError(f"Path '{path}' not supported.")
 
 
 @pytest.fixture
@@ -198,15 +222,28 @@ def app_hook_deliveries():
 
 
 @pytest.fixture
-def get_mock_github_session(app_hook_config_url, accessible_repos, app_hook_deliveries):
+def mock_github_backend(app_hook_config_url, accessible_repos, app_hook_deliveries):
+    """The backend data which simulates data that is retrievable via the GitHub API. Importantly,
+    this has to be its own fixture, so that if multiple instances of the ``MockGitHubAPI`` are
+    used within a single test invocation, each of these sessions share a single instance of the
+    backend data. Multiple ``MockGitHubAPI`` sessions *are* used in certain test invocations,
+    because sometimes we use one session to populate pre-requisite data, and then the function
+    under test starts a separate session to query that data.
+    """
+
+    backend_kws = {
+        "_app_hook_config_url": app_hook_config_url,
+        "_accessible_repos": accessible_repos,
+        "_app_hook_deliveries": app_hook_deliveries,
+        "_check_runs": list(),
+    }
+    return _MockGitHubBackend(**backend_kws)
+
+
+@pytest.fixture
+def get_mock_github_session(mock_github_backend):
     def _get_mock_github_session(http_session: HttpSession):
-        backend_kws = {
-            "_app_hook_config_url": app_hook_config_url,
-            "_accessible_repos": accessible_repos,
-            "_app_hook_deliveries": app_hook_deliveries,
-            "_check_runs": list(),
-        }
-        return MockGitHubAPI(http_session=http_session, username="pangeo-forge", **backend_kws)
+        return MockGitHubAPI(http_session, "pangeo-forge", _backend=mock_github_backend)
 
     return _get_mock_github_session
 
@@ -272,22 +309,56 @@ async def test_get_app_webhook_url(private_key, get_mock_github_session):
     assert url == "https://api.pangeo-forge.org/github/hooks/"
 
 
+@pytest.fixture
+def check_run_create_kwargs():
+    return dict(
+        name="synchronize",
+        head_sha="abcdefg",  # TODO: fixturize
+        status="in_progress",
+        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+        output=dict(
+            title="Syncing latest commit to Pangeo Forge Cloud",
+            summary="",  # required
+        ),
+        details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
+    )
+
+
 @pytest.mark.asyncio
-async def test_create_check_run(private_key, get_mock_github_session, api_url):
+async def test_create_check_run(private_key, get_mock_github_session, check_run_create_kwargs):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    data = dict()
-    response = await create_check_run(mock_gh, api_url, data)
+    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
+    response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
     assert isinstance(response["id"], int)
+    for k in check_run_create_kwargs:
+        assert response[k] == check_run_create_kwargs[k]
 
 
 @pytest.mark.asyncio
-async def test_update_check_run(private_key, get_mock_github_session, api_url):
+async def test_update_check_run(private_key, get_mock_github_session, check_run_create_kwargs):
     os.environ["PEM_FILE"] = private_key
     mock_gh = get_mock_github_session(http_session)
-    data = dict()
-    _ = await update_check_run(mock_gh, api_url, 1, data)
-    # TODO: assert something here. currently, just a smoke test.
+    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
+    update_kwargs = dict(
+        status="completed",
+        conclusion="success",
+        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+        output=dict(
+            title="Recipe runs queued for latest commit",
+            summary="",
+        ),
+    )
+    create_response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
+    update_response = await update_check_run(
+        mock_gh,
+        api_url,
+        create_response["id"],
+        update_kwargs,
+    )
+    assert create_response["id"] == update_response["id"]
+    for k in update_kwargs:
+        assert update_response[k] == update_kwargs[k]
 
 
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
@@ -347,7 +418,46 @@ async def test_get_delivery(
         assert response.json() == delivery
 
 
-# TODO: test get_feedstock_check_runs
+@pytest.mark.asyncio
+async def test_get_feedstock_check_runs(
+    mocker,
+    private_key,
+    get_mock_github_session,
+    check_run_create_kwargs,
+    async_app_client,
+    admin_key,
+):
+    os.environ["PEM_FILE"] = private_key
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+
+    # populate the pangeo forge database with a feedstock
+    admin_headers = {"X-API-Key": admin_key}
+    fstock_response = await async_app_client.post(
+        "/feedstocks/",
+        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+        headers=admin_headers,
+    )
+    assert fstock_response.status_code == 200
+    fstock_id = fstock_response.json()["id"]
+
+    # populate mock github backend with check runs for the feedstock (only 1 for now)
+    mock_gh = get_mock_github_session(http_session)
+    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
+    check_run_response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
+    commit_sha = check_run_response["head_sha"]
+
+    # now that the data is in the mock github backend, retrieve it
+    response = await async_app_client.get(
+        f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
+    )
+    json_ = response.json()
+    assert json_["total_count"] == 1  # this value represents the number of check runs created
+    for k in check_run_create_kwargs:
+        assert json_["check_runs"][0][k] == check_run_create_kwargs[k]
 
 
 @pytest.mark.parametrize(
