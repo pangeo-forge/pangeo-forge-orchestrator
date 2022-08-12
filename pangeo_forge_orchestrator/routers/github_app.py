@@ -1,7 +1,3 @@
-"""This module contains code adapted from https://github.com/Mariatta/gh_app_demo, a repo authored
-by Mariatta Wijaya and licensed under Apache 2.0.
-"""
-
 import hashlib
 import hmac
 import json
@@ -12,6 +8,7 @@ from datetime import datetime
 from textwrap import dedent
 from urllib.parse import urlparse
 
+import aiohttp
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
@@ -19,7 +16,7 @@ from gidgethub.apps import get_installation_access_token
 from sqlmodel import Session, select
 
 from ..dependencies import get_session as get_database_session
-from ..http import HttpSession, http_session
+from ..http import http_session
 from ..logging import logger
 from ..models import MODELS
 
@@ -40,7 +37,7 @@ github_app_router = APIRouter()
 # Helpers -----------------------------------------------------------------------------------------
 
 
-def get_github_session(http_session: HttpSession):
+def get_github_session(http_session: aiohttp.ClientSession):
     return GitHubAPI(http_session, "pangeo-forge")
 
 
@@ -53,6 +50,8 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 
 
 def get_jwt():
+    """Adapted from https://github.com/Mariatta/gh_app_demo"""
+
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
@@ -151,7 +150,7 @@ async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session:
 async def get_feedstock_hook_deliveries(
     id: int,
     db_session: Session = Depends(get_database_session),
-    http_session: HttpSession = Depends(http_session),
+    http_session: aiohttp.ClientSession = Depends(http_session),
 ):
     gh = get_github_session(http_session)
     repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
@@ -171,7 +170,7 @@ async def get_feedstock_check_runs(
     id: int,
     commit_sha: str,
     db_session: Session = Depends(get_database_session),
-    http_session: HttpSession = Depends(http_session),
+    http_session: aiohttp.ClientSession = Depends(http_session),
 ):
     gh = get_github_session(http_session)
     _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
@@ -190,7 +189,12 @@ async def get_feedstock_check_runs(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
-async def receive_github_hook(request: Request, background_tasks: BackgroundTasks):
+async def receive_github_hook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    http_session: aiohttp.ClientSession = Depends(http_session),
+    db_session: Session = Depends(get_database_session),
+):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
 
@@ -213,7 +217,8 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
     if payload["action"] == "synchronize":
         pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
-        background_tasks.add_task(synchronize, *args)
+        gh = get_github_session(http_session)
+        background_tasks.add_task(synchronize, *args, gh=gh, db_session=db_session)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
     else:
         raise HTTPException(
@@ -226,7 +231,7 @@ async def receive_github_hook(request: Request, background_tasks: BackgroundTask
     "/github/hooks/deliveries",
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
 )
-async def get_deliveries(http_session: HttpSession = Depends(http_session)):
+async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_session)):
     gh = get_github_session(http_session)
 
     deliveries = []
@@ -243,7 +248,7 @@ async def get_deliveries(http_session: HttpSession = Depends(http_session)):
 async def get_delivery(
     id: int,
     response_only: bool = Query(True, description="Return only response body, excluding request."),
-    http_session: HttpSession = Depends(http_session),
+    http_session: aiohttp.ClientSession = Depends(http_session),
 ):
     gh = get_github_session(http_session)
     delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
@@ -253,7 +258,7 @@ async def get_delivery(
 # Background tasks --------------------------------------------------------------------------------
 
 
-async def synchronize(html_url, head_sha):
+async def synchronize(html_url: str, head_sha: str, gh: GitHubAPI, db_session: Session):
     logger.info(f"Synchronizing {html_url} at {head_sha}.")
     api_url = html_to_api_url(html_url)
     create_request = dict(
@@ -267,7 +272,6 @@ async def synchronize(html_url, head_sha):
         ),
         details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
     )
-    gh = get_github_session(http_session)
     checks_response = await create_check_run(gh, api_url, create_request)
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
@@ -291,8 +295,7 @@ async def synchronize(html_url, head_sha):
         if p["status"] == "completed":
             meta = p["meta"]
     logger.debug(meta)
-    # TODO: create recipe runs in database for each recipe in expanded meta
-    db_session = next(get_database_session())  # Is this the best way to get a session?
+
     try:
         feedstock_statement = select(MODELS["feedstock"].table).where(
             MODELS["feedstock"].table.spec == html_url_to_repo_full_name(html_url)
