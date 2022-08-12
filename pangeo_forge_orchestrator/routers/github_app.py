@@ -10,6 +10,7 @@ import subprocess
 import time
 from datetime import datetime
 from textwrap import dedent
+from urllib.parse import urlparse
 
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
@@ -29,6 +30,9 @@ from ..models import MODELS
 GH_APP_ID = 222382
 INSTALLATION_ID = 27724604
 ACCEPT = "application/vnd.github+json"
+
+FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
+DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
 github_app_router = APIRouter()
 
@@ -335,23 +339,27 @@ async def synchronize(html_url, head_sha):
         )
         for recipe in meta["recipes"]
     ]
+    created = []
     for nm in new_models:
         db_model = MODELS["recipe_run"].table.from_orm(nm)
         db_session.add(db_model)
         db_session.commit()
         db_session.refresh(db_model)
-    # TODO: post notification back to github with created recipe runs
+        created.append(db_model)
+    summary = f"Recipe runs created at commit `{head_sha}`:"
+    backend_app_webhook_url = await get_app_webhook_url(gh)
+    backend_netloc = urlparse(backend_app_webhook_url).netloc
+    query_param = (
+        ""
+        if backend_netloc == DEFAULT_BACKEND_NETLOC
+        else f"?orchestratorEndpoint={backend_netloc}"
+    )
+    for model in created:
+        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-runs/{model.id}{query_param}"
     update_request = dict(
         status="completed",
         conclusion="success",
         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(
-            title="Recipe runs queued for latest commit",
-            summary=dedent(
-                """\
-                TODO: Links to recipe runs (requires knowing deployment base url)
-                """
-            ),
-        ),
+        output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
     _ = await update_check_run(gh, api_url, checks_response["id"], update_request)

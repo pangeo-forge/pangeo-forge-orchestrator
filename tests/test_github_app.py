@@ -641,6 +641,7 @@ async def test_receive_github_hook(
             f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
         )
         # TODO: fixturize expected_check_runs_response
+        print(check_runs_response.json())
         expected_check_runs_response = {
             "total_count": 1,
             "check_runs": [
@@ -651,7 +652,7 @@ async def test_receive_github_hook(
                     "started_at": "2022-08-11T21:22:51Z",
                     "output": {
                         "title": "Recipe runs queued for latest commit",
-                        "summary": "TODO: Links to recipe runs (requires knowing deployment base url)\n",
+                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-runs/1",
                     },
                     "details_url": "https://pangeo-forge.org/",
                     "id": 0,

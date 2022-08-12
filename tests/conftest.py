@@ -23,7 +23,7 @@ def setup_and_teardown():
     if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
         # Assumes tests are invoked from repo root (not within tests/ directory).
         raise ValueError(
-            "Prexisting file `./database.sqlite` may cause test failures. Please remove this file "
+            "Preexisting `./database.sqlite` may cause test failures. Please remove this file "
             "then restart test session."
         )
     # TODO: remove this call to `maybe_create_db_and_tables`. This function is called on app
