@@ -234,14 +234,12 @@ async def receive_github_hook(
         if comment["body"].startswith("/run"):
             # Add ``eyes`` reaction to confirm receipt, which mimics slash command UX
             token = await get_access_token(gh)
-            eyes_response = gh.post(
+            _ = await gh.post(
                 comment["reactions"]["url"],
                 oauth_token=token,
                 accept=ACCEPT,
                 data={"content": "eyes"},
             )
-            assert eyes_response.status_code == 200
-
             if comment["author_association"] != "MEMBER":
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
