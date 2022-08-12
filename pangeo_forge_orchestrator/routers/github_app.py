@@ -13,6 +13,7 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
+from sqlalchemy import and_
 from sqlmodel import Session, select
 
 from ..dependencies import get_session as get_database_session
@@ -218,6 +219,7 @@ async def receive_github_hook(
     # here in the route function and then pass them through to the background task as kwargs.
     # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
     gh = get_github_session(http_session)
+    session_kws = dict(gh=gh, db_session=db_session)
 
     event = request.headers.get("X-GitHub-Event")
     payload = await request.json()
@@ -225,37 +227,48 @@ async def receive_github_hook(
     if event == "pull_request" and payload["action"] == "synchronize":
         pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
-        background_tasks.add_task(synchronize, *args, gh=gh, db_session=db_session)
+        background_tasks.add_task(synchronize, *args, **session_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
     elif event == "issue_comment" and payload["action"] == "created":
         comment = payload["comment"]
-        comment["reactions"]["url"]
-        if comment["body"].startswith("/run"):
-            # Add ``eyes`` reaction to confirm receipt, which mimics slash command UX
-            token = await get_access_token(gh)
-            _ = await gh.post(
-                comment["reactions"]["url"],
-                oauth_token=token,
-                accept=ACCEPT,
-                data={"content": "eyes"},
-            )
-            if comment["author_association"] != "MEMBER":
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="A member of Pangeo Forge GitHub org must issue `/run` command.",
-                )
-                # TODO: Maybe post a comment including the detail of the error? This could
-                # circumvent some issues we've seen, where users want to use ``/run`` themselves.
-            cmd = comment["body"].split()
-            if len(cmd) != 4 or cmd[2] != "@":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=(
-                        f"Command {cmd} not of form " "``['/run', RECIPE_NAME, '@', COMMIT_SHA]``."
-                    ),
-                )
+        comment_body = comment["body"]
+        reactions_url = comment["reactions"]["url"]
 
+        if not comment_body.startswith("/"):
+            # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
+            # comment with automated emoji reactions.
+            return {"status": "ok", "message": "Comment is not a slash command."}
+
+        token = await get_access_token(gh)
+        gh_kws = dict(oauth_token=token, accept=ACCEPT)
+        # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
+        # that the command was received, mimicing the slash command dispatch github action UX.
+        _ = await gh.post(reactions_url, data={"content": "eyes"}, **gh_kws)
+
+        # So, what kind of slash command is this?
+        cmd, *cmd_args = comment_body.split()
+        if cmd == "/run":
+            if len(cmd_args) != 1:
+                detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+                # TODO: Maybe post a comment and/or emoji reaction explaining this error.
+            recipe_id = cmd_args.pop(0)
+            pr_response = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
+            logger.debug(pr_response)
+            statement = and_(
+                MODELS["recipe_run"].table.recipe_id == recipe_id,
+                # MODELS["recipe_run"].table.head_sha == ,
+            )
+            result = db_session.query(MODELS["recipe_run"].table).filter(statement)
+            logger.debug(result)
+            # args = ()
+            # background_tasks.add_task(run_recipe_test)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No handling implemented for this event type.",
+            )
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -294,7 +307,7 @@ async def get_delivery(
 # Background tasks --------------------------------------------------------------------------------
 
 
-async def synchronize(html_url: str, head_sha: str, gh: GitHubAPI, db_session: Session):
+async def synchronize(html_url: str, head_sha: str, *, gh: GitHubAPI, db_session: Session):
     logger.info(f"Synchronizing {html_url} at {head_sha}.")
     api_url = html_to_api_url(html_url)
     create_request = dict(
@@ -402,3 +415,14 @@ async def synchronize(html_url: str, head_sha: str, gh: GitHubAPI, db_session: S
         output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
     _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+
+
+async def run_recipe_test(
+    comment_body: str,
+    reactions_url: str,
+    *,
+    gh: GitHubAPI,
+    db_session: Session,
+):
+    """ """
+    pass
