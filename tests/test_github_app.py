@@ -641,7 +641,6 @@ async def test_receive_github_hook(
             f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
         )
         # TODO: fixturize expected_check_runs_response
-        print(check_runs_response.json())
         expected_check_runs_response = {
             "total_count": 1,
             "check_runs": [
