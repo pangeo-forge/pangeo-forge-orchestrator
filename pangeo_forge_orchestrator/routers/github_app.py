@@ -218,6 +218,10 @@ async def receive_github_hook(
         pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
         gh = get_github_session(http_session)
+        # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
+        # dependencies. We can resolve these dependencies (i.e., github session, database session)
+        # here in the route function and then pass them through to the background task as kwargs.
+        # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
         background_tasks.add_task(synchronize, *args, gh=gh, db_session=db_session)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
     else:
