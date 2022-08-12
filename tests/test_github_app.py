@@ -487,7 +487,7 @@ async def test_receive_github_hook_unauthorized(
     assert json.loads(response.text)["detail"] == expected_response_detail
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def webhook_secret():
     return secrets.token_hex(20)
 
@@ -520,8 +520,9 @@ def mock_subprocess_check_output(cmd: List[str]):
 
 
 @pytest.fixture
-def synchronize_payload():
-    return {
+def synchronize_request():
+    headers = {"X-GitHub-Event": "pull_request"}
+    payload = {
         "action": "synchronize",
         "pull_request": {
             "base": {
@@ -530,15 +531,26 @@ def synchronize_payload():
             "head": {"sha": "abc"},
         },
     }
+    return {"headers": headers, "payload": payload}
 
 
 @pytest.fixture(
     scope="session",
     params=[
-        pytest.lazy_fixture("synchronize_payload"),
+        pytest.lazy_fixture("synchronize_request"),
     ],
 )
-def github_webhook_payload(request):
+def github_webhook_request(request, webhook_secret):
+    """ """
+
+    payload_bytes = bytes(json.dumps(request.param["payload"]), "utf-8")
+    hash_signature = hmac.new(
+        bytes(webhook_secret, encoding="utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    request.param["headers"].update({"X-Hub-Signature-256": f"sha256={hash_signature}"})
+
     return request.param
 
 
@@ -549,7 +561,7 @@ async def test_receive_github_hook(
     get_mock_github_session,
     webhook_secret,
     async_app_client,
-    github_webhook_payload,
+    github_webhook_request,
     private_key,
     raises_missing_database_dependencies_error,
     admin_key,
@@ -564,20 +576,12 @@ async def test_receive_github_hook(
     # PEM_FILE is used to authenticate with github in background tasks
     os.environ["PEM_FILE"] = private_key
 
-    payload_bytes = bytes(json.dumps(github_webhook_payload), "utf-8")
-    hash_signature = hmac.new(
-        bytes(webhook_secret, encoding="utf-8"),
-        payload_bytes,
-        hashlib.sha256,
-    ).hexdigest()
-    webhook_headers = {"X-Hub-Signature-256": f"sha256={hash_signature}"}
-
     if raises_missing_database_dependencies_error:
         with pytest.raises(ValueError, match=r"Feedstock .* and\/or bakery .* not in database."):
             response = await async_app_client.post(
                 "/github/hooks/",
-                json=github_webhook_payload,
-                headers=webhook_headers,
+                json=github_webhook_request["payload"],
+                headers=github_webhook_request["headers"],
             )
     else:
         # In order for the recipe run creation process to succeed, both the bakery and feedstock
@@ -603,8 +607,8 @@ async def test_receive_github_hook(
         # Now that the database is pre-populated with pre-requisites, we can actually test.
         response = await async_app_client.post(
             "/github/hooks/",
-            json=github_webhook_payload,
-            headers=webhook_headers,
+            json=github_webhook_request["payload"],
+            headers=github_webhook_request["headers"],
         )
         assert response.status_code == 202
 
@@ -651,7 +655,7 @@ async def test_receive_github_hook(
                     "started_at": "2022-08-11T21:22:51Z",
                     "output": {
                         "title": "Recipe runs queued for latest commit",
-                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-runs/1",
+                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-run/1",
                     },
                     "details_url": "https://pangeo-forge.org/",
                     "id": 0,

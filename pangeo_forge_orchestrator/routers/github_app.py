@@ -213,17 +213,51 @@ async def receive_github_hook(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
         )
 
+    # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
+    # dependencies. We can resolve these dependencies (i.e., github session, database session)
+    # here in the route function and then pass them through to the background task as kwargs.
+    # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
+    gh = get_github_session(http_session)
+
+    event = request.headers.get("X-GitHub-Event")
     payload = await request.json()
-    if payload["action"] == "synchronize":
+
+    if event == "pull_request" and payload["action"] == "synchronize":
         pr = payload["pull_request"]
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
-        gh = get_github_session(http_session)
-        # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
-        # dependencies. We can resolve these dependencies (i.e., github session, database session)
-        # here in the route function and then pass them through to the background task as kwargs.
-        # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
         background_tasks.add_task(synchronize, *args, gh=gh, db_session=db_session)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
+
+    elif event == "issue_comment" and payload["action"] == "created":
+        comment = payload["comment"]
+        comment["reactions"]["url"]
+        if comment["body"].startswith("/run"):
+            # Add ``eyes`` reaction to confirm receipt, which mimics slash command UX
+            token = await get_access_token(gh)
+            eyes_response = gh.post(
+                comment["reactions"]["url"],
+                oauth_token=token,
+                accept=ACCEPT,
+                data={"content": "eyes"},
+            )
+            assert eyes_response.status_code == 200
+
+            if comment["author_association"] != "MEMBER":
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="A member of Pangeo Forge GitHub org must issue `/run` command.",
+                )
+                # TODO: Maybe post a comment including the detail of the error? This could
+                # circumvent some issues we've seen, where users want to use ``/run`` themselves.
+            cmd = comment["body"].split()
+            if len(cmd) != 4 or cmd[2] != "@":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Command {cmd} not of form " "``['/run', RECIPE_NAME, '@', COMMIT_SHA]``."
+                    ),
+                )
+
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -362,7 +396,7 @@ async def synchronize(html_url: str, head_sha: str, gh: GitHubAPI, db_session: S
         else f"?orchestratorEndpoint={backend_netloc}"
     )
     for model in created:
-        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-runs/{model.id}{query_param}"
+        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-run/{model.id}{query_param}"
     update_request = dict(
         status="completed",
         conclusion="success",
