@@ -255,10 +255,9 @@ async def receive_github_hook(
                 # TODO: Maybe post a comment and/or emoji reaction explaining this error.
             recipe_id = cmd_args.pop(0)
             pr_response = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
-            logger.debug(pr_response)
             statement = and_(
                 MODELS["recipe_run"].table.recipe_id == recipe_id,
-                # MODELS["recipe_run"].table.head_sha == ,
+                MODELS["recipe_run"].table.head_sha == pr_response.json()["head"]["sha"],
             )
             result = db_session.query(MODELS["recipe_run"].table).filter(statement)
             logger.debug(result)
