@@ -6,6 +6,7 @@ import subprocess
 import time
 from datetime import datetime
 from textwrap import dedent
+from typing import List
 from urllib.parse import urlparse
 
 import aiohttp
@@ -141,6 +142,34 @@ async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session:
     return repo_id, feedstock.spec
 
 
+async def pass_if_deployment_not_selected(pr_labels: List[str], gh: aiohttp.ClientSession):
+    """The specific deployment identifier should follow "only-backend-".
+
+    There are three types of specific deployments:
+      1. A persistent Heroku deployment (i.e. production, staging, etc.)
+      2. An ephemeral Heroku deployment (e.g, a review app linked to a PR)
+      3. A tunnel (i.e. smee channel) to a local dev server, as recommended in:
+         https://docs.github.com/en/github-ae@latest/developers/apps/getting-started-with-apps/setting-up-your-development-environment-to-create-a-github-app
+    """
+    # TODO: THIS WONT WORK W/OUT GENERALIZING ``GH_APP_ID`` & ``INSTALLATION_ID`` CONSTANTS
+
+    specific_deployments = [label for label in pr_labels if label.startswith("only-backend-")]
+    if specific_deployments:
+        app_webhook_url = await get_app_webhook_url(gh)
+        for sd in specific_deployments:
+            #
+            sd_identifier = sd.replace("only-backend-", "")
+            if sd_identifier not in app_webhook_url:
+                return {
+                    "status": "pass",
+                    "message": (
+                        f"This deployment receives webhooks from {app_webhook_url}, which is "
+                        f"not identified in the label set {specific_deployments}."
+                    ),
+                }
+    return {"status": "ok"}
+
+
 # Routes ------------------------------------------------------------------------------------------
 
 
@@ -226,6 +255,11 @@ async def receive_github_hook(
 
     if event == "pull_request" and payload["action"] == "synchronize":
         pr = payload["pull_request"]
+
+        maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
+        if maybe_pass["status"] == "pass":
+            return maybe_pass
+
         args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
         background_tasks.add_task(synchronize, *args, **session_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
@@ -235,13 +269,20 @@ async def receive_github_hook(
         comment_body = comment["body"]
         reactions_url = comment["reactions"]["url"]
 
+        token = await get_access_token(gh)
+        gh_kws = dict(oauth_token=token, accept=ACCEPT)
+        pr_response = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
+        pr = pr_response.json()
+
+        maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
+        if maybe_pass["status"] == "pass":
+            return maybe_pass
+
         if not comment_body.startswith("/"):
             # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
             # comment with automated emoji reactions.
             return {"status": "ok", "message": "Comment is not a slash command."}
 
-        token = await get_access_token(gh)
-        gh_kws = dict(oauth_token=token, accept=ACCEPT)
         # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
         # that the command was received, mimicing the slash command dispatch github action UX.
         _ = await gh.post(reactions_url, data={"content": "eyes"}, **gh_kws)
@@ -254,10 +295,9 @@ async def receive_github_hook(
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
                 # TODO: Maybe post a comment and/or emoji reaction explaining this error.
             recipe_id = cmd_args.pop(0)
-            pr_response = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
             statement = and_(
                 MODELS["recipe_run"].table.recipe_id == recipe_id,
-                MODELS["recipe_run"].table.head_sha == pr_response.json()["head"]["sha"],
+                MODELS["recipe_run"].table.head_sha == pr["head"]["sha"],
             )
             result = db_session.query(MODELS["recipe_run"].table).filter(statement)
             logger.debug(result)
