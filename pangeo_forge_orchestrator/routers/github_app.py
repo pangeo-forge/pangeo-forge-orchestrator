@@ -22,14 +22,8 @@ from ..http import http_session
 from ..logging import logger
 from ..models import MODELS
 
-# For now, we only have one app, installed in one place (the `pangeo-forge` org), so these are
-# constants. Eventually, we'll have multiple apps (`staging`, etc.) installed in potentially
-# multiple locations (> 1 account), at which point these will need to be determined dynamically.
-# https://docs.github.com/en/rest/apps/apps#list-installations-for-the-authenticated-app
 GH_APP_ID = 222382
-INSTALLATION_ID = 27724604
 ACCEPT = "application/vnd.github+json"
-
 FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
 DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
@@ -65,9 +59,16 @@ def get_jwt():
 
 
 async def get_access_token(gh: GitHubAPI):
+    async for installation in gh.getitem("/app/installations", jwt=get_jwt(), accept=ACCEPT):
+        installation_id = installation["id"]
+        # I think installations are one per organization, so as long as we are only working with
+        # repositories within the `pangeo-forge` organization, there should only ever be one
+        # ``installation_id``. This assumption would change if we allow installations on accounts
+        # other than the ``pangeo-forge`` org.
+        break
     token_response = await get_installation_access_token(
         gh,
-        installation_id=INSTALLATION_ID,
+        installation_id=installation_id,
         app_id=GH_APP_ID,
         private_key=os.getenv("PEM_FILE"),
     )
@@ -157,7 +158,6 @@ async def pass_if_deployment_not_selected(pr_labels: List[str], gh: aiohttp.Clie
     if specific_deployments:
         app_webhook_url = await get_app_webhook_url(gh)
         for sd in specific_deployments:
-            #
             sd_identifier = sd.replace("only-backend-", "")
             if sd_identifier not in app_webhook_url:
                 return {
