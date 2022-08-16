@@ -59,7 +59,7 @@ def get_jwt():
 
 
 async def get_access_token(gh: GitHubAPI):
-    async for installation in gh.getitem("/app/installations", jwt=get_jwt(), accept=ACCEPT):
+    async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
         installation_id = installation["id"]
         # I think installations are one per organization, so as long as we are only working with
         # repositories within the `pangeo-forge` organization, there should only ever be one

@@ -72,6 +72,7 @@ class _MockGitHubBackend:
     _app_hook_config_url: str
     _accessible_repos: List[dict]
     _app_hook_deliveries: List[dict]
+    _app_installations: List[dict]
     _check_runs: List[dict]
 
 
@@ -121,6 +122,9 @@ class MockGitHubAPI:
         if path == "/app/hook/deliveries":
             for delivery in self._backend._app_hook_deliveries:
                 yield delivery
+        elif path == "/app/installations":
+            for installation in self._backend._app_installations:
+                yield installation
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -221,7 +225,21 @@ def app_hook_deliveries():
 
 
 @pytest.fixture
-def mock_github_backend(app_hook_config_url, accessible_repos, app_hook_deliveries):
+def app_installations():
+    """Installations for the mock GitHub App. The real payload contains a lot more information, but
+    just including the subset that we use here.
+    """
+
+    return [{"id": 1234567}]
+
+
+@pytest.fixture
+def mock_github_backend(
+    app_hook_config_url,
+    accessible_repos,
+    app_hook_deliveries,
+    app_installations,
+):
     """The backend data which simulates data that is retrievable via the GitHub API. Importantly,
     this has to be its own fixture, so that if multiple instances of the ``MockGitHubAPI`` are
     used within a single test invocation, each of these sessions share a single instance of the
@@ -234,6 +252,7 @@ def mock_github_backend(app_hook_config_url, accessible_repos, app_hook_deliveri
         "_app_hook_config_url": app_hook_config_url,
         "_accessible_repos": accessible_repos,
         "_app_hook_deliveries": app_hook_deliveries,
+        "_app_installations": app_installations,
         "_check_runs": list(),
     }
     return _MockGitHubBackend(**backend_kws)
@@ -529,6 +548,7 @@ def synchronize_request():
                 "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
             },
             "head": {"sha": "abc"},
+            "labels": [],
         },
     }
     return {"headers": headers, "payload": payload}

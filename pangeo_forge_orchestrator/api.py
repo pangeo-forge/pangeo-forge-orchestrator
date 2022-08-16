@@ -3,6 +3,8 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from traitlets import Integer, List, Unicode
+from traitlets.config import Application
 
 from .database import maybe_create_db_and_tables
 from .http import http_session
@@ -27,6 +29,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class GitHubApp(Application):
+    installation_id = Integer(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The installation id for this app instance.
+        """,
+    )
+
+    webhook_url = Unicode(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The url to which this app instance sends webhooks.
+        """,
+    )
+
+    private_key = Unicode(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The private key for this app instance.
+        """,
+    )
+
+    run_only_on = List(
+        Unicode,
+        default=[],
+        config=True,
+        help="""
+        List of labels a PR could have that will trigger a run from this app.
+
+        Leave blank to trigger on everything.
+        """,
+    )
+
+
+github_app = GitHubApp()
+github_app.load_config_file("github_app.json")
 
 
 @app.on_event("startup")
