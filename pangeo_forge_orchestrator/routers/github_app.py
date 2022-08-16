@@ -1,10 +1,10 @@
 import hashlib
 import hmac
 import json
-import os
 import subprocess
 import time
 from datetime import datetime
+from pathlib import Path
 from textwrap import dedent
 from typing import List
 from urllib.parse import urlparse
@@ -16,18 +16,85 @@ from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlalchemy import and_
 from sqlmodel import Session, select
+from traitlets import Integer, List as TraitList, Unicode
+from traitlets.config import Application
 
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
 from ..models import MODELS
 
-GH_APP_ID = 222382
 ACCEPT = "application/vnd.github+json"
 FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
 DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
 github_app_router = APIRouter()
+
+
+# Config ------------------------------------------------------------------------------------------
+
+
+class GitHubApp(Application):
+    id = Integer(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The app instance id.
+        """,
+    )
+
+    installation_id = Integer(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The installation id for this app instance.
+        """,
+    )
+
+    webhook_url = Unicode(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The url to which this app instance sends webhooks.
+        """,
+    )
+
+    webhook_secret = Unicode(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The webhook secret used to generate the hash sig GitHub attaches to each payload.
+        """,
+    )
+
+    private_key = Unicode(
+        None,
+        allow_none=True,
+        config=True,
+        help="""
+        The private key for this app instance.
+        """,
+    )
+
+    run_only_on = TraitList(
+        Unicode,
+        default=[],
+        config=True,
+        help="""
+        List of labels a PR could have that will trigger a run from this app.
+
+        Leave blank to trigger on everything.
+        """,
+    )
+
+
+github_app = GitHubApp()
+github_app_config_path = f"{Path(__file__).resolve().parent.parent}/secrets/github_app_config.yaml"
+github_app.load_config_file(github_app_config_path)
 
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -51,9 +118,9 @@ def get_jwt():
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
-        "iss": GH_APP_ID,
+        "iss": github_app.id,
     }
-    bearer_token = jwt.encode(payload, os.getenv("PEM_FILE"), algorithm="RS256")
+    bearer_token = jwt.encode(payload, github_app.private_key, algorithm="RS256")
 
     return bearer_token
 
@@ -69,8 +136,8 @@ async def get_access_token(gh: GitHubAPI):
     token_response = await get_installation_access_token(
         gh,
         installation_id=installation_id,
-        app_id=GH_APP_ID,
-        private_key=os.getenv("PEM_FILE"),
+        app_id=github_app.id,
+        private_key=github_app.private_key,
     )
     return token_response["token"]
 
@@ -236,7 +303,7 @@ async def receive_github_hook(
         )
 
     payload_bytes = await request.body()
-    webhook_secret = bytes(os.environ["GITHUB_WEBHOOK_SECRET"], encoding="utf-8")  # type: ignore
+    webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
     h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
     if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):
         raise HTTPException(
