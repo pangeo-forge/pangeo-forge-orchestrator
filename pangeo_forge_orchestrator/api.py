@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,7 +73,8 @@ class GitHubApp(Application):
 
 
 github_app = GitHubApp()
-github_app.load_config_file("github_app.json")
+github_app_config_path = f"{Path(__file__).resolve().parent.parent}/secrets/github_app_config.yaml"
+github_app.load_config_file(github_app_config_path)
 
 
 @app.on_event("startup")
