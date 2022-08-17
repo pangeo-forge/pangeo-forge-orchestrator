@@ -43,8 +43,10 @@ class GitHubAppConfig(BaseModel):
     run_only_on: Optional[List[str]] = None
 
 
+config_path = f"{Path(__file__).resolve().parent.parent.parent}/secrets/github_app_config.yaml"
+
+
 def get_github_app_config():
-    config_path = f"{Path(__file__).resolve().parent.parent.parent}/secrets/github_app_config.yaml"
     with open(config_path) as c:
         kw = yaml.safe_load(c)
         return GitHubAppConfig(**kw["GitHubApp"])

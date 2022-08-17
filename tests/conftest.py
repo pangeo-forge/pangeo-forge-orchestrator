@@ -20,7 +20,6 @@ import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
-from pangeo_forge_orchestrator.routers.github_app import GitHubAppConfig
 
 from .interfaces import FastAPITestClientCRUD
 
@@ -43,15 +42,10 @@ def setup_and_teardown(session_mocker, mock_github_app_config_path):
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
-    def get_mock_github_app_config():
-        with open(mock_github_app_config_path) as c:
-            kw = yaml.safe_load(c)
-            return GitHubAppConfig(**kw["GitHubApp"])
-
     session_mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
-        "get_github_app_config",
-        get_mock_github_app_config,
+        "config_path",
+        mock_github_app_config_path,
     )
     yield
     # teardown here (none for now)
