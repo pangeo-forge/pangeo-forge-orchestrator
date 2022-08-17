@@ -5,21 +5,25 @@ from unittest import mock
 
 import pytest
 import pytest_asyncio
+import yaml
 from asgi_lifespan import LifespanManager
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel
 
+import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
+from pangeo_forge_orchestrator.routers.github_app import GitHubAppConfig
 
 from .interfaces import FastAPITestClientCRUD
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_and_teardown():
+def setup_and_teardown(session_mocker, mock_github_app_config_path):
+    # (1) database setup
     if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
         # Assumes tests are invoked from repo root (not within tests/ directory).
         raise ValueError(
@@ -33,8 +37,43 @@ def setup_and_teardown():
     # A forthcoming refactor of the test fixtures can resolve this, but for now it's okay to have
     # this called twice (once now and once at app start-up), because it should be idempotent.
     maybe_create_db_and_tables()
+
+    # (2) github app test session setup
+    def get_mock_github_app_config():
+        with open(mock_github_app_config_path) as c:
+            kw = yaml.safe_load(c)
+            return GitHubAppConfig(**kw["GitHubApp"])
+
+    session_mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_app_config",
+        get_mock_github_app_config,
+    )
     yield
     # teardown here (none for now)
+
+
+@pytest.fixture(scope="session")
+def mock_github_app_config_kwargs(webhook_secret, private_key):
+    return {
+        "GitHubApp": {
+            "id": 1234567,
+            "installation_id": 91011123,
+            "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
+            "webhook_secret": webhook_secret,
+            "private_key": private_key,
+        }
+    }
+
+
+@pytest.fixture(scope="session")
+def mock_github_app_config_path(mock_github_app_config_kwargs, tmp_path_factory):
+    """ """
+    path = tmp_path_factory.mktemp("secrets") / "github_app_config.yaml"
+    with open(path, "w") as f:
+        yaml.dump(mock_github_app_config_kwargs, f)
+
+    return path
 
 
 # For this general pattern, see

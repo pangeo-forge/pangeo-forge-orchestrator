@@ -6,18 +6,18 @@ import time
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import List
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
 import jwt
+import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
+from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlmodel import Session, select
-from traitlets import Integer, List as TraitList, Unicode
-from traitlets.config import Application
 
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
@@ -34,67 +34,20 @@ github_app_router = APIRouter()
 # Config ------------------------------------------------------------------------------------------
 
 
-class GitHubApp(Application):
-    id = Integer(
-        None,
-        allow_none=True,
-        config=True,
-        help="""
-        The app instance id.
-        """,
-    )
-
-    installation_id = Integer(
-        None,
-        allow_none=True,
-        config=True,
-        help="""
-        The installation id for this app instance.
-        """,
-    )
-
-    webhook_url = Unicode(
-        None,
-        allow_none=True,
-        config=True,
-        help="""
-        The url to which this app instance sends webhooks.
-        """,
-    )
-
-    webhook_secret = Unicode(
-        None,
-        allow_none=True,
-        config=True,
-        help="""
-        The webhook secret used to generate the hash sig GitHub attaches to each payload.
-        """,
-    )
-
-    private_key = Unicode(
-        None,
-        allow_none=True,
-        config=True,
-        help="""
-        The private key for this app instance.
-        """,
-    )
-
-    run_only_on = TraitList(
-        Unicode,
-        default=[],
-        config=True,
-        help="""
-        List of labels a PR could have that will trigger a run from this app.
-
-        Leave blank to trigger on everything.
-        """,
-    )
+class GitHubAppConfig(BaseModel):
+    id: int
+    installation_id: int
+    webhook_url: str
+    webhook_secret: str
+    private_key: str
+    run_only_on: Optional[List[str]] = None
 
 
-github_app = GitHubApp()
-github_app_config_path = f"{Path(__file__).resolve().parent.parent}/secrets/github_app_config.yaml"
-github_app.load_config_file(github_app_config_path)
+def get_github_app_config():
+    config_path = f"{Path(__file__).resolve().parent.parent.parent}/secrets/github_app_config.yaml"
+    with open(config_path) as c:
+        kw = yaml.safe_load(c)
+        return GitHubAppConfig(**kw["GitHubApp"])
 
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -115,6 +68,7 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 def get_jwt():
     """Adapted from https://github.com/Mariatta/gh_app_demo"""
 
+    github_app = get_github_app_config()
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
@@ -126,16 +80,10 @@ def get_jwt():
 
 
 async def get_access_token(gh: GitHubAPI):
-    async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
-        installation_id = installation["id"]
-        # I think installations are one per organization, so as long as we are only working with
-        # repositories within the `pangeo-forge` organization, there should only ever be one
-        # ``installation_id``. This assumption would change if we allow installations on accounts
-        # other than the ``pangeo-forge`` org.
-        break
+    github_app = get_github_app_config()
     token_response = await get_installation_access_token(
         gh,
-        installation_id=installation_id,
+        installation_id=github_app.installation_id,
         app_id=github_app.id,
         private_key=github_app.private_key,
     )
@@ -303,6 +251,7 @@ async def receive_github_hook(
         )
 
     payload_bytes = await request.body()
+    github_app = get_github_app_config()
     webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
     h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
     if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):

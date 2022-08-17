@@ -302,8 +302,7 @@ def test_html_url_to_repo_full_name(html_url, expected_repo_full_name):
 
 
 def test_get_jwt(rsa_key_pair):
-    private_key, public_key = rsa_key_pair
-    os.environ["PEM_FILE"] = private_key
+    _, public_key = rsa_key_pair
     encoded_jwt = get_jwt()
     decoded = jwt.decode(encoded_jwt, public_key, algorithms=["RS256"])
     assert list(decoded.keys()) == ["iat", "exp", "iss"]
