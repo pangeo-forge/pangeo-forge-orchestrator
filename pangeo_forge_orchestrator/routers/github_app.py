@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import os
 import subprocess
 import time
 from datetime import datetime
@@ -13,6 +14,7 @@ import aiohttp
 import jwt
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi.responses import HTMLResponse
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from pydantic import BaseModel
@@ -43,10 +45,22 @@ class GitHubAppConfig(BaseModel):
     run_only_on: Optional[List[str]] = None
 
 
-config_path = f"{Path(__file__).resolve().parent.parent.parent}/secrets/github_app_config.yaml"
-
-
 def get_github_app_config():
+    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", False)
+    if deployment:
+        # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable:
+        # for production, this is `prod`; for staging, it's `staging`. Therefore,
+        # in a named deployment context, config filenames will resolve to
+        # `github_app_config.prod.yaml` and `github_app_config.staging.yaml`, respectively.
+        secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
+        config_path = f"{secrets_dir}/github_app_config.{deployment}.yaml"
+    else:
+        # If this is a local deployment, the GITHUB_APP_CONFIG_PATH must be passed explicitly.
+        # TODO: Figure out Review App fits into this. Heroku supports setting global review app
+        # env variables which apply to all review apps. Ideally, however, we need a way to
+        # customize this variable for each review app. Perhaps the user can supply this to Heroku
+        # via the PR somehow.
+        config_path = os.environ.get("GITHUB_APP_CONFIG_PATH")
     with open(config_path) as c:
         kw = yaml.safe_load(c)
         return GitHubAppConfig(**kw["GitHubApp"])
@@ -359,6 +373,87 @@ async def get_delivery(
     gh = get_github_session(http_session)
     delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
     return delivery["response"] if response_only else delivery
+
+
+@github_app_router.get("/github/apps/new-dev-app", response_class=HTMLResponse, summary="")
+def create_new_dev_app(
+    smee_proxy_url: str,
+    local_port: int = Query(8000, description="Port the local dev server is running on"),
+):
+    if not os.environ.get("GITHUB_PAT", None):
+        # This will be required in the redirect url.
+        # TODO: provide descriptive error in html below.
+        return """
+        <html>
+            <h1>Credentials error</h1>
+            <div>No token</div>
+        </html>
+        """
+
+    p = urlparse(smee_proxy_url)
+    abbreviated_smee_channel_id = p.path[1:8]
+    proxy_url_without_scheme = p.netloc + p.path
+    manifest = dict(
+        name=f"pangeo-forge-dev-{abbreviated_smee_channel_id}",
+        url=f"https://pangeo-forge.org/?orchestratorEndpoint={proxy_url_without_scheme}",
+        hook_attributes={"url": smee_proxy_url},
+        redirect_url=f"http://localhost:{local_port}/github/apps/download-dev-app-config",
+        callback_urls=["https://example.com/callback"],  # TODO: customize
+        description="A dev instance of the pangeo-forge github app.",
+        public=False,
+        default_events=[
+            "issue_comment",
+            "pull_request",
+        ],
+        default_permissions={  # TODO: See if these can be pruned
+            "administration": "write",
+            "checks": "write",
+            "contents": "write",
+            "deployments": "write",
+            "issues": "read",
+            "metadata": "read",
+            "pull_requests": "write",
+        },
+    )
+    return f"""
+    <html>
+        <form action="https://github.com/settings/apps/new?state=abc123" method="post">
+            Create a GitHub App Manifest: <input type="text" name="manifest" id="manifest"><br>
+            <input type="submit" value="Submit">
+        </form>
+        <script>
+            input = document.getElementById("manifest")
+            input.value = JSON.stringify({json.dumps(manifest)})
+        </script>
+    <html>
+    """
+
+
+@github_app_router.get(
+    "/github/apps/download-dev-app-config", response_class=HTMLResponse, summary=""
+)
+async def download_new_app_config(
+    http_session: aiohttp.ClientSession = Depends(http_session),
+    code: str = Query(None, description="Code issued by GitHub for retrieval of new app config."),
+):
+    # If we were redirected here, we know this env var exists, because it was checked for in the
+    # "/github/apps/new-dev-app" route before it redirected us here.
+    user_token = os.environ.get("GITHUB_PAT")
+
+    gh = get_github_session(http_session)
+    response = await gh.post(
+        f"/app-manifests/{code}/conversions",
+        oauth_token=user_token,
+        accept=ACCEPT,
+        data=b"",
+    )
+
+    return f"""
+    <html>
+        <h1>Redirected here</h1>
+        <div>{response}</div>
+    </html>
+    """
 
 
 # Background tasks --------------------------------------------------------------------------------
