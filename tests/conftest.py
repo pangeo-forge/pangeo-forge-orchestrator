@@ -161,7 +161,6 @@ def session():
     with Session(engine) as session:
         for k in MODELS:
             clear_table(session, MODELS[k].table)  # make sure the database is empty
-        yield session
 
 
 # the next two fixtures use the session fixture to clear the database
