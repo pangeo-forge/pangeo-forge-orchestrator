@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import json
 import os
-import secrets
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,9 +9,6 @@ from typing import List, Optional
 
 import jwt
 import pytest
-from cryptography.hazmat.backends import default_backend as crypto_default_backend
-from cryptography.hazmat.primitives import serialization as crypto_serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
@@ -27,32 +23,6 @@ from pangeo_forge_orchestrator.routers.github_app import (
     list_accessible_repos,
     update_check_run,
 )
-
-
-@pytest.fixture(scope="session")
-def rsa_key_pair():
-    """Simulates keys generated for the GitHub App. See https://stackoverflow.com/a/39126754."""
-
-    key = rsa.generate_private_key(
-        backend=crypto_default_backend(), public_exponent=65537, key_size=2048
-    )
-    private_key = key.private_bytes(
-        crypto_serialization.Encoding.PEM,
-        crypto_serialization.PrivateFormat.PKCS8,
-        crypto_serialization.NoEncryption(),
-    )
-    public_key = key.public_key().public_bytes(
-        crypto_serialization.Encoding.OpenSSH, crypto_serialization.PublicFormat.OpenSSH
-    )
-    return [k.decode(encoding="utf-8") for k in (private_key, public_key)]
-
-
-@pytest.fixture(scope="session")
-def private_key(rsa_key_pair):
-    """Convenience fixture so we don't have to unpack ``rsa_key_pair`` in every test function."""
-
-    private_key, _ = rsa_key_pair
-    return private_key
 
 
 def mock_access_token_from_jwt(jwt: str):
@@ -503,11 +473,6 @@ async def test_receive_github_hook_unauthorized(
     )
     assert response.status_code == 401
     assert json.loads(response.text)["detail"] == expected_response_detail
-
-
-@pytest.fixture(scope="session")
-def webhook_secret():
-    return secrets.token_hex(20)
 
 
 def mock_subprocess_check_output(cmd: List[str]):
