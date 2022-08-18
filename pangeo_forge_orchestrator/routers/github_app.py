@@ -37,7 +37,6 @@ github_app_router = APIRouter()
 
 class GitHubAppConfig(BaseModel):
     id: int
-    installation_id: int
     webhook_url: str
     webhook_secret: str
     private_key: str
@@ -96,9 +95,20 @@ def get_jwt():
 
 async def get_access_token(gh: GitHubAPI):
     github_app = get_github_app_config()
+    async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
+        installation_id = installation["id"]
+        # Even if installed on multiple repos within the account, I believe installations are
+        # one per account (organization or user), so as long as apps are only ever deployed in
+        # the account they were created in, there should only ever be one installation_id per app.
+        # Currently, this assumption holds, because named deployments are made from private apps
+        # owned by the pangeo-forge org, and only deployed in pangeo-forge, and dev apps are made
+        # by developers, and only deployed in on repos they own. If we were to change this
+        # paradigm, the assumption that the first installation returned by this `getiter` call is
+        # the only installation (and therefore the one we want), would change.
+        break
     token_response = await get_installation_access_token(
         gh,
-        installation_id=github_app.installation_id,
+        installation_id=installation_id,
         app_id=github_app.id,
         private_key=github_app.private_key,
     )

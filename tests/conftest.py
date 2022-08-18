@@ -81,7 +81,6 @@ def mock_github_app_config_kwargs(webhook_secret, private_key):
     return {
         "GitHubApp": {
             "id": 1234567,
-            "installation_id": 91011123,
             "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
             "webhook_secret": webhook_secret,
             "private_key": private_key,

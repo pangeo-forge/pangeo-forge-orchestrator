@@ -21,10 +21,11 @@ With these four components set up, you have everything you need to run Pangeo Fo
 
 ### Create a new dev app
 
-1. Create a smee channel, and copy its full url
+1. Navigate to https://smee.io/, and create a new smee channel. Also create a GitHub Personal Access Token (PAT) with `repo` scope (TODO: Confirm this is the correct scope). Export both to your local env as:
 
    ```console
    export SMEE_URL=https://smee.io/brlCfGukG7f5BXv
+   export GITHUB_PAT=ghs_abc123..etc.
    ```
 
 2. From repo root, run

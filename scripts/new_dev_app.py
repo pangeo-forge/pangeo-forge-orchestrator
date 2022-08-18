@@ -109,8 +109,7 @@ if __name__ == "__main__":
                 app_config = {
                     "GitHubApp": {
                         "id": response_json["id"],
-                        # "installation_id": ,  TODO: include or omit?
-                        # "webhook_url": response_json, TODO: get this from API?
+                        "webhook_url": smee_proxy_url,
                         "webhook_secret": response_json["webhook_secret"],
                         "private_key": response_json["pem"],
                     }
