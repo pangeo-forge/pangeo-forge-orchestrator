@@ -1,3 +1,6 @@
+# github app manifest flow
+.github_app_manifest_flow/
+
 # sqlite databases
 *.db
 *.sqlite
