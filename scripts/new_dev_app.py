@@ -36,6 +36,10 @@ def main(smee_proxy_url):
     # https://docs.github.com/en/developers/apps/building-github-apps/creating-a-github-app-from-a-manifest#github-app-manifest-parameters
     manifest = dict(
         name=f"pangeo-forge-dev-{abbreviated_smee_channel_id}",
+        # TODO: Make this url actually work. This will *not* work with Smee, because IIUC Smee only
+        # forwards incoming traffic. To make outgoing traffic queryable, I think we'll need to use
+        # something like Ngrok instead. The reason I've chosen Smee is that you get a persistent
+        # url (i.e. channel) for free. With Ngrok, a persistent url requires a paid plan.
         url=f"https://pangeo-forge.org/?orchestratorEndpoint={proxy_url_without_scheme}",
         hook_attributes={"url": smee_proxy_url},
         redirect_url=redirect_url,
