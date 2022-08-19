@@ -38,15 +38,45 @@ With these four components set up, you have everything you need to run Pangeo Fo
 3. Navigate to http://localhost:3000/authorize.html and click **Submit**
 4. Follow the unscreen prompts to authorize a GitHub App to be created in your user account
 5. You may now `Ctrl+C` out of the webserver process started by `scripts/new_dev_app.py`
-6. Your app config (including secrets) will be saved to `secrets/github_app_config.dev.yaml`
+6. Your app config (including secrets) will be saved to `secrets/config.dev.yaml`
 
 > A note on `scripts/new_dev_app.py`... why is it so complicated? The only way to make a GitHub App
 > instance _from a manifest_ is to use a web browser, for authentication.
 
-### Create a sandbox repository & install your dev app
+### Add api keys to your dev app config
+
+```console
+python3 scripts/generate_api_key.py
+```
+
+### Create a sandbox repository
 
 1. Create a repository on your personal account. This can have any name, maybe `mock-staged-recipes`
 2. Follow the GitHub [docs for installing your newly created GitHub App on your own account](https://docs.github.com/en/developers/apps/managing-github-apps/installing-github-apps#installing-your-private-github-app-on-your-repository). At the installation prompt, make sure to select **Only select repositories**, and specify to install your dev app in only the sandbox repository you've just created.
+
+### Setup the database
+
+1. Define your database target
+
+   ```
+   export DATABASE_URL= ...
+   ```
+
+2. Initialized the database
+
+   ```console
+   export MOCK_FEEDSTOCK_SPEC="cisaacstern/mock-dataset-feedstock"
+   export PORT=8000
+   python3 scripts/initialize_database.py $PORT $MOCK_FEEDSTOCK_SPEC
+   ```
+
+### Start the FastAPI dev server
+
+From the repo root, run:
+
+```
+uvicorn pangeo_forge_orchestrator.api:app --reload --reload-dir=`pwd`/pangeo_forge_orchestrator
+```
 
 ### Start the smee client
 
@@ -60,18 +90,6 @@ smee -u $SMEE_URL --path /github/hooks/
 
 Smee uses port 8000 by default. If this is occupied, you can specify an open port with the `-p`
 option.
-
-### Start the FastAPI dev server
-
-From the repo root, run:
-
-```
-uvicorn pangeo_forge_orchestrator.api:app --reload --reload-dir=`pwd`/pangeo_forge_orchestrator
-```
-
-### Setup the database
-
-Before
 
 ## Make a PR
 

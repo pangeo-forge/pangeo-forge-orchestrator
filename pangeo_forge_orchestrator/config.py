@@ -33,7 +33,7 @@ def get_config_path() -> str:
     deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", "dev")
     # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
     # prevent commiting unencyrpted secrets to this directory.
-    secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
+    secrets_dir = f"{Path(__file__).resolve().parent.parent}/secrets"
     config_path = f"{secrets_dir}/config.{deployment}.yaml"
     return config_path
 
