@@ -125,7 +125,7 @@ if __name__ == "__main__":
                 else:
                     creds = {}
                 with open(CREDS_OUTPATH, "w") as f:
-                    creds["GitHubApp"] = app_config
+                    creds["github_app"] = app_config
                     yaml.dump(creds, f)
 
             return http.server.SimpleHTTPRequestHandler.do_GET(self)

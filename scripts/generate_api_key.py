@@ -26,7 +26,7 @@ def main():
         creds = {}
 
     with open(CREDS_OUTPATH, "w") as out:
-        creds["FastAPI"] = keys
+        creds["fastapi"] = keys
         yaml.dump(creds, out)
 
 

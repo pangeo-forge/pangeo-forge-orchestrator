@@ -1,25 +1,22 @@
 import hashlib
 import hmac
 import json
-import os
 import subprocess
 import time
 from datetime import datetime
-from pathlib import Path
 from textwrap import dedent
-from typing import List, Optional
+from typing import List
 from urllib.parse import urlparse
 
 import aiohttp
 import jwt
-import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
-from pydantic import BaseModel
 from sqlalchemy import and_
 from sqlmodel import Session, select
 
+from ..config import get_config
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
@@ -30,37 +27,6 @@ FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
 DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
 github_app_router = APIRouter()
-
-
-# Config ------------------------------------------------------------------------------------------
-
-
-class GitHubAppConfig(BaseModel):
-    id: int
-    webhook_url: str
-    webhook_secret: str
-    private_key: str
-    run_only_on: Optional[List[str]] = None
-
-
-def get_github_app_config_path():
-    # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable: for production, this
-    # is `prod`; for staging, it's `staging`. Therefore, in a named deployment context, config
-    # filenames will resolve to `github_app_config.prod.yaml` and `github_app_config.staging.yaml`,
-    # respectively. If PANGEO_FORGE_DEPLOYMENT is unset, assume we're in a dev environment.
-    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", "dev")
-    # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
-    # prevent commiting unencyrpted secrets to this directory.
-    secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
-    config_path = f"{secrets_dir}/github_app_config.{deployment}.yaml"
-    return config_path
-
-
-def get_github_app_config():
-    config_path = get_github_app_config_path()
-    with open(config_path) as c:
-        kw = yaml.safe_load(c)
-        return GitHubAppConfig(**kw["GitHubApp"])
 
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -81,7 +47,7 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 def get_jwt():
     """Adapted from https://github.com/Mariatta/gh_app_demo"""
 
-    github_app = get_github_app_config()
+    github_app = get_config().github_app
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
@@ -93,7 +59,7 @@ def get_jwt():
 
 
 async def get_access_token(gh: GitHubAPI):
-    github_app = get_github_app_config()
+    github_app = get_config().github_app
     async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
         installation_id = installation["id"]
         # Even if installed on multiple repos within the account, I believe installations are
@@ -275,7 +241,7 @@ async def receive_github_hook(
         )
 
     payload_bytes = await request.body()
-    github_app = get_github_app_config()
+    github_app = get_config().github_app
     webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
     h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
     if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):

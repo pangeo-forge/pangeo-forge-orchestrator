@@ -2,7 +2,6 @@ import hashlib
 import os
 import secrets
 import uuid
-from unittest import mock
 
 import pytest
 import pytest_asyncio
@@ -25,7 +24,7 @@ from .interfaces import FastAPITestClientCRUD
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_and_teardown(session_mocker, mock_github_app_config_path):
+def setup_and_teardown(session_mocker, mock_config_path):
     # (1) database test session setup
     if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
         # Assumes tests are invoked from repo root (not within tests/ directory).
@@ -42,14 +41,15 @@ def setup_and_teardown(session_mocker, mock_github_app_config_path):
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
-    def get_mock_github_app_config_path():
-        return mock_github_app_config_path
+    def get_mock_config_path():
+        return mock_config_path
 
     session_mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_github_app_config_path",
-        get_mock_github_app_config_path,
+        pangeo_forge_orchestrator.config,
+        "get_config_path",
+        get_mock_config_path,
     )
+
     yield
     # teardown here (none for now)
 
@@ -89,23 +89,29 @@ def webhook_secret():
 
 
 @pytest.fixture(scope="session")
-def mock_github_app_config_kwargs(webhook_secret, private_key):
+def mock_config_kwargs(webhook_secret, private_key, api_keys):
+    salt, raw_key, encrypted_key = api_keys
     return {
-        "GitHubApp": {
+        "fastapi": {
+            "ADMIN_API_KEY_SHA256": encrypted_key,
+            "ENCRYPTION_SALT": salt,
+            "PANGEO_FORGE_API_KEY": raw_key,
+        },
+        "github_app": {
             "id": 1234567,
             "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
             "webhook_secret": webhook_secret,
             "private_key": private_key,
-        }
+        },
     }
 
 
 @pytest.fixture(scope="session")
-def mock_github_app_config_path(mock_github_app_config_kwargs, tmp_path_factory):
+def mock_config_path(mock_config_kwargs, tmp_path_factory):
     """ """
-    path = tmp_path_factory.mktemp("secrets") / "github_app_config.yaml"
+    path = tmp_path_factory.mktemp("secrets") / "config.yaml"
     with open(path, "w") as f:
-        yaml.dump(mock_github_app_config_kwargs, f)
+        yaml.dump(mock_config_kwargs, f)
 
     return path
 
@@ -139,19 +145,6 @@ def api_keys():
     raw_key = uuid.uuid4().hex
     encrypted_key = hashlib.sha256(salt.encode() + raw_key.encode()).hexdigest()
     return salt, raw_key, encrypted_key
-
-
-@pytest.fixture(autouse=True)
-def required_backend_env_vars(api_keys):
-    salt, _, encrypted_key = api_keys
-    with mock.patch.dict(
-        os.environ,
-        {
-            "ENCRYPTION_SALT": salt,
-            "ADMIN_API_KEY_SHA256": encrypted_key,
-        },
-    ):
-        yield
 
 
 @pytest.fixture(scope="session")
