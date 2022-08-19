@@ -43,7 +43,7 @@ class GitHubAppConfig(BaseModel):
     run_only_on: Optional[List[str]] = None
 
 
-def get_github_app_config():
+def get_github_app_config_path():
     # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable: for production, this
     # is `prod`; for staging, it's `staging`. Therefore, in a named deployment context, config
     # filenames will resolve to `github_app_config.prod.yaml` and `github_app_config.staging.yaml`,
@@ -53,6 +53,11 @@ def get_github_app_config():
     # prevent commiting unencyrpted secrets to this directory.
     secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
     config_path = f"{secrets_dir}/github_app_config.{deployment}.yaml"
+    return config_path
+
+
+def get_github_app_config():
+    config_path = get_github_app_config_path()
     with open(config_path) as c:
         kw = yaml.safe_load(c)
         return GitHubAppConfig(**kw["GitHubApp"])

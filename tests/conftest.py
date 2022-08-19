@@ -16,6 +16,7 @@ from httpx import AsyncClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel
 
+import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
@@ -24,7 +25,8 @@ from .interfaces import FastAPITestClientCRUD
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_and_teardown():
+def setup_and_teardown(session_mocker, mock_github_app_config_path):
+    # (1) database test session setup
     if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
         # Assumes tests are invoked from repo root (not within tests/ directory).
         raise ValueError(
@@ -38,6 +40,16 @@ def setup_and_teardown():
     # A forthcoming refactor of the test fixtures can resolve this, but for now it's okay to have
     # this called twice (once now and once at app start-up), because it should be idempotent.
     maybe_create_db_and_tables()
+
+    # (2) github app test session setup
+    def get_mock_github_app_config_path():
+        return mock_github_app_config_path
+
+    session_mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_app_config_path",
+        get_mock_github_app_config_path,
+    )
     yield
     # teardown here (none for now)
 
@@ -130,14 +142,13 @@ def api_keys():
 
 
 @pytest.fixture(autouse=True)
-def required_backend_env_vars(api_keys, mock_github_app_config_path):
+def required_backend_env_vars(api_keys):
     salt, _, encrypted_key = api_keys
     with mock.patch.dict(
         os.environ,
         {
             "ENCRYPTION_SALT": salt,
             "ADMIN_API_KEY_SHA256": encrypted_key,
-            "GITHUB_APP_CONFIG_PATH": str(mock_github_app_config_path),
         },
     ):
         yield
