@@ -10,7 +10,7 @@ import requests  # type: ignore
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CREDS_OUTPATH = REPO_ROOT / "secrets/github_app_config.dev.yaml"
+CREDS_OUTPATH = REPO_ROOT / "secrets/config.dev.yaml"
 CACHEDIR = REPO_ROOT / ".github_app_manifest_flow"
 AUTHORIZE = "authorize.html"
 REDIRECT = "redirect.html"
@@ -114,15 +114,19 @@ if __name__ == "__main__":
                 response.raise_for_status()
                 response_json = response.json()
                 app_config = {
-                    "GitHubApp": {
-                        "id": response_json["id"],
-                        "webhook_url": smee_proxy_url,
-                        "webhook_secret": response_json["webhook_secret"],
-                        "private_key": response_json["pem"],
-                    }
+                    "id": response_json["id"],
+                    "webhook_url": smee_proxy_url,
+                    "webhook_secret": response_json["webhook_secret"],
+                    "private_key": response_json["pem"],
                 }
+                if os.path.exists(CREDS_OUTPATH):
+                    with open(CREDS_OUTPATH) as c:
+                        creds = yaml.safe_load(c)
+                else:
+                    creds = {}
                 with open(CREDS_OUTPATH, "w") as f:
-                    yaml.dump(app_config, f)
+                    creds["GitHubApp"] = app_config
+                    yaml.dump(creds, f)
 
             return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
