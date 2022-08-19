@@ -294,7 +294,7 @@ async def receive_github_hook(
     event = request.headers.get("X-GitHub-Event")
     payload = await request.json()
 
-    if event == "pull_request" and payload["action"] == "synchronize":
+    if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
 
         maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
