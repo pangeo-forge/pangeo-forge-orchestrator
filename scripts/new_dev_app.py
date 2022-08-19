@@ -3,12 +3,15 @@ import json
 import os
 import socketserver
 import sys
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests  # type: ignore
 import yaml
 
-CACHEDIR = f"{os.getcwd()}/.github_app_manifest_flow"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CREDS_OUTPATH = REPO_ROOT / "secrets/github_app_config.dev.yaml"
+CACHEDIR = REPO_ROOT / ".github_app_manifest_flow"
 AUTHORIZE = "authorize.html"
 REDIRECT = "redirect.html"
 PORT = 3000
@@ -22,7 +25,7 @@ def main(smee_proxy_url):
 
     # Write the redirect page to disk
     with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
-        f.write("<html>You've been redirected</html>")
+        f.write(f"<html>Authorization complete! Creds stored in <b>{CREDS_OUTPATH}</b></html>")
 
     # We're going to serve from the `CACHEDIR` as base,
     # so the redirect page will be at this address
@@ -66,7 +69,7 @@ def main(smee_proxy_url):
     content = f"""
     <html>
         <form action="https://github.com/settings/apps/new?state=abc123" method="post">
-            Create a GitHub App Manifest: <input type="text" name="manifest" id="manifest"><br>
+            Create a GitHub App from Manifest: <input type="text" name="manifest" id="manifest"><br>
             <input type="submit" value="Submit">
         </form>
         <script>
@@ -118,7 +121,7 @@ if __name__ == "__main__":
                         "private_key": response_json["pem"],
                     }
                 }
-                with open(f"{CACHEDIR}/github_app_config.dev.yaml", "w") as f:
+                with open(CREDS_OUTPATH, "w") as f:
                     yaml.dump(app_config, f)
 
             return http.server.SimpleHTTPRequestHandler.do_GET(self)

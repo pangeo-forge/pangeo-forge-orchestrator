@@ -44,21 +44,15 @@ class GitHubAppConfig(BaseModel):
 
 
 def get_github_app_config():
-    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", False)
-    if deployment:
-        # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable:
-        # for production, this is `prod`; for staging, it's `staging`. Therefore,
-        # in a named deployment context, config filenames will resolve to
-        # `github_app_config.prod.yaml` and `github_app_config.staging.yaml`, respectively.
-        secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
-        config_path = f"{secrets_dir}/github_app_config.{deployment}.yaml"
-    else:
-        # If this is a local deployment, the GITHUB_APP_CONFIG_PATH must be passed explicitly.
-        # TODO: Figure out Review App fits into this. Heroku supports setting global review app
-        # env variables which apply to all review apps. Ideally, however, we need a way to
-        # customize this variable for each review app. Perhaps the user can supply this to Heroku
-        # via the PR somehow.
-        config_path = os.environ.get("GITHUB_APP_CONFIG_PATH")
+    # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable: for production, this
+    # is `prod`; for staging, it's `staging`. Therefore, in a named deployment context, config
+    # filenames will resolve to `github_app_config.prod.yaml` and `github_app_config.staging.yaml`,
+    # respectively. If PANGEO_FORGE_DEPLOYMENT is unset, assume we're in a dev environment.
+    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", "dev")
+    # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
+    # prevent commiting unencyrpted secrets to this directory.
+    secrets_dir = f"{Path(__file__).resolve().parent.parent.parent}/secrets"
+    config_path = f"{secrets_dir}/github_app_config.{deployment}.yaml"
     with open(config_path) as c:
         kw = yaml.safe_load(c)
         return GitHubAppConfig(**kw["GitHubApp"])

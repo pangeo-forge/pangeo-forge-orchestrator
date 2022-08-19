@@ -38,11 +38,7 @@ With these four components set up, you have everything you need to run Pangeo Fo
 3. Navigate to http://localhost:3000/authorize.html and click **Submit**
 4. Follow the unscreen prompts to authorize a GitHub App to be created in your user account
 5. You may now `Ctrl+C` out of the webserver process started by `scripts/new_dev_app.py`
-6. Your `github_app_config.dev.yaml` will be saved into the `.github_app_manifest_flow/` directory
-7. From the repo root, set
-   ```console
-   export GITHUB_APP_CONFIG_PATH=`pwd`/.github_app_manifest_flow/github_app_config.dev.yaml
-   ```
+6. Your app config (including secrets) will be saved to `secrets/github_app_config.dev.yaml`
 
 > A note on `scripts/new_dev_app.py`... why is it so complicated? The only way to make a GitHub App
 > instance _from a manifest_ is to use a web browser, for authentication.
@@ -67,9 +63,7 @@ option.
 
 ### Start the FastAPI dev server
 
-1. Make sure you have set the `GITHUB_APP_CONFIG_PATH` env variable and that it points to the path
-   where your `github_app_config.dev.yaml` file is located. (See step 7 of **Create a new dev app**)
-2. From the repo root, run:
+From the repo root, run:
 
 ```
 uvicorn pangeo_forge_orchestrator.api:app --reload --reload-dir=`pwd`/pangeo_forge_orchestrator
@@ -92,8 +86,7 @@ The syncronize action
 > call the GitHub API \_as the app*. How do we do this?
 >
 > The good news is that we can use the convenience functions baked into `pangeo_forge_orchestrator`
-> to help us in retreiving the necessary credentials. For both of these actions, you will need to make
-> make sure the `GITHUB_APP_CONFIG_PATH` is set.
+> to help us in retreiving the necessary credentials.
 >
 > ### 1. Get a JWT for your dev app
 >
