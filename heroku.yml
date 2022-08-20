@@ -1,0 +1,13 @@
+setup:
+  addons:
+    - plan: heroku-postgresql:standard-0
+build:
+  docker:
+    web: Dockerfile
+release:
+  command:
+    - python -m alembic upgrade head
+run:
+  web: |
+    sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml \
+    && gunicorn -w 3 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
