@@ -7,5 +7,6 @@ build:
 release:
   command:
     - python -m alembic upgrade head
+  image: web
 run:
   web: sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml && gunicorn -w 3 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
