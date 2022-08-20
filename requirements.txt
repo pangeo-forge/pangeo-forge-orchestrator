@@ -11,4 +11,4 @@ pangeo-forge-runner==0.3
 # for deployment
 gunicorn==20.1.0
 uvicorn==0.17.0
-psycopg2==2.9.3
+psycopg2-binary==2.9.3
