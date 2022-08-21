@@ -1,0 +1,33 @@
+# This file is for local testing only, see:
+# https://devcenter.heroku.com/articles/local-development-with-docker-compose
+# Deployment is configured in `heroku.yml` & `app.json`
+
+version: '3'
+services:
+  web:
+    # For platform spec, see https://stackoverflow.com/a/70238851
+    platform: linux/amd64
+    build: .
+    ports:
+      - '3000:3000'
+    depends_on:
+      - db
+    environment:
+      # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
+      # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
+      DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
+    # Sleep 5 to hopefully allow postgres enought time to start. There are some more involved
+    # solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
+    # this is just for testing, I think this should be enough, and is much lighter weight.
+    entrypoint: ['/bin/sh', '-c', 'sleep 5 && python3 -m alembic upgrade head']
+  db:
+    platform: linux/amd64
+    image: postgres:latest
+    ports:
+      - '5432:5432'
+    environment:
+      # Identical config as for postgres service in `.github/workflows/main.yaml`
+      POSTGRES_DB: postgres_db
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres_user
