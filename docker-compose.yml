@@ -23,14 +23,20 @@ services:
       # In Heroku, we use the SOPS_AGE_KEY variable instead, for description of both options, see:
       # https://github.com/mozilla/sops#22encrypting-using-age
       SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
-    # Sleep 1 to hopefully allow postgres enought time to start. There are some more involved
-    # solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
-    # this is just for testing, I think this should be enough, and is much lighter weight.
+    # Note on this entrypoint:
+    # - Sleep at start to allow postgres enought time to start. There are some more involved
+    #   solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
+    #   this is just for testing, I think this should be enough, and is much lighter weight.
+    # - The commands following sleep combine the `release` and `web` directives from `heroku.yml`,
+    #   with the following small differences:
+    #     - docker-compose spec requires double $$ for string interpolation (vs. single $)
+    #     - Only running one gunicorn worker here (as opposed to 4 in production). Specifying more
+    #       than 1 worker fails in this context.
     entrypoint: >
       /bin/sh -c 'sleep 1
       && python3 -m alembic upgrade head
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
-      && gunicorn -w 3 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app'
+      && gunicorn -w 1 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app'
   db:
     platform: linux/amd64
     image: postgres:latest
