@@ -9,7 +9,7 @@ services:
     platform: linux/amd64
     build: .
     ports:
-      - '3000:3000'
+      - '3000:8000'
     depends_on:
       - db
     volumes:
@@ -29,7 +29,8 @@ services:
     entrypoint: >
       /bin/sh -c 'sleep 1
       && python3 -m alembic upgrade head
-      && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml'
+      && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
+      && gunicorn -w 3 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app'
   db:
     platform: linux/amd64
     image: postgres:latest
