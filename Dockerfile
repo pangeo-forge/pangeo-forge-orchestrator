@@ -18,5 +18,7 @@ COPY --from=0 /go/bin/sops /usr/local/bin/sops
 RUN apt-get update && apt-get -y install curl python3 python3-pip
 
 COPY requirements.txt ./
-
 RUN pip install -r requirements.txt
+
+COPY . /opt/app
+WORKDIR /opt/app
