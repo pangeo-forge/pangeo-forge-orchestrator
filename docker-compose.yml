@@ -12,14 +12,24 @@ services:
       - '3000:3000'
     depends_on:
       - db
+    volumes:
+      # See SOPS_AGE_KEY_FILE in `environment:` below for details.
+      - ${PWD}/key.txt:/var/sops/key.txt
     environment:
       # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
       # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
-    # Sleep 5 to hopefully allow postgres enought time to start. There are some more involved
+      PANGEO_FORGE_DEPLOYMENT: 'dev'
+      # In Heroku, we use the SOPS_AGE_KEY variable instead, for description of both options, see:
+      # https://github.com/mozilla/sops#22encrypting-using-age
+      SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
+    # Sleep 1 to hopefully allow postgres enought time to start. There are some more involved
     # solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
     # this is just for testing, I think this should be enough, and is much lighter weight.
-    entrypoint: ['/bin/sh', '-c', 'sleep 5 && python3 -m alembic upgrade head']
+    entrypoint: >
+      /bin/sh -c 'sleep 1
+      && python3 -m alembic upgrade head
+      && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml'
   db:
     platform: linux/amd64
     image: postgres:latest
