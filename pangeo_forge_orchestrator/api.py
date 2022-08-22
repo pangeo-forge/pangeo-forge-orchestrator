@@ -15,7 +15,7 @@ from .security import create_admin_api_key
 
 app = FastAPI(**app_metadata)
 
-if os.environ.get("PANGEO_FORGE_DEPLOYMENT", False):
+if os.environ.get("PANGEO_FORGE_DEPLOYMENT") in ("prod", "staging"):
     app.add_middleware(HTTPSRedirectMiddleware)
 
 origins = ["*"]  # is this dangerous? I can't see why.

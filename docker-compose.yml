@@ -36,7 +36,7 @@ services:
       /bin/sh -c 'sleep 1
       && python3 -m alembic upgrade head
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
-      && gunicorn -w 1 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app'
+      && gunicorn -w 1 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app -b 0.0.0.0:8000'
   db:
     platform: linux/amd64
     image: postgres:latest
