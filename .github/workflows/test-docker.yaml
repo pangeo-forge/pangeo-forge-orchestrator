@@ -1,6 +1,6 @@
 # Compare: https://github.com/peter-evans/docker-compose-actions-workflow
 
-name: Test on Docker
+name: Tests
 on:
   push:
     branches:
@@ -17,6 +17,7 @@ on:
 
 jobs:
   test:
+    name: Docker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
