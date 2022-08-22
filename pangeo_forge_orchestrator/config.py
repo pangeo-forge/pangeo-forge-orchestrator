@@ -42,4 +42,6 @@ def get_config() -> Config:
     config_path = get_config_path()
     with open(config_path) as c:
         kw = yaml.safe_load(c)
+        if "sops" in kw:
+            raise ValueError(f"Config file {config_path} is encrypted. Decrypt, then restart.")
         return Config(**kw)
