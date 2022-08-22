@@ -32,6 +32,7 @@ services:
     #     - docker-compose spec requires double $$ for string interpolation (vs. single $)
     #     - Only running one gunicorn worker here (as opposed to 4 in production). Specifying more
     #       than 1 worker fails in this context.
+    #     - We bind to 0.0.0.0 (as opposed to default 127.0.0.1) to make port binding to host work
     entrypoint: >
       /bin/sh -c 'sleep 1
       && python3 -m alembic upgrade head

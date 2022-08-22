@@ -1,0 +1,33 @@
+# Compare: https://github.com/peter-evans/docker-compose-actions-workflow
+
+name: Test on Docker
+on:
+  push:
+    branches:
+      - main
+      - prod
+    paths-ignore:
+      - 'docs/**'
+  pull_request:
+    branches:
+      - main
+      - prod
+    paths-ignore:
+      - 'docs/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build the stack
+        run: docker-compose build
+      - name: Test
+        run: |
+          docker-compose run \
+          --entrypoint="/bin/sh -c 'sleep 1
+            && python3 -m alembic upgrade head
+            && apt-get install -y git
+            && pip install \".[dev]\"
+            && pytest -vx'" \
+          web

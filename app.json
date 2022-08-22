@@ -9,14 +9,5 @@
     {
       "plan": "heroku-postgresql:standard-0"
     }
-  ],
-  "environments": {
-    "test": {
-      "addons": ["heroku-postgresql:in-dyno"],
-      "scripts": {
-        "test-setup": "pip install -e '.[dev]' && python -m alembic upgrade head",
-        "test": "pytest -vs tests"
-      }
-    }
-  }
+  ]
 }
