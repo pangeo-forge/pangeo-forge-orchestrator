@@ -22,13 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build the stack
-        run: docker-compose up -d
+        run: docker-compose build
       - name: Test
         run: >
-          docker-compose run \
+          docker-compose run
           --entrypoint="/bin/sh -c 'sleep 1
-            && python3 -m alembic upgrade head
-            && apt-get install -y git
-            && pip install \".[dev]\"
-            && pytest -vx'" \
+          && python3 -m alembic upgrade head
+          && apt-get install -y git
+          && pip install \".[dev]\"
+          && pytest -vx'"
           web
