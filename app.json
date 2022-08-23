@@ -9,5 +9,12 @@
     {
       "plan": "heroku-postgresql:standard-0"
     }
-  ]
+  ],
+  "environments": {
+    "review": {
+      "env": {
+        "PANGEO_FORGE_DEPLOYMENT": "review"
+      }
+    }
+  }
 }

@@ -19,7 +19,7 @@ services:
       # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
       # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
-      PANGEO_FORGE_DEPLOYMENT: 'dev'
+      PANGEO_FORGE_DEPLOYMENT: 'local'
       # In Heroku, we use the SOPS_AGE_KEY variable instead, for description of both options, see:
       # https://github.com/mozilla/sops#22encrypting-using-age
       SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
