@@ -20,8 +20,53 @@ if not os.path.exists(CACHEDIR):
     os.mkdir(CACHEDIR)
 
 
-def main(smee_proxy_url):
-    """ """
+def get_app_name_and_desc(github_username, deployment, pr_number=None):
+    """For a given github_username and deployment type, return a name and description for the app.
+    - ``prod`` deployment is always named ``pangeo-forge`` and can only be created in the
+      pangeo-forge organization (not in a user account).
+    - ``staging`` deployment is always named ``pangeo-forge-staging`` and can only be created
+      in the pangeo-forge organization (not in a user account).
+    - ``review`` deployment is named ``pforge-review-pr-{NUM}`` where NUM is the PR number
+    - ``local`` deployment is named ``pforge-local``. This deployment is a private deployment
+      in the developer's user account, so there isn't a need to specify the name further.
+    """
+
+    if github_username == "pangeo-forge":
+        if deployment in ("review", "local"):
+            raise ValueError(
+                "GitHub Apps for `review` and `local` deployments should not be created in the "
+                "`pangeo-forge` organization. The developer should create these apps in their own "
+                "user account."
+            )
+        github_app_name = "pangeo-forge"  # the name of the production app
+        desc = "The official pangeo-forge github app."
+        if deployment == "staging":
+            github_app_name += "-staging"
+            desc = desc.replace("The", "A staging deployment of the")
+    else:  # this is a developer's user account
+        if deployment in ("prod", "staging"):
+            raise ValueError(
+                "GitHub Apps for `prod` and `staging` deployments should not be created in a "
+                "developer's user account. These apps should only be created within the "
+                "`pangeo-forge` organization."
+            )
+        github_app_name = f"pforge-dev-{deployment}"
+        desc = "A development version of the pangeo-forge github app."
+        if deployment == "review":
+            github_app_name += f"-{pr_number}"
+
+    return github_app_name, desc
+
+
+def main(github_username, deployment, pr_number=None):
+
+    allowed_deployments = ("prod", "staging", "review", "local")
+    if deployment not in allowed_deployments:
+        raise ValueError(f"{deployment =} not in {allowed_deployments =}.")
+    if deployment == "review" and not pr_number:
+        raise ValueError("PR number must be given for review app.")
+
+    app_name, description = get_app_name_and_desc(github_username, deployment, pr_number=pr_number)
 
     # Write the redirect page to disk
     with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
@@ -31,23 +76,17 @@ def main(smee_proxy_url):
     # so the redirect page will be at this address
     redirect_url = f"http://localhost:{PORT}/{REDIRECT}"
 
-    p = urlparse(smee_proxy_url)
-    abbreviated_smee_channel_id = p.path[1:8]
-    proxy_url_without_scheme = p.netloc + p.path
-
     # For manifest parameters docs, see:
     # https://docs.github.com/en/developers/apps/building-github-apps/creating-a-github-app-from-a-manifest#github-app-manifest-parameters
     manifest = dict(
-        name=f"pangeo-forge-dev-{abbreviated_smee_channel_id}",
-        # TODO: Make this url actually work. This will *not* work with Smee, because IIUC Smee only
-        # forwards incoming traffic. To make outgoing traffic queryable, I think we'll need to use
-        # something like Ngrok instead. The reason I've chosen Smee is that you get a persistent
-        # url (i.e. channel) for free. With Ngrok, a persistent url requires a paid plan.
-        url=f"https://pangeo-forge.org/?orchestratorEndpoint={proxy_url_without_scheme}",
-        hook_attributes={"url": smee_proxy_url},
+        name=app_name,
+        url="https://pangeo-forge.org/",  # TODO: Specify this?
+        # NOTE: The hook url is deliberately given as a placeholder here. The real hook url will be
+        # set in a subsequent step. See ``docs/development_guide.md`` for details.
+        hook_attributes={"url": "https://example.com/github/events"},
         redirect_url=redirect_url,
-        callback_urls=["https://example.com/callback"],  # TODO: customize
-        description="A dev instance of the pangeo-forge github app.",
+        callback_urls=["https://example.com/callback"],  # TODO: Customize this.
+        description=description,
         public=False,
         default_events=[
             "issue_comment",
@@ -91,8 +130,7 @@ if __name__ == "__main__":
     if not user_token:
         raise ValueError("Env variable 'GITHUB_PAT' required, but unset. ")
 
-    smee_proxy_url = sys.argv[1]
-    authorize_url = main(smee_proxy_url)
+    authorize_url = main(*sys.argv[1:])
 
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -115,7 +153,7 @@ if __name__ == "__main__":
                 response_json = response.json()
                 app_config = {
                     "id": response_json["id"],
-                    "webhook_url": smee_proxy_url,
+                    "webhook_url": "",
                     "webhook_secret": response_json["webhook_secret"],
                     "private_key": response_json["pem"],
                 }
