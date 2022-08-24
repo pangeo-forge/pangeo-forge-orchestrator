@@ -15,6 +15,7 @@ AUTHORIZE = "authorize.html"
 REDIRECT = "redirect.html"
 PORT = 3000
 AUTHORIZE_URL = f"http://localhost:{PORT}/{AUTHORIZE}"
+PLACEHOLDER_HOOK_URL = "https://example.com/github/events"
 
 if not os.path.exists(CACHEDIR):
     os.mkdir(CACHEDIR)
@@ -76,7 +77,7 @@ def main(github_username, deployment, pr_number=None):
         url="https://pangeo-forge.org/",  # TODO: Specify this?
         # NOTE: The hook url is deliberately given as a placeholder here. The real hook url will be
         # set in a subsequent step. See ``docs/development_guide.md`` for details.
-        hook_attributes={"url": "https://example.com/github/events"},
+        hook_attributes={"url": PLACEHOLDER_HOOK_URL},
         redirect_url=redirect_url,
         callback_urls=["https://example.com/callback"],  # TODO: Customize this.
         description=description,
@@ -165,7 +166,7 @@ if __name__ == "__main__":
                 response_json = response.json()
                 app_config = {
                     "id": response_json["id"],
-                    "webhook_url": "",
+                    "webhook_url": PLACEHOLDER_HOOK_URL,
                     "webhook_secret": response_json["webhook_secret"],
                     "private_key": response_json["pem"],
                 }

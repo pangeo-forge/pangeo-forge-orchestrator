@@ -11,6 +11,8 @@ from setup of a local dev environment, through making your first PR to `pangeo-f
     - [2.1.1 GitHub App](#211-github-app)
     - [2.1.2 FastAPI](#212-fastapi)
   - [2.2 Encrypting & committing creds](#22-encrypting--committing-creds)
+    - [2.2.1 Create an age key](#221-create-an-age-key)
+    - [2.2.2 Encrypt those creds](#222-encrypt-those-creds)
   - [2.3 Database](#23-database)
   - [2.4 The proxy: selection & setup](#24-the-proxy-selection--setup)
   - [2.5 Start the server](#25-start-the-server)
@@ -182,8 +184,65 @@ If you look at `secrets/config.local.yaml` now, you should see that creds have b
 
 ### 2.2 Encrypting & committing creds
 
-Currently, we use the
-[`age` backend](https://github.com/mozilla/sops#encrypting-using-age) for SOPS.
+🥇 Great work! You should now have a `secrets/config.local.yaml` with all the credentials required for your
+`local` deployment. While it is not strictly necessary to commit these credentials to the repo (because they
+are for your local dev environment), this is a good opportunity to practice encrypting credentials (which
+_will_ be required for the `review` deployment later on). Moreover, managing all credentials (including for
+`local` deployment) in a uniform manner simplifies the process.
+
+> ⚠️ If you have not yet made sure that [**pre-commit is installed**](https://pre-commit.com/#quick-start) in
+> your local development environment, now is the time to do so! If you do not install pre-commit,
+> [pre-commit-hook-ensure-sops](https://github.com/yuvipanda/pre-commit-hook-ensure-sops) cannot protect you
+> from accidentally committing unencrypted credentials.
+
+Assuming you have pre-commit installed (really, ☝️ read the warning above if you haven't already 😄), you will
+be protected from committing your (currently unencrypted) credentials:
+
+```console
+$ git commit -m "add local config"
+Ensure secrets are encrypted with sops...................................Failed
+- hook id: sops-encryption
+- exit code: 1
+
+secrets/config.local.yaml: sops metadata key not found in file, is not properly encrypted
+```
+
+#### 2.2.1 Create an age key
+
+Currently, we use the [`age` backend](https://github.com/mozilla/sops#encrypting-using-age) for SOPS.
+To get an `age` encryption key:
+
+1. [Install `age`](https://github.com/FiloSottile/age#installation)
+2. Generate your private/public key pair with `age-keygen -o key.txt`
+3. Your public key will be printed to stdout, and your private key will be saved to `key.txt`
+
+You can keep your private `key.txt` in the repo root; our `.gitignore` prevents it from being committed. Save
+your public key somewhere you'll remember it, and also export it to your local env as `AGE_PUBLIC_KEY`.
+For example:
+
+```console
+$ export AGE_PUBLIC_KEY=age1xvhtwvxklw0zljmj4flnqyqlnq0cudadnenzcv20snwa90nzqylqzqtlsg
+```
+
+#### 2.2.2 Encrypt those creds
+
+1. Install [SOPS](https://github.com/mozilla/sops). The easiest way to do this on Mac is probably
+   [`brew install sops`](https://formulae.brew.sh/formula/sops).
+2. Set the `SOPS_AGE_RECIPIENTS` env var as follows:
+   ```console
+   $ export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt),${AGE_PUBLIC_KEY}
+   ```
+   This will ensure that you will be able to decrypt this file (because `AGE_PUBLIC_KEY` is your public key),
+   and that Pangeo Forge admins (whose public key is stored in `age-recipients.txt`) will also be able to
+   decrypt it.
+3. From the repo root, run:
+   ```console
+   $ sops -e -i secrets/config.local.yaml
+   ```
+   The `-e` indicates `encrypt` and the `-i` is for "in place".
+
+Your credentials are now encrypted! You can commit them to the repo now. We will revisit how to decrypt them
+before [starting the dev server](#25-start-the-server) below.
 
 ## 2.3 Database
 
