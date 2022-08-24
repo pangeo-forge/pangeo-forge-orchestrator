@@ -3,6 +3,8 @@
 This combination guide and step-by-step tutorial walks through the development process
 from setup of a local dev environment, through making your first PR to `pangeo-forge-orchestrator`.
 
+**Table of Contents**
+
 - [1 Deployment Lifecycle](#1-deployment-lifecycle)
 - [2 Getting started: the local deployment](#2-getting-started-the-local-deployment)
   - [2.1 Generating credentials](#21-generating-credentials)
@@ -85,7 +87,8 @@ in your local development environment.
 ## 2.1 Generating credentials
 
 Before starting work on your PR, you will need a local deployment of the application to work with. In order to
-run this deployment, you will need to generate credentials for a new GitHub App instance, as well as for FastAPI.
+run this deployment, you will need to generate credentials for a new GitHub App instance, as well as for
+FastAPI.
 
 ### 2.1.1 GitHub App
 
@@ -165,7 +168,17 @@ to generating FastAPI credentials.
 
 ### 2.1.2 FastAPI
 
-In addition to GitHub App credentials, each deployment requires FastAPI credentials. These are the
+In addition to GitHub App credentials, each deployment requires FastAPI credentials. These are the creds that
+are used to authorize protected actions on such as creating, patching, and deleting entries in the database.
+
+To generate these credentials for the `local` deployment, from the repo root, run:
+
+```console
+$ python3 scripts/generate_api_key.py local
+```
+
+If you look at `secrets/config.local.yaml` now, you should see that creds have been added to it under the
+`fastapi` heading.
 
 ### 2.2 Encrypting & committing creds
 

@@ -135,6 +135,8 @@ if __name__ == "__main__":
         raise ValueError("PR number must be given for review app.")
 
     creds_outpath = REPO_ROOT / f"secrets/config.{deployment}.yaml"
+    if os.path.exists(creds_outpath):
+        raise ValueError(f"{creds_outpath} already exists. Delete this file to continue.")
 
     # Write the redirect page to disk
     with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
