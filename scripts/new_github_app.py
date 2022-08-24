@@ -10,11 +10,11 @@ import requests  # type: ignore
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CREDS_OUTPATH = REPO_ROOT / "secrets/config.dev.yaml"
 CACHEDIR = REPO_ROOT / ".github_app_manifest_flow"
 AUTHORIZE = "authorize.html"
 REDIRECT = "redirect.html"
 PORT = 3000
+AUTHORIZE_URL = f"http://localhost:{PORT}/{AUTHORIZE}"
 
 if not os.path.exists(CACHEDIR):
     os.mkdir(CACHEDIR)
@@ -26,9 +26,10 @@ def get_app_name_and_desc(github_username, deployment, pr_number=None):
       pangeo-forge organization (not in a user account).
     - ``staging`` deployment is always named ``pangeo-forge-staging`` and can only be created
       in the pangeo-forge organization (not in a user account).
-    - ``review`` deployment is named ``pforge-review-pr-{NUM}`` where NUM is the PR number
-    - ``local`` deployment is named ``pforge-local``. This deployment is a private deployment
-      in the developer's user account, so there isn't a need to specify the name further.
+    - ``review`` deployment is named ``pforge-review-pr-{pr_number}`` where pr_number is the
+      number of the PR on ``pangeo-forge-orchestrator`` from which this review app is deployed.
+    - ``local`` deployment is named ``pforge-local-{github_username}``. This deployment is a
+      private deployment in the developer's user account.
     """
 
     if github_username == "pangeo-forge":
@@ -50,27 +51,19 @@ def get_app_name_and_desc(github_username, deployment, pr_number=None):
                 "developer's user account. These apps should only be created within the "
                 "`pangeo-forge` organization."
             )
-        github_app_name = f"pforge-dev-{deployment}"
+        github_app_name = f"pforge-{deployment}"
         desc = "A development version of the pangeo-forge github app."
         if deployment == "review":
             github_app_name += f"-{pr_number}"
+        elif deployment == "local":
+            github_app_name += f"-{github_username}"
 
     return github_app_name, desc
 
 
 def main(github_username, deployment, pr_number=None):
 
-    allowed_deployments = ("prod", "staging", "review", "local")
-    if deployment not in allowed_deployments:
-        raise ValueError(f"{deployment =} not in {allowed_deployments =}.")
-    if deployment == "review" and not pr_number:
-        raise ValueError("PR number must be given for review app.")
-
     app_name, description = get_app_name_and_desc(github_username, deployment, pr_number=pr_number)
-
-    # Write the redirect page to disk
-    with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
-        f.write(f"<html>Authorization complete! Creds stored in <b>{CREDS_OUTPATH}</b></html>")
 
     # We're going to serve from the `CACHEDIR` as base,
     # so the redirect page will be at this address
@@ -121,16 +114,33 @@ def main(github_username, deployment, pr_number=None):
     with open(f"{CACHEDIR}/{AUTHORIZE}", "w") as f:
         f.write(content)
 
-    return f"http://localhost:{PORT}/{AUTHORIZE}"
-
 
 if __name__ == "__main__":
 
     user_token = os.environ.get("GITHUB_PAT", None)
     if not user_token:
-        raise ValueError("Env variable 'GITHUB_PAT' required, but unset. ")
+        raise ValueError("Env variable 'GITHUB_PAT' required, but unset.")
 
-    authorize_url = main(*sys.argv[1:])
+    args = sys.argv[1:]
+    # args should be passed as GITHUB_USERNAME, DEPLOYMENT then [optionally] PR_NUMBER
+    # it would be more robust to enforce/document this with argparse or similar, but moving
+    # quickly now for a the first draft.
+    deployment = args[1]
+    allowed_deployments = ("prod", "staging", "review", "local")
+    if deployment not in allowed_deployments:
+        raise ValueError(f"{deployment =} not in {allowed_deployments =}.")
+
+    pr_number = args[2] if len(args) == 3 else None
+    if deployment == "review" and not pr_number:
+        raise ValueError("PR number must be given for review app.")
+
+    creds_outpath = REPO_ROOT / f"secrets/config.{deployment}.yaml"
+
+    # Write the redirect page to disk
+    with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
+        f.write(f"<html>Authorization complete! Creds stored in <b>{creds_outpath}</b></html>")
+
+    main(*sys.argv[1:])
 
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
@@ -157,17 +167,17 @@ if __name__ == "__main__":
                     "webhook_secret": response_json["webhook_secret"],
                     "private_key": response_json["pem"],
                 }
-                if os.path.exists(CREDS_OUTPATH):
-                    with open(CREDS_OUTPATH) as c:
+                if os.path.exists(creds_outpath):
+                    with open(creds_outpath) as c:
                         creds = yaml.safe_load(c)
                 else:
                     creds = {}
-                with open(CREDS_OUTPATH, "w") as f:
+                with open(creds_outpath, "w") as f:
                     creds["github_app"] = app_config
                     yaml.dump(creds, f)
 
             return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print("To authorize a new dev app, navigate to", authorize_url)
+        print("To authorize a new dev app, navigate to", AUTHORIZE_URL)
         httpd.serve_forever()
