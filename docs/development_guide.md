@@ -246,11 +246,31 @@ before [starting the dev server](#25-start-the-server) below.
 
 ## 2.3 Database
 
+You will not be able to start your `local` dev server without first setting the `DATABASE_URL` env variable,
+which tells the application where to connect to the database.
+
+By far the easiest way to do this is by using a sqlite database, as follows:
+
+```console
+$ export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+```
+
+The file `database.sqlite` does not need to exist before you start the application; the application will
+create it for you on start-up. Note that of the four deployments described in the
+[Deployment Lifecycle](#1-deployment-lifecycle) section above, the `local` deployment is the only once which
+can use sqlite. All of the others use postgres:
+
 |          | local | review | staging | prod |
 | -------- | ----- | ------ | ------- | ---- |
 | sqlite   | ✅    | ✖️     | ✖️      | ✖️   |
 | postgres | ✅    | ✅     | ✅      | ✅   |
 
+As noted by this table, the `local` deployment _can_ also run with postgres. This may be useful for
+debugging issues related to postgres specifically. (The sqlite and postgres idioms, while similar, are
+different enough that code developed _only_ against sqlite can sometimes fail against postgres.)
+
+> **TODO**: Move postgres setup documentation from top level README to here? Or otherwise link to it.
+
 # 2.4 The proxy: selection & setup
 
-## 2.5 Start the server
+# 2.5 Start the server
