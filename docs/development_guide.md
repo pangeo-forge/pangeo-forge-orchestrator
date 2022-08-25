@@ -15,6 +15,8 @@ from setup of a local dev environment, through making your first PR to `pangeo-f
     - [2.2.2 Encrypt those creds](#222-encrypt-those-creds)
   - [2.3 Database](#23-database)
   - [2.4 The proxy: selection & setup](#24-the-proxy-selection--setup)
+    - [2.4.1 smee vs. ngrok](#241-smee-vs-ngrok)
+    - [2.4.2 Update Github App's webhook url](#242-update-github-apps-webhook-url)
   - [2.5 Start the server](#25-start-the-server)
 - [3 Sending payloads to `local` deployment]()
   - [3.1 Creating a mock feedstock repo on GitHub]()
@@ -85,6 +87,30 @@ reason, please always make sure that [**pre-commit is installed**](https://pre-c
 in your local development environment.
 
 # 2 Getting started: the local deployment
+
+The following sequence diagram illustrates the `local` development environment we will now set up:
+
+```mermaid
+sequenceDiagram
+    Feedstock Repo-->>GitHub App: event
+    GitHub App-->>Proxy Service: webhook
+    Proxy Service-->>FastAPI: webhook
+    FastAPI->>Database: records event
+    FastAPI->>GitHub App: authenticates as
+    GitHub App->>Feedstock Repo: to take action
+```
+
+In prose, we could describe this sequence as follows: When an event occurs on a **Feedstock Repo** on
+GitHub, it is registered by the **GitHub App**(s) installed on that repo. The GitHub App(s) post
+information about that event to the **Proxy Service** as a webhook, which forwards those webhooks to
+the (locally running) **FastAPI** instance. The FastAPI instance records that event in the database, and
+then _authenticates as_ the **GitHub App** to _take an action_ in response to the event on the
+**Feedstock Repo**.
+
+> This flow is almost identical to that of the other deployments, with the exception of the Proxy Service,
+> which is unique to the `local` deployment.
+
+In what follows, we will work through all of the steps necessary for setting up this development environment.
 
 ## 2.1 Generating credentials
 
@@ -272,5 +298,60 @@ different enough that code developed _only_ against sqlite can sometimes fail ag
 > **TODO**: Move postgres setup documentation from top level README to here? Or otherwise link to it.
 
 # 2.4 The proxy: selection & setup
+
+## 2.4.1 smee vs. ngrok
+
+Next, you will need to start a new proxy for your local application instance. Two choices are:
+
+| Proxy service     | ✅ Pros                                                                                 | ❌ Cons                                                              |
+| ----------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| https://smee.io   | <li>Light weight</li><li>Faster to setup</li><li>Persistent url without paid plan</li>  | No birectional communication (only forwards webhooks).               |
+| https://ngrok.com | Birectional communication (forwards webhooks _and_ allows querying _any_ route on app). | <li>Slightly more setup</li><li>No persistent urls on free plan</li> |
+
+Both of these services are endorsed by the official GitHub docs. The choice may be partially stylistic, and
+partially dependent on what aspect of the the application you are planning to work on. Either way, you will need
+to:
+
+- Generate a proxy url via your selected service
+- Install and start the local client service for your proxy url
+
+With smee, your proxy url will look something like: https://smee.io/pGKLaDu6CJwiBjJU. Smee is _only a webhook
+forwarding service_, therefore you do not specify the `/github/hooks/` route in the proxy url; this route is
+specified by the `--path` option of the `smee` client.
+
+With ngrok, your proxy url may look something like: https://28ae-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io/github/hooks/.
+Ngrok exposes _your entire locally running app_ over the public internet. You _do_, therefore, need to append
+the `/github/hooks/` route to this url, because routes on this service correspond to the actual routes on your
+app.
+
+## 2.4.2 Update GitHub App's webhook url
+
+We will need `pangeo-forge-orchestrator` installed to run the final setup script below. If you have not done so
+already, from the repo root, run:
+
+```console
+$ pip install -e ".[dev]"
+```
+
+Running the next script will require your GitHub App credentials, which if you've been following this guide
+sequentially are still encrypted. To decrypt them, from the repo root, run:
+
+```console
+$ SOPS_AGE_KEY=$(cat key.txt) sops -d -i secrets/config.local.yaml
+```
+
+Then, using the proxy url you generated in [section 2.4.1](#241-smee-vs-ngrok) as `PROXY_URL`, run:
+
+```console
+$ python3 scripts/update_hook_url.py local $PROXY_URL
+```
+
+If this script succeeds, you will get a response to stdout such as:
+
+```
+200 {"content_type":"json","secret":"********","url":"https://smee.io/pGKLaDu6CJwiBjJU","insecure_ssl":"0"}
+```
+
+where the `"url"` field should be updated to refect the `PROXY_URL` you passed to the script.
 
 # 2.5 Start the server

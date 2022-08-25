@@ -166,7 +166,6 @@ if __name__ == "__main__":
                 response_json = response.json()
                 app_config = {
                     "id": response_json["id"],
-                    "webhook_url": PLACEHOLDER_HOOK_URL,
                     "webhook_secret": response_json["webhook_secret"],
                     "private_key": response_json["pem"],
                 }
