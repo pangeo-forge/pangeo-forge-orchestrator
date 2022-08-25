@@ -20,14 +20,15 @@ through making your first PR to `pangeo-forge-orchestrator`.
       - [Option 1: with smee](#2421-option-1-with-smee)
       - [Option 2: with ngrok](#2422-option-2-with-ngrok)
     - [2.4.2 Update Github App's webhook url](#242-update-github-apps-webhook-url)
-  - [2.5 Start the server](#25-start-the-server)
-- [3 Sending payloads to `local` deployment]()
+  - [2.5 Interlude: Recap](#25-interlude-recap)
+  - [2.6 Start the FastAPI server](#25-start-the-fastapi-server)
+- [3 Triggering payloads]()
   - [3.1 Creating a mock feedstock repo on GitHub]()
     - [3.1.1 Mocking pangeo-forge/staged-recipes]()
     - [3.1.2 Mocking pangeo-forge/dataset-feedstock]()
-  - [3.2 Installing the `local` app in a mock feedstock]()
-  - [3.3 Triggering events from the mock feedstock]()
-  - [3.4 Debugging event webhooks]()
+  - [3.2 Installing GitHub App in a mock feedstock]()
+  - [3.3 Initializing the database]()
+  - [3.4 Triggering a payload]()
 - [4 Adding features: design principles]()
   - [4.1]()
   - [4.2]()
@@ -180,7 +181,7 @@ Clicking the green button will create the `local` development app, and redirect 
 
 ![GitHub App creds created example](/docs/_static/creds-created-example.png)
 
-where `/workdir` where will be replaced with the path in which your clone of `pangeo-forge-orchestrator` is stored.
+where `/workdir` will be replaced with the path in which your clone of `pangeo-forge-orchestrator` is stored.
 
 🎉 Congratulations, you've created the GitHub App instance for your `local` deployment.
 Navigating to https://github.com/settings/apps should now show you something like this (except
@@ -387,7 +388,7 @@ the `/github/hooks/` route to this url, because routes on this service correspon
 app. You would therefore assign your proxy url as, e.g.:
 
 ```console
-$ export PROXY_URL=https://28ae-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io/github/hooks/
+$ export PROXY_URL=https://d584-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io/github/hooks/
 ```
 
 > ☝️ See how we've appended `/github/hooks/` to the ngrok proxy url, but not the smee url? That's important!
@@ -434,4 +435,66 @@ where the `"url"` field should be updated to refect the `PROXY_URL` you passed t
 🎊 Your GitHub App will now POST webhooks to the specified proxy url. You can change your proxy url at any
 time. If you do, repeat this step to assign the new url to your GitHub App.
 
-# 2.5 Start the server
+# 2.5 Interlude: Recap
+
+To recap, if you've followed this document sequentially, you should now have:
+
+<ul style="list-style-type:none">
+  <li>☑️ A <code>secrets/config.local.yaml</code> file with creds for a GitHub App & for FastAPI</li>
+  <li>
+    ☑️ An age private/public key pair, and the ability to use it, via SOPS, to encrypt and decrypt
+    your creds
+  </li>
+  <li>☑️ pre-commit installed, to prevent you from accidentally committing unencrypted secrets</li>
+  <li>☑️ <code>DATABASE_URL</code> env variable set</li>
+  <li>☑️ Proxy client running in a terminal window</li>
+  <li>☑️ Webhook url for your GitHub App set to the url associated with your proxy client</li>
+</ul>
+
+With all of this is in place, it's time to start your local FastAPI server!
+
+# 2.6 Start the FastAPI server
+
+In addition to the pre-requistes listed in the [recap](#25-interlude-recap) above, before starting the FastAPI server, you'll need to ensure that:
+
+1. Your creds are decrypted:
+
+   ```console
+   $ SOPS_AGE_KEY=$(cat key.txt) sops -d -i secrets/config.local.yaml
+   ```
+
+2. You have `pangeo-forge-orchestrator` installed:
+   ```console
+   $ pip install -e ".[dev]"
+   ```
+
+> Both of these commands are run from the repo root. If you've been following this tutorial sequentially, you
+> will have already done both of these things. You may be referring back to this section out-of-order, however,
+> in which case this reminder may be helpful.
+
+To start the FastAPI dev server in reload mode (recommended), from the repo root, run:
+
+```console
+$ uvicorn pangeo_forge_orchestrator.api:app --reload --reload-dir=`pwd`/pangeo_forge_orchestrator
+```
+
+You should see something like:
+
+```
+INFO:     Will watch for changes in these directories: ['/workdir/pangeo-forge-orchestrator/pangeo_forge_orchestrator']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [57722] using StatReload
+INFO:     Started server process [57727]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+```
+
+where `/workdir` will be replaced with the path in which your clone of `pangeo-forge-orchestrator` is stored.
+
+Make sure that this server is running on localhost port `8000` (as shown in the example above). If it's run
+on a different port, the [proxy client we started above](#242-start-the-proxy) will not forward webhooks to
+it.
+
+# Triggering payloads
+
+🌟 Congratulations! You now have a
