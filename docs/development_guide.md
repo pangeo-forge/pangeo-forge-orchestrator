@@ -6,7 +6,7 @@ through making your first PR to `pangeo-forge-orchestrator`.
 **Table of Contents**
 
 - [1 Deployment Lifecycle](#1-deployment-lifecycle)
-- [2 Getting started: the local deployment](#2-getting-started-the-local-deployment)
+- [2 Getting started: the `local` deployment](#2-getting-started-the-local-deployment)
   - [2.1 Generating credentials](#21-generating-credentials)
     - [2.1.1 GitHub App](#211-github-app)
     - [2.1.2 FastAPI](#212-fastapi)
@@ -44,18 +44,22 @@ through making your first PR to `pangeo-forge-orchestrator`.
   - [4.4 Never import a recipe (or read meta.yaml) directly]()
   - [4.5 Upstream recipe handling features to pangeo-forge-runner]()
   - [4.6 ]()
-- [5 Next steps: the `review` deployment]()
-  - [5.1 Open a PR]()
-  - [5.2 Create, encrypt, and commit `review` credentials]()
-- [6 Before merge: automated testing]()
-  - [6.1 Mocking payloads]()
-  - [6.2 Local run]()
-    - [6.2.1 sqlite]()
-    - [6.3.2 postgres]()
-  - [6.3 Containerized run]()
-    - [6.3.1 Starting the containerized services]()
-    - [6.3.2 Testing on the containerized services]()
-- [7 Finally: from `staging` to `prod`]()
+- [5 Interlude: Calling the GitHub API directly, as your GitHub App](#5-interlude-calling-the-github-api-directly-as-your-github-app)
+  - [5.1 Get a JWT](#51-get-a-jwt)
+  - [5.2 Get an installation access token](#52-get-an-installation-access-token)
+  - [5.3 Call the API](#53-call-the-api)
+- [6 Next steps: the `review` deployment](#5-next-steps-the-review-deployment)
+  - [6.1 Open a PR]()
+  - [6.2 Create, encrypt, and commit `review` credentials]()
+- [7 Before merge: automated testing]()
+  - [7.1 Mocking payloads]()
+  - [7.2 Local run]()
+    - [7.2.1 sqlite]()
+    - [7.3.2 postgres]()
+  - [7.3 Containerized run]()
+    - [7.3.1 Starting the containerized services]()
+    - [7.3.2 Testing on the containerized services]()
+- [8 Finally: from `staging` to `prod`]()
 
 # 1 Deployment Lifecycle
 
@@ -757,3 +761,38 @@ More detail on implementation of background tasks (including interaction with th
 in the diagram above) is provided in the next section.
 
 # 4 Adding features: design principles
+
+# 5 Interlude: Calling the GitHub API directly, as your GitHub App
+
+Situations may arise in which you want to call the GitHup API directly, authenticated as your
+dev app. An example would be: you've been working on a feature which creates a check run, and then
+you want to manually edit that check run. (Perhaps it's been left in an "in-progress" state.) Users
+(even the owners of an app instance) can't patch check runs created by the app, so you'll need to
+call the GitHub API _as the app_. How do we do this?
+
+The good news is that we can use the convenience functions baked into `pangeo_forge_orchestrator`
+to help us in retreiving the necessary credentials.
+
+### 5.1 Get a JWT
+
+```python
+from pangeo_forge_orchestrator.routers.github_app import get_jwt
+get_jwt()  # --> returns a JWT for your dev app
+```
+
+### 5.2 Get an installation access token
+
+```python
+import aiohttp
+from gidgethub.aiohttp import GitHubAPI
+from pangeo_forge_orchestrator.routers.github_app import get_access_token
+
+async with aiohttp.ClientSession() as session:
+     gh = GitHubAPI(session, "your-github-username")
+     token = await get_access_token(gh)
+     print(token)  # --> prints an installation access token for your dev app
+```
+
+### 5.3 Call the API
+
+# 6 Next steps: the `review` deployment
