@@ -24,15 +24,17 @@ if __name__ == "__main__":
         data=json.dumps({"spec": spec}),
     )
     feedstock_response.raise_for_status()
-    bakery_response = requests.post(
-        f"{app_address}/bakeries/",
-        headers=headers,
-        data=json.dumps(
-            {
-                "name": "local-test-bakery",
-                "description": "A great bakery.",
-                "region": "local",
-            },
-        ),
-    )
-    bakery_response.raise_for_status()
+    bakery_exists = requests.get(f"{app_address}/bakeries/").json()
+    if not bakery_exists:  # json will be a falsy empty list if no bakeries exist in database
+        bakery_response = requests.post(
+            f"{app_address}/bakeries/",
+            headers=headers,
+            data=json.dumps(
+                {
+                    "name": "local-test-bakery",
+                    "description": "A great bakery.",
+                    "region": "local",
+                },
+            ),
+        )
+        bakery_response.raise_for_status()
