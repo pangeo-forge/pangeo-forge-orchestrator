@@ -1,7 +1,7 @@
 # Development Guide
 
-This combination guide and step-by-step tutorial walks through the development process
-from setup of a local dev environment, through making your first PR to `pangeo-forge-orchestrator`.
+This combination guide and tutorial walks through setup of a local dev environment,
+through making your first PR to `pangeo-forge-orchestrator`.
 
 **Table of Contents**
 
@@ -16,6 +16,9 @@ from setup of a local dev environment, through making your first PR to `pangeo-f
   - [2.3 Database](#23-database)
   - [2.4 The proxy: selection & setup](#24-the-proxy-selection--setup)
     - [2.4.1 smee vs. ngrok](#241-smee-vs-ngrok)
+    - [2.4.2 Start the proxy](#242-start-the-proxy)
+      - [Option 1: with smee](#2421-option-1-with-smee)
+      - [Option 2: with ngrok](#2422-option-2-with-ngrok)
     - [2.4.2 Update Github App's webhook url](#242-update-github-apps-webhook-url)
   - [2.5 Start the server](#25-start-the-server)
 - [3 Sending payloads to `local` deployment]()
@@ -101,7 +104,7 @@ sequenceDiagram
 ```
 
 In prose, we could describe this sequence as follows: When an event occurs on a **Feedstock Repo** on
-GitHub, it is registered by the **GitHub App**(s) installed on that repo. The GitHub App(s) post
+GitHub, it is seen by the **GitHub App**(s) installed on that repo. The GitHub App(s) post
 information about that event to the **Proxy Service** as a webhook, which forwards those webhooks to
 the (locally running) **FastAPI** instance. The FastAPI instance records that event in the database, and
 then _authenticates as_ the **GitHub App** to _take an action_ in response to the event on the
@@ -128,8 +131,8 @@ GitHub Apps associated with their `local` and `review` deployments.
 
 > **Note**: You may be wondering, if this is a `local` deployment, why do I need a _real_ GitHub App at all?
 > Shouldn't the `local` deployment run entirely _locally_ on my own machine? This a good question. The answer is
-> that while the `pangeo-forge-orchestrator` instance will run locally, the easiest and most reliable way to
-> generate webhook inputs for your local instance is to connect it (via a "tunnel" or proxy) to a
+> that while the `pangeo-forge-orchestrator` FastAPI instance will run locally, the easiest and most reliable
+> way to generate webhook inputs for your local instance is to connect it (via a "tunnel" or proxy) to a
 > corresponding _real_ GitHub App. Without doing this, we must generate mock payloads ourselves, which is a
 > time-consuming and potentially error-prone process (insofar as our mock payloads may not perfectly match
 > those delivered by a real GitHub event). Ultimately, all features of the `pangeo-forge-orchestrator` app
@@ -315,14 +318,88 @@ to:
 - Generate a proxy url via your selected service
 - Install and start the local client service for your proxy url
 
-With smee, your proxy url will look something like: https://smee.io/pGKLaDu6CJwiBjJU. Smee is _only a webhook
-forwarding service_, therefore you do not specify the `/github/hooks/` route in the proxy url; this route is
-specified by the `--path` option of the `smee` client.
+> **Note**: In smee, these ☝️ are two separate steps. In ngrok (with the free plan), starting the client
+> generates the proxl url, so these two steps are combined into one. We'll discuss this in the next section.
 
-With ngrok, your proxy url may look something like: https://28ae-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io/github/hooks/.
+## 2.4.2 Start the proxy
+
+### 2.4.2.1 Option 1: with smee
+
+Navigate to https://smee.io/ and click **Start a new channel**. Smee will generate a your proxy url for you,
+which will look something like this: https://smee.io/pGKLaDu6CJwiBjJU.
+
+> Smee is _only a webhook forwarding service_, therefore you do not append the `/github/hooks/` route to the proxy url; this route is specified by the `--path` option when starting the `smee` client.
+
+Assign your smee proxy as, e.g.:
+
+```console
+$ export PROXY_URL=https://smee.io/pGKLaDu6CJwiBjJU
+```
+
+Navigating to your smee proxy url in a browser will provide you instructions for installing the smee command
+line utility. Install it, then start the smee client with:
+
+```console
+$ smee -u $PROXY_URL -p 8000 --path /github/hooks/
+```
+
+where `-p` is the localhost port you plan to serve FastAPI on, and `--path` is the route to which GitHub
+App webhooks are posted.
+
+> Note: I believe smee sends a ping test to the url when the client starts? If so this ping test will fail
+> because we have not finished setting up our dev environment. But we don't need to worry about this for now.
+> It's just a ping test, which we can repeat later once everything is setup and running.
+
+### 2.4.2.2 Option 2: with ngrok
+
+To use ngrok, follow the instructions in https://ngrok.com/docs/getting-started to install and authenticate
+your ngrok account. Then start a local ngrok client with:
+
+```console
+$ ngrok http 8000
+```
+
+You should see a terminal window such as:
+
+```console
+ngrok                                                                                               (Ctrl+C to quit)
+
+Hello World! https://ngrok.com/next-generation
+
+Session Status                online
+Account                       Charles Stern (Plan: Free)
+Update                        update available (version 3.0.7, Ctrl-U to update)
+Version                       3.0.6
+Region                        United States (us)
+Latency                       -
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    https://d584-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io -> http://localhost:8000
+
+Connections                   ttl     opn     rt1     rt5     p50     p90
+                              0       0       0.00    0.00    0.00    0.00
+```
+
+the long url listed after `Forwarding` is your proxy url. In this case, it would be :
+https://d584-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io.
+
 Ngrok exposes _your entire locally running app_ over the public internet. You _do_, therefore, need to append
 the `/github/hooks/` route to this url, because routes on this service correspond to the actual routes on your
-app.
+app. You would therefore assign your proxy url as, e.g.:
+
+```console
+$ export PROXY_URL=https://28ae-2603-8001-7403-8c5d-65ac-51ae-6801-5986.ngrok.io/github/hooks/
+```
+
+> ☝️ See how we've appended `/github/hooks/` to the ngrok proxy url, but not the smee url? That's important!
+> Overlooking this difference in how smee & ngrok behave can lead to confusion and a broken dev environment.
+
+Ngrok urls do not persist between client sessions on the free plan, so closing this window will reset your
+proxy url. We need this url to be persistent at least within a single development session, therefore leave
+ngrok running for the duration of your development session.
+
+> The lack of persitent urls on ngrok's free plan makes it a slightly higher friction choice. The support
+> for bidirection communication (POSTing webhooks, and GETing data back) is very useful, however, and may be
+> worth the friction for certain development tasks.
 
 ## 2.4.2 Update GitHub App's webhook url
 
@@ -353,5 +430,8 @@ If this script succeeds, you will get a response to stdout such as:
 ```
 
 where the `"url"` field should be updated to refect the `PROXY_URL` you passed to the script.
+
+🎊 Your GitHub App will now POST webhooks to the specified proxy url. You can change your proxy url at any
+time. If you do, repeat this step to assign the new url to your GitHub App.
 
 # 2.5 Start the server
