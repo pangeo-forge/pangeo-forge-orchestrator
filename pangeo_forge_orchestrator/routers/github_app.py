@@ -527,26 +527,35 @@ async def run_recipe_test(
 
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     # TODO: Customize these values based on meta.yaml
+    GCS_BUCKET = "pfcsb-bucket"  # TODO: variablize/change
+    # TODO: make this identifier better
+    path_identifier = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
     config = {
         "Bake": {
             "prune": True,
-            "bakery_class": "pangeo_forge_runner.bakery.local.LocalDirectBakery",
+            "bakery_class": "pangeo_forge_runner.bakery.dataflow.DataflowBakery",
             "recipe_id": recipe_run.recipe_id,
         },
+        "DataflowBakery": {
+            # TODO: probably use a different temp location for production
+            "temp_gcs_location": "gs://beam-dataflow-test/temp",
+        },
+        # TODO: Use OSN for target
         "TargetStorage": {
-            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
-            # "fsspec_args": fsspec_args,
-            "root_path": "tmp/target/",
+            "fsspec_class": "gcsfs.GCSFileSystem",
+            "fsspec_args": dict(bucket=GCS_BUCKET),
+            # TODO: Fix this to match target path spec for OSN
+            "root_path": f"{GCS_BUCKET}/{path_identifier}",
         },
         "InputCacheStorage": {
-            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
-            # "fsspec_args": fsspec_args,
-            "root_path": "tmp/input-cache/",
+            "fsspec_class": "gcsfs.GCSFileSystem",
+            "fsspec_args": dict(bucket=GCS_BUCKET),
+            "root_path": f"{GCS_BUCKET}/cache",
         },
         "MetadataCacheStorage": {
-            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
+            "fsspec_class": "gcsfs.GCSFileSystem",
             # "fsspec_args": fsspec_args,
-            "root_path": "tmp/metadata-cache/",
+            "root_path": f"{GCS_BUCKET}/cache/metadata/{path_identifier}",
         },
     }
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
