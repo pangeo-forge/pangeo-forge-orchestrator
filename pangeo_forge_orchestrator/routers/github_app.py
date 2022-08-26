@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import subprocess
+import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
@@ -13,8 +14,7 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
-from sqlalchemy import and_
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 from ..config import get_config
 from ..dependencies import get_session as get_database_session
@@ -277,8 +277,7 @@ async def receive_github_hook(
 
         token = await get_access_token(gh)
         gh_kws = dict(oauth_token=token, accept=ACCEPT)
-        pr_response = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
-        pr = pr_response.json()
+        pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
 
         maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
         if maybe_pass["status"] == "pass":
@@ -301,14 +300,23 @@ async def receive_github_hook(
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
                 # TODO: Maybe post a comment and/or emoji reaction explaining this error.
             recipe_id = cmd_args.pop(0)
-            statement = and_(
-                MODELS["recipe_run"].table.recipe_id == recipe_id,
-                MODELS["recipe_run"].table.head_sha == pr["head"]["sha"],
+            statement = (
+                # https://sqlmodel.tiangolo.com/tutorial/where/#multiple-where
+                select(MODELS["recipe_run"].table)
+                .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
+                .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
             )
-            result = db_session.query(MODELS["recipe_run"].table).filter(statement)
-            logger.debug(result)
-            # args = ()
-            # background_tasks.add_task(run_recipe_test)
+            # TODO: handle error if there is no matching result. this would arise if the slash
+            # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
+            matching_recipe_run = db_session.exec(statement).one()
+            logger.debug(matching_recipe_run)
+            args = (  # type: ignore
+                payload["repository"]["html_url"],
+                pr["head"]["sha"],
+                pr["number"],
+                matching_recipe_run,
+            )
+            background_tasks.add_task(run_recipe_test, *args, **session_kws)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -504,11 +512,85 @@ async def synchronize(
 
 
 async def run_recipe_test(
-    comment_body: str,
-    reactions_url: str,
+    html_url: str,
+    head_sha: str,
+    pr_number: str,
+    recipe_run: SQLModel,
+    # comment_body: str,
+    # reactions_url: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
 ):
     """ """
-    pass
+    api_url = html_to_api_url(html_url)
+
+    # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
+    # TODO: Customize these values based on meta.yaml
+    config = {
+        "Bake": {
+            "prune": True,
+            "bakery_class": "pangeo_forge_runner.bakery.local.LocalDirectBakery",
+            "recipe_id": recipe_run.recipe_id,
+        },
+        "TargetStorage": {
+            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
+            # "fsspec_args": fsspec_args,
+            "root_path": "tmp/target/",
+        },
+        "InputCacheStorage": {
+            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
+            # "fsspec_args": fsspec_args,
+            "root_path": "tmp/input-cache/",
+        },
+        "MetadataCacheStorage": {
+            "fsspec_class": "fsspec.implementations.local.LocalFileSystem",
+            # "fsspec_args": fsspec_args,
+            "root_path": "tmp/metadata-cache/",
+        },
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+        json.dump(config, f)
+        f.flush()
+        cmd = [
+            "pangeo-forge-runner",
+            "bake",
+            "--repo",
+            html_url,
+            "--ref",
+            head_sha,
+            "--json",
+            "-f",
+            f.name,
+        ]
+        # NOTE: This is redundant w/ synchronize task function above. Can probably be factored togeth.
+        if "staged-recipes" in html_url:
+            token = await get_access_token(gh)
+            files = await gh.getitem(
+                f"{api_url}/pulls/{pr_number}/files",
+                oauth_token=token,
+                accept=ACCEPT,
+            )
+            # TODO: make subdir parsing more robust. currently, the next line will parse
+            #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
+            # but does not account for any edge cases or error conditions.
+            subdir = files[0]["filename"].split("/")[1]
+            cmd.append(f"--feedstock-subdir=recipes/{subdir}")
+        print("COMMAND", cmd)
+
+        # We're about to run this recipe, let's update its status to "in_progress"
+        recipe_run.status = "in_progress"
+        # TODO: update recipe_run.started_at time? It was initially set on creation.
+        db_session.add(recipe_run)
+        db_session.commit()
+        try:
+            out = subprocess.check_output(cmd)
+            print("OUT", out)
+        except subprocess.CalledProcessError as e:
+            # Something went wrong, let's update the recipe_run status to "failed"
+            # TODO: Confirm this works. I don't think we need to get the model back from the database.
+            recipe_run.status = "completed"
+            recipe_run.conclusion = "failure"
+            db_session.add(recipe_run)
+            db_session.commit()
+            raise ValueError(e.output) from e
