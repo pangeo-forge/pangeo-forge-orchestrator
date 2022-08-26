@@ -266,7 +266,7 @@ async def receive_github_hook(
         if maybe_pass["status"] == "pass":
             return maybe_pass
 
-        args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"])
+        args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"], pr["number"])
         background_tasks.add_task(synchronize, *args, **session_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
@@ -352,7 +352,14 @@ async def get_delivery(
 # Background tasks --------------------------------------------------------------------------------
 
 
-async def synchronize(html_url: str, head_sha: str, *, gh: GitHubAPI, db_session: Session):
+async def synchronize(
+    html_url: str,
+    head_sha: str,
+    pr_number: str,
+    *,
+    gh: GitHubAPI,
+    db_session: Session,
+):
     logger.info(f"Synchronizing {html_url} at {head_sha}.")
     api_url = html_to_api_url(html_url)
     create_request = dict(
@@ -383,7 +390,41 @@ async def synchronize(html_url: str, head_sha: str, *, gh: GitHubAPI, db_session
         head_sha,
         "--json",
     ]
-    out = subprocess.check_output(cmd)
+    if "staged-recipes" in html_url:
+        token = await get_access_token(gh)
+        files = await gh.getitem(
+            f"{api_url}/pulls/{pr_number}/files",
+            oauth_token=token,
+            accept=ACCEPT,
+        )
+        # TODO: make subdir parsing more robust. currently, the next line will parse
+        #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
+        # but does not account for any edge cases or error conditions.
+        subdir = files[0]["filename"].split("/")[1]
+        cmd.append(f"--feedstock-subdir=recipes/{subdir}")
+    try:
+        out = subprocess.check_output(cmd)
+    except subprocess.CalledProcessError as e:
+        for line in e.output.splitlines():
+            p = json.loads(line)
+            if p["status"] == "failed":
+                tracelines = p["exc_info"].splitlines()
+                if tracelines[-1].startswith("FileNotFoundError"):
+                    # A required file is missing: either meta.yaml or recipe.py
+                    update_request = dict(
+                        status="completed",
+                        conclusion="failure",
+                        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                        output=dict(title="FileNotFoundError", summary=tracelines[-1]),
+                    )
+                    _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+                    raise ValueError(tracelines[-1]) from e
+                else:
+                    raise NotImplementedError from e
+        # CalledProcessError's output *should* have a line where "status" == "failed", but just in
+        # case it doesn't, raise a NotImplementedError here to prevent moving forward.
+        raise NotImplementedError from e
+
     for line in out.splitlines():
         p = json.loads(line)
         if p["status"] == "completed":
