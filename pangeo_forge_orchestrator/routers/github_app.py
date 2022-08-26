@@ -526,10 +526,16 @@ async def run_recipe_test(
     api_url = html_to_api_url(html_url)
 
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
-    # TODO: Customize these values based on meta.yaml
-    GCS_BUCKET = "pfcsb-bucket"  # TODO: variablize/change
+    # TODO: Choose bakery type based on meta.yaml!
+
+    # TODO: these constants somehow. probably in secrets/config.{}.yaml
+    GCS_BUCKET = "pfcsb-bucket"
+    GCS_TEMP_LOCATION = "gs://beam-dataflow-test/temp"
+    SERVICE_ACCOUNT_EMAIL = "pangeo-forge-dataflow@pangeo-forge-4967.iam.gserviceaccount.com"
+
     # TODO: make this identifier better
     path_identifier = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
+
     config = {
         "Bake": {
             "prune": True,
@@ -538,7 +544,8 @@ async def run_recipe_test(
         },
         "DataflowBakery": {
             # TODO: probably use a different temp location for production
-            "temp_gcs_location": "gs://beam-dataflow-test/temp",
+            "temp_gcs_location": GCS_TEMP_LOCATION,
+            "service_account_email": SERVICE_ACCOUNT_EMAIL,
         },
         # TODO: Use OSN for target
         "TargetStorage": {
