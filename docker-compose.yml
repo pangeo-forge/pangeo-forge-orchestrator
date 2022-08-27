@@ -37,6 +37,9 @@ services:
       /bin/sh -c 'sleep 1
       && python3 -m alembic upgrade head
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
+      && sops -d -i ./secrets/dataflow.json
+      && gcloud auth activate-service-account --key-file=./secrets/dataflow.json
+      && export GOOGLE_APPLICATION_CREDENTIALS=./secrets/dataflow.json
       && gunicorn -w 1 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app -b 0.0.0.0:8000'
   db:
     platform: linux/amd64

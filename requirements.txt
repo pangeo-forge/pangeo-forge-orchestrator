@@ -6,9 +6,16 @@ gidgethub==5.1.0
 sqlmodel==0.0.6
 sqlalchemy==1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
 alembic==1.7.5
-pangeo-forge-runner==0.3
+PyYAML==6.0
 
 # for deployment
 gunicorn==20.1.0
 uvicorn==0.17.0
 psycopg2-binary==2.9.3
+
+# these will eventually move out of the app container, and instead be
+# installed within the docker sibling container used for recipe handling
+# pangeo-forge-runner==0.4
+git+https://github.com/cisaacstern/pangeo-forge-runner@dev
+gcsfs
+s3fs
