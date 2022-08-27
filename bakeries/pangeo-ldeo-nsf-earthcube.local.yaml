@@ -1,0 +1,23 @@
+Bake:
+  bakery_class: 'pangeo_forge_runner.bakery.dataflow.DataflowBakery'
+
+DataflowBakery:
+  temp_gcs_location: 'gs://beam-dataflow-test/temp'
+
+TargetStorage: # TODO: Use OSN for target
+  fsspec_class: 'gcsfs.GCSFileSystem'
+  fsspec_args:
+    bucket: 'pfcsb-bucket'
+  # TODO: Fix this to match target path spec for OSN
+  root_path: 'pfcsb-bucket/{subpath}'
+
+InputCacheStorage:
+  fsspec_class: 'gcsfs.GCSFileSystem'
+  fsspec_args:
+    bucket: 'pfcsb-bucket'
+  root_path: 'pfcsb-bucket/cache'
+
+MetadataCacheStorage:
+  fsspec_class: 'gcsfs.GCSFileSystem'
+  fsspec_args: {}
+  root_path: 'pfcsb-bucket/cache/metadata/{subpath}'

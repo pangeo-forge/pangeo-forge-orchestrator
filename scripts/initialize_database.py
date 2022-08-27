@@ -31,7 +31,7 @@ if __name__ == "__main__":
             headers=headers,
             data=json.dumps(
                 {
-                    "name": "local-test-bakery",
+                    "name": "pangeo-ldeo-nsf-earthcube",
                     "description": "A great bakery.",
                     "region": "local",
                 },

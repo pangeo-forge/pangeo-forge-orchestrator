@@ -175,6 +175,30 @@ async def pass_if_deployment_not_selected(pr_labels: List[str], gh: aiohttp.Clie
     return {"status": "ok"}
 
 
+async def maybe_specify_feedstock_subdir(
+    cmd: List[str],
+    api_url: str,
+    pr_number: str,
+    gh: GitHubAPI,
+) -> List[str]:
+    """If this is staged-recipes, add the --feedstock-subdir option to the command."""
+
+    if "staged-recipes" in api_url:
+        token = await get_access_token(gh)
+        files = await gh.getitem(
+            f"{api_url}/pulls/{pr_number}/files",
+            oauth_token=token,
+            accept=ACCEPT,
+        )
+        # TODO: make subdir parsing more robust. currently, the next line will parse
+        #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
+        # but does not account for any edge cases or error conditions.
+        subdir = files[0]["filename"].split("/")[1]
+        cmd.append(f"--feedstock-subdir=recipes/{subdir}")
+
+    return cmd
+
+
 # Routes ------------------------------------------------------------------------------------------
 
 
@@ -392,24 +416,11 @@ async def synchronize(
     cmd = [
         "pangeo-forge-runner",
         "expand-meta",
-        "--repo",
-        html_url,
-        "--ref",
-        head_sha,
+        f"--repo={html_url}",
+        f"--ref={head_sha}",
         "--json",
     ]
-    if "staged-recipes" in html_url:
-        token = await get_access_token(gh)
-        files = await gh.getitem(
-            f"{api_url}/pulls/{pr_number}/files",
-            oauth_token=token,
-            accept=ACCEPT,
-        )
-        # TODO: make subdir parsing more robust. currently, the next line will parse
-        #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
-        # but does not account for any edge cases or error conditions.
-        subdir = files[0]["filename"].split("/")[1]
-        cmd.append(f"--feedstock-subdir=recipes/{subdir}")
+    cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
     try:
         out = subprocess.check_output(cmd)
     except subprocess.CalledProcessError as e:
@@ -525,72 +536,40 @@ async def run_recipe_test(
     """ """
     api_url = html_to_api_url(html_url)
 
-    # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
-    # TODO: Choose bakery type based on meta.yaml!
-
-    # TODO: these constants somehow. probably in secrets/config.{}.yaml
-    GCS_BUCKET = "pfcsb-bucket"
-    GCS_TEMP_LOCATION = "gs://beam-dataflow-test/temp"
+    statement = select(MODELS["bakery"].table).where(
+        MODELS["bakery"].table.id == recipe_run.bakery_id
+    )
+    matching_bakery = db_session.exec(statement).one()
+    bakery_config = get_config().bakeries[matching_bakery.name]
 
     # TODO: make this identifier better
-    path_identifier = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
-
-    config = {
-        "Bake": {
-            "prune": True,
-            "bakery_class": "pangeo_forge_runner.bakery.dataflow.DataflowBakery",
-            "recipe_id": recipe_run.recipe_id,
-        },
-        "DataflowBakery": {
-            # TODO: probably use a different temp location for production
-            "temp_gcs_location": GCS_TEMP_LOCATION,
-        },
-        # TODO: Use OSN for target
-        "TargetStorage": {
-            "fsspec_class": "gcsfs.GCSFileSystem",
-            "fsspec_args": dict(bucket=GCS_BUCKET),
-            # TODO: Fix this to match target path spec for OSN
-            "root_path": f"{GCS_BUCKET}/{path_identifier}",
-        },
-        "InputCacheStorage": {
-            "fsspec_class": "gcsfs.GCSFileSystem",
-            "fsspec_args": dict(bucket=GCS_BUCKET),
-            "root_path": f"{GCS_BUCKET}/cache",
-        },
-        "MetadataCacheStorage": {
-            "fsspec_class": "gcsfs.GCSFileSystem",
-            # "fsspec_args": fsspec_args,
-            "root_path": f"{GCS_BUCKET}/cache/metadata/{path_identifier}",
-        },
-    }
+    subpath = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
+    # root paths are an interesting configuration edge-case because they combine some stable
+    # config (the base path) with some per-recipe config (the subpath). so they are partially
+    # initialized when we get them, but we need to complete them here.
+    bakery_config.TargetStorage.root_path = bakery_config.TargetStorage.root_path.format(
+        subpath=subpath
+    )
+    bakery_config.MetadataCacheStorage.root_path = (
+        bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
+    )
+    logger.debug("Dumping bakery config to json: ", bakery_config.dict())
+    # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-        json.dump(config, f)
+        json.dump(bakery_config.dict(), f)
         f.flush()
         cmd = [
             "pangeo-forge-runner",
             "bake",
-            "--repo",
-            html_url,
-            "--ref",
-            head_sha,
+            f"--repo={html_url}",
+            f"--ref={head_sha}",
             "--json",
-            "-f",
-            f.name,
+            "--prune",
+            f"--Bake.recipe_id={recipe_run.recipe_id}",  # NOTE: under development
+            f"-f={f.name}",
         ]
-        # NOTE: This is redundant w/ synchronize task function above. Can probably be factored togeth.
-        if "staged-recipes" in html_url:
-            token = await get_access_token(gh)
-            files = await gh.getitem(
-                f"{api_url}/pulls/{pr_number}/files",
-                oauth_token=token,
-                accept=ACCEPT,
-            )
-            # TODO: make subdir parsing more robust. currently, the next line will parse
-            #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
-            # but does not account for any edge cases or error conditions.
-            subdir = files[0]["filename"].split("/")[1]
-            cmd.append(f"--feedstock-subdir=recipes/{subdir}")
-        print("COMMAND", cmd)
+        cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
+        logger.debug("Running command: ", cmd)
 
         # We're about to run this recipe, let's update its status to "in_progress"
         recipe_run.status = "in_progress"
