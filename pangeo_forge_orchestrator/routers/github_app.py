@@ -339,8 +339,9 @@ async def receive_github_hook(
                 pr["head"]["sha"],
                 pr["number"],
                 matching_recipe_run,
+                reactions_url,
             )
-            background_tasks.add_task(run_recipe_test, *args, **session_kws)
+            background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -527,11 +528,11 @@ async def run_recipe_test(
     head_sha: str,
     pr_number: str,
     recipe_run: SQLModel,
-    # comment_body: str,
-    # reactions_url: str,
+    reactions_url: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
+    gh_kws: dict,
 ):
     """ """
     api_url = html_to_api_url(html_url)
@@ -553,7 +554,7 @@ async def run_recipe_test(
     bakery_config.MetadataCacheStorage.root_path = (
         bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
     )
-    logger.debug("Dumping bakery config to json: ", bakery_config.dict())
+    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
         json.dump(bakery_config.dict(), f)
@@ -569,13 +570,14 @@ async def run_recipe_test(
             f"-f={f.name}",
         ]
         cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
-        logger.debug("Running command: ", cmd)
+        logger.debug(f"Running command: {cmd}")
 
         # We're about to run this recipe, let's update its status to "in_progress"
         recipe_run.status = "in_progress"
         # TODO: update recipe_run.started_at time? It was initially set on creation.
         db_session.add(recipe_run)
         db_session.commit()
+        _ = await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
         try:
             out = subprocess.check_output(cmd)
             print("OUT", out)
@@ -586,4 +588,5 @@ async def run_recipe_test(
             recipe_run.conclusion = "failure"
             db_session.add(recipe_run)
             db_session.commit()
+            _ = await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
             raise ValueError(e.output) from e
