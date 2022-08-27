@@ -14,8 +14,13 @@ RUN make install
 FROM ubuntu:22.04
 
 COPY --from=0 /go/bin/sops /usr/local/bin/sops
+RUN apt-get update && apt-get -y install curl python3 python3-pip apt-transport-https ca-certificates
 
-RUN apt-get update && apt-get -y install curl python3 python3-pip
+# Install gcloud https://cloud.google.com/sdk/docs/install#installation_instructions
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt \
+    cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | tee /usr/share/keyrings/cloud.google.gpg \
+    && apt-get update && apt-get -y install google-cloud-cli
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
