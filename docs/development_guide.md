@@ -43,7 +43,7 @@ through making your first PR to `pangeo-forge-orchestrator`.
   - [4.3 Pass dependencies through to background tasks as kwargs]()
   - [4.4 Never import a recipe (or read meta.yaml) directly]()
   - [4.5 Upstream recipe handling features to pangeo-forge-runner]()
-  - [4.6 ]()
+  - [4.6 Config: Leverage JSON/YAML/SOPS to minimize env vars]()
 - [5 Interlude: Calling the GitHub API directly, as your GitHub App](#5-interlude-calling-the-github-api-directly-as-your-github-app)
   - [5.1 Get a JWT](#51-get-a-jwt)
   - [5.2 Get an installation access token](#52-get-an-installation-access-token)
