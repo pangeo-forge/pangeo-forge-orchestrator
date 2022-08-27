@@ -14,12 +14,16 @@ RUN make install
 FROM ubuntu:22.04
 
 COPY --from=0 /go/bin/sops /usr/local/bin/sops
-# FIXME: we need python3.9 because apache beam is not supported on 3.10
-# this does not work as-is to ensure 3.9 environment. probably need to use venv.
-# with this build, still getting warning such as:
-#     web_1  | /usr/local/lib/python3.10/dist-packages/apache_beam/__init__.py:79:
-#     UserWarning: This version of Apache Beam has not been sufficiently tested on Python 3.10.
-RUN apt-get update && apt-get -y install curl python3.9 python3-pip apt-transport-https ca-certificates
+# we need python3.9 because apache beam is not supported on 3.10
+# is the best way to get 3.9 on ubuntu? https://askubuntu.com/a/682875
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -y install tzdata software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get -y install python3.9-dev python3.9-distutils
+RUN apt-get update && apt-get -y install curl apt-transport-https ca-certificates
+# is this the best way to get pip for python 3.9? https://stackoverflow.com/a/65644846
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
+    && python3.9 get-pip.py
 
 # Install gcloud https://cloud.google.com/sdk/docs/install#installation_instructions
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt \
@@ -27,10 +31,11 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | tee /usr/share/keyrings/cloud.google.gpg \
     && apt-get update && apt-get -y install google-cloud-cli
 
-# TODO: remove git install; needed for now because installing unrealeased deps from github
-RUN apt-get update && apt-get -y install git
+# TODO: remove git + gcc, and revert python3.9-dev -> python3.9 above
+# Only needed for now because installing unrealeased deps from github
+RUN apt-get update && apt-get -y install git gcc
 COPY requirements.txt ./
-RUN pip install -r requirements.txt
+RUN python3.9 -m pip install -r requirements.txt
 
 COPY . /opt/app
 WORKDIR /opt/app
