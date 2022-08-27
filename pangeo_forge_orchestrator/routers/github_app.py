@@ -531,7 +531,6 @@ async def run_recipe_test(
     # TODO: these constants somehow. probably in secrets/config.{}.yaml
     GCS_BUCKET = "pfcsb-bucket"
     GCS_TEMP_LOCATION = "gs://beam-dataflow-test/temp"
-    SERVICE_ACCOUNT_EMAIL = "pangeo-forge-dataflow@pangeo-forge-4967.iam.gserviceaccount.com"
 
     # TODO: make this identifier better
     path_identifier = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
@@ -545,7 +544,6 @@ async def run_recipe_test(
         "DataflowBakery": {
             # TODO: probably use a different temp location for production
             "temp_gcs_location": GCS_TEMP_LOCATION,
-            "service_account_email": SERVICE_ACCOUNT_EMAIL,
         },
         # TODO: Use OSN for target
         "TargetStorage": {
