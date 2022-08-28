@@ -27,7 +27,7 @@ jobs:
         run: >
           docker-compose run
           --entrypoint="/bin/sh -c 'sleep 1
-          && python3 -m alembic upgrade head
+          && python3.9 -m alembic upgrade head
           && apt-get install -y git
           && pip install \".[dev]\"
           && pytest -vx'"

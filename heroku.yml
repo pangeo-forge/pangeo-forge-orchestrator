@@ -6,7 +6,7 @@ build:
     web: Dockerfile
 release:
   command:
-    - python3 -m alembic upgrade head
+    - python3.9 -m alembic upgrade head
   image: web
 run:
   web: >
