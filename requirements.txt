@@ -7,6 +7,7 @@ sqlmodel==0.0.6
 sqlalchemy==1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
 alembic==1.7.5
 PyYAML==6.0
+cffi
 
 # for deployment
 gunicorn==20.1.0
