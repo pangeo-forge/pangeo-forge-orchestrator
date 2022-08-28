@@ -6,7 +6,7 @@ import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
-from typing import List
+from typing import List, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -279,6 +279,8 @@ async def receive_github_hook(
     # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
     gh = get_github_session(http_session)
     session_kws = dict(gh=gh, db_session=db_session)
+    token = await get_access_token(gh)
+    gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
     event = request.headers.get("X-GitHub-Event")
     if event != "dataflow":
@@ -310,8 +312,6 @@ async def receive_github_hook(
         comment_body = comment["body"]
         reactions_url = comment["reactions"]["url"]
 
-        token = await get_access_token(gh)
-        gh_kws = dict(oauth_token=token, accept=ACCEPT)
         pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
 
         maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
@@ -358,8 +358,43 @@ async def receive_github_hook(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No handling implemented for this event type.",
             )
-    elif event == "dataflow" and payload["action"] == "complete":
-        logger.info("\n\n\nReceived dataflow webhook!\n\n\n")
+
+    elif event == "dataflow" and payload["action"] == "completed":
+        logger.info(f"Received dataflow webhook with {payload = }")
+        if payload["conclusion"] not in ("success", "failure"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No handling implemented for {payload['conclusion'] = }.",
+            )
+
+        recipe_run = db_session.exec(
+            select(MODELS["recipe_run"].table).where(
+                MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
+            )
+        ).one()
+        feedstock = db_session.exec(
+            select(MODELS["feedstock"].table).where(
+                MODELS["feedstock"].table.id == recipe_run.feedstock_id
+            )
+        ).one()
+
+        recipe_run.status = "completed"
+        recipe_run.conclusion = payload["conclusion"]
+        if recipe_run.conclusion == "success":
+            # FIXME: Add the dataset_public_url here! Will require using same formating method
+            # as used to deploy recipe. (So that could be factored out to a separate func).
+            recipe_run.dataset_public_url = "..."
+        db_session.add(recipe_run)
+        db_session.commit()
+
+        # Wow not every day you google a error and see a comment on it by Guido van Rossum
+        # https://github.com/python/mypy/issues/1174#issuecomment-175854832
+        args: Tuple[SQLModel, SQLModel] = (recipe_run, feedstock)  # type: ignore
+        if recipe_run.is_test:
+            background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
+        else:
+            background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+
     else:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -637,7 +672,7 @@ async def run_recipe_test(
         _ = await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
         try:
             out = subprocess.check_output(cmd)
-            print("OUT", out)
+            logger.debug(f"Command output is {out.decode('utf-8')}")
         except subprocess.CalledProcessError as e:
             # Something went wrong, let's update the recipe_run status to "failed"
             # TODO: Confirm this works. I don't think we need to get the model back from the database.
@@ -647,3 +682,26 @@ async def run_recipe_test(
             db_session.commit()
             _ = await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
             raise ValueError(e.output) from e
+
+
+async def triage_test_run_complete(
+    recipe_run: SQLModel,
+    feedstock: SQLModel,
+    *,
+    gh: GitHubAPI,
+    gh_kws: dict,
+):
+    async for pr in gh.getiter(f"/repos/{feedstock.spec}/pulls", **gh_kws):
+        if pr["head"]["sha"] == recipe_run.head_sha:
+            comments_url = pr["comments_url"]
+            break
+
+    if recipe_run.conclusion == "failure":
+        comment = ":-( The test failed."
+    elif recipe_run.conclusion == "success":
+        comment = ":-) The test succeeded!"
+    _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
+
+
+async def triage_prod_run_complete():
+    pass
