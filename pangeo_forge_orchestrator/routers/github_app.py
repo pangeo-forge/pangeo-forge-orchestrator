@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from textwrap import dedent
 from typing import List
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 import jwt
@@ -281,7 +281,18 @@ async def receive_github_hook(
     session_kws = dict(gh=gh, db_session=db_session)
 
     event = request.headers.get("X-GitHub-Event")
-    payload = await request.json()
+    if event != "dataflow":
+        # This is a real github webhook, which can be loaded like this
+        payload = await request.json()
+    else:
+        # This is a webhook sent by our custom GCP Cloud Function. For some reason it can't be
+        # parsed with ``await request.json`` so just special-casing for now.
+        # TODO: What can we change in this Cloud Function to remove this special-casing? It's
+        # defined in https://github.com/pango-forge/dataflow-status-monitoring.
+        # Maybe Python ``requests`` payloads are just *inevitably* encoded as query strings, so
+        # we would need to use a different method/module/language to get uniformity w/ GitHub?
+        qs = parse_qs(payload_bytes.decode("utf-8"))
+        payload = {k: v.pop(0) for k, v in qs.items()}
 
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
