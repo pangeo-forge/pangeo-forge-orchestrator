@@ -5,7 +5,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import jwt
 import pytest
@@ -61,7 +61,7 @@ class MockGitHubAPI:
         accept: Optional[str] = None,
         jwt: Optional[str] = None,
         oauth_token: Optional[str] = None,
-    ) -> dict:
+    ) -> Union[dict, List[dict]]:
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
         elif path.startswith("/repos/"):
@@ -80,6 +80,8 @@ class MockGitHubAPI:
             return [
                 {"response": d} for d in self._backend._app_hook_deliveries if d["id"] == id_
             ].pop(0)
+        elif "pulls" in path and path.endswith("files"):
+            return [{"filename": "recipes/new-dataset/recipe.py"}]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -508,6 +510,7 @@ def synchronize_request():
     payload = {
         "action": "synchronize",
         "pull_request": {
+            "number": 1,
             "base": {
                 "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
             },

@@ -24,7 +24,7 @@ from .interfaces import FastAPITestClientCRUD
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_and_teardown(session_mocker, mock_config_path):
+def setup_and_teardown(session_mocker, mock_app_config_path):
     # (1) database test session setup
     if os.environ["DATABASE_URL"].startswith("sqlite") and os.path.exists("./database.sqlite"):
         # Assumes tests are invoked from repo root (not within tests/ directory).
@@ -41,13 +41,13 @@ def setup_and_teardown(session_mocker, mock_config_path):
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
-    def get_mock_config_path():
-        return mock_config_path
+    def get_mock_app_config_path():
+        return mock_app_config_path
 
     session_mocker.patch.object(
         pangeo_forge_orchestrator.config,
-        "get_config_path",
-        get_mock_config_path,
+        "get_app_config_path",
+        get_mock_app_config_path,
     )
 
     yield
@@ -107,7 +107,7 @@ def mock_config_kwargs(webhook_secret, private_key, api_keys):
 
 
 @pytest.fixture(scope="session")
-def mock_config_path(mock_config_kwargs, tmp_path_factory):
+def mock_app_config_path(mock_config_kwargs, tmp_path_factory):
     """ """
     path = tmp_path_factory.mktemp("secrets") / "config.yaml"
     with open(path, "w") as f:
