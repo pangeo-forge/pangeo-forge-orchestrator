@@ -21,6 +21,7 @@ class GitHubAppConfig(BaseModel):
 
 class Bake(BaseModel):
     bakery_class: str
+    job_name: Optional[str]
 
 
 class Storage(BaseModel):
