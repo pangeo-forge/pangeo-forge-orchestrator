@@ -9,4 +9,12 @@ release:
     - python3 -m alembic upgrade head
   image: web
 run:
-  web: sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml && gunicorn -w 3 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
+  web: >
+    sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
+    && sops -d -i ./secrets/dataflow.json
+    && gcloud auth activate-service-account --key-file=./secrets/dataflow.json
+    && cat ./secrets/dataflow.json
+    | python3.9 -c "import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
+    | xargs -I{} gcloud config set project {}
+    && export GOOGLE_APPLICATION_CREDENTIALS=./secrets/dataflow.json
+    && gunicorn -w 3 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
