@@ -408,17 +408,19 @@ async def receive_github_hook(  # noqa: C901
         and payload["action"] == "closed"
         and payload["pull_request"]["merged"]
     ):
+        logger.info("Received PR merged event...")
         if "staged-recipes" in payload["pull_request"]["base"]["repo"]["full_name"]:
             # this is staged-recipes, so (probably) create a new feedstock repository
-            # make sure this is a recipe PR (not top-level config or something)
-            if ...:
-                return {"message": "not a recipes PR"}
+            # TODO: make sure this is a recipe PR (not top-level config or something)
+            # if ...:
+            #    return {"message": "not a recipes PR"}
 
             args = (  # type: ignore
                 payload["pull_request"]["base"]["repo"]["owner"],
                 payload["pull_request"]["number"],
                 payload["pull_request"]["base"]["repo"]["url"],
             )
+            logger.info(f"Calling create_feedstock with args {args}")
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
         else:
             # this is not staged recipes
@@ -815,6 +817,7 @@ async def create_feedstock_repo(
 ):
     # (1) check changed files, if we're in a subdir of recipes, then proceed
     files = await gh.getitem(f"{api_url}/pulls/{pr_number}/files", **gh_kws)
+    logger.debug(f"PR has files: {files}")
     subdir = files[0]["filename"].split("/")[1]
     # (2) make a new repo with name `subdir-feedstock`, plus license + readme
     create_route = f"/orgs/{owner['login']}/repos" if owner["type"] != "User" else "/user/repos"
@@ -833,11 +836,13 @@ async def create_feedstock_repo(
         gitignore_template="Python",
         license_template="apache-2.0",
     )
+    logger.debug(f"Creating new feedstock with kws: {data}")
     await gh.post(create_route, data=data, **gh_kws)
     feedstock_spec = f"{owner['login']}/{name}"
     # (3) add all contributors to PR as collaborators w/ write permission on repo
     ...
     # (4) create a new branch on feedstock repo
+    logger.debug(f"Adding 'create-feedstock' branch on feedstock {feedstock_spec}")
     main = await gh.getitem(f"/repos/{feedstock_spec}/git/matching-refs/main", **gh_kws)
     await gh.post(
         f"/repos/{feedstock_spec}/git/refs",
@@ -849,6 +854,7 @@ async def create_feedstock_repo(
     )
     # (5) add contents to new branch
     for f in files:
+        logger.debug(f"Adding file {f}")
         await gh.post(
             f"/repos/{feedstock_spec}/contents/feedstock/{f['name']}",
             data=dict(
