@@ -304,6 +304,7 @@ async def receive_github_hook(  # noqa: C901
         if obj["labels"][0]["name"] != "github-app-dev":
             logger.info("PR does not have github-app-dev label, skipping")
             return {"message": "not a github-app-dev pr, skipping"}
+    logger.info("PR label found, continuing...")
 
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
@@ -363,12 +364,14 @@ async def receive_github_hook(  # noqa: C901
             matching_recipe_run = db_session.exec(statement).one()
             logger.debug(matching_recipe_run)
             args = (  # type: ignore
-                payload["repository"]["html_url"],
+                pr["head"]["repo"]["html_url"],
+                pr["base"]["repo"]["url"],
                 pr["head"]["sha"],
                 pr["number"],
                 matching_recipe_run,
                 reactions_url,
             )
+            logger.info(f"Creating run_recipe_test task with args: {args}")
             background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
         else:
             raise HTTPException(
@@ -529,7 +532,8 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
 
 
 async def run(
-    html_url: str,
+    head_html_url: str,
+    base_api_url: str,
     head_sha: str,
     pr_number: str,
     recipe_run: SQLModel,  # maybe not required for production run?
@@ -537,8 +541,6 @@ async def run(
     gh: GitHubAPI,
     db_session: Session,
 ):
-    api_url = html_to_api_url(html_url)
-
     statement = select(MODELS["bakery"].table).where(
         MODELS["bakery"].table.id == recipe_run.bakery_id
     )
@@ -568,14 +570,14 @@ async def run(
         cmd = [
             "pangeo-forge-runner",
             "bake",
-            f"--repo={html_url}",
+            f"--repo={head_html_url}",
             f"--ref={head_sha}",
             "--json",
             "--prune",
             f"--Bake.recipe_id={recipe_run.recipe_id}",  # NOTE: under development
             f"-f={f.name}",
         ]
-        cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
+        cmd = await maybe_specify_feedstock_subdir(cmd, base_api_url, pr_number, gh)
         logger.debug(f"Running command: {cmd}")
 
         # We're about to run this recipe, let's update its status to "in_progress"
@@ -742,7 +744,8 @@ async def synchronize(
 
 
 async def run_recipe_test(
-    html_url: str,
+    head_html_url: str,
+    base_api_url: str,
     head_sha: str,
     pr_number: str,
     recipe_run: SQLModel,
@@ -754,16 +757,10 @@ async def run_recipe_test(
 ):
     """ """
     await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
-
+    args = (head_html_url, base_api_url, head_sha, pr_number, recipe_run)
+    logger.info(f"Calling run with args: {args}")
     try:
-        await run(
-            html_url,
-            head_sha,
-            pr_number,
-            recipe_run,
-            gh=gh,
-            db_session=db_session,
-        )
+        await run(*args, gh=gh, db_session=db_session)
     except subprocess.CalledProcessError as e:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
         raise e
