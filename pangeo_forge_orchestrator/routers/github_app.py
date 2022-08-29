@@ -463,6 +463,53 @@ async def get_delivery(
     return delivery["response"] if response_only else delivery
 
 
+# Background task helpers -------------------------------------------------------------------------
+
+
+async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
+    github_app_webhook_url = await get_app_webhook_url(gh)
+    # Encode webhook url + recipe run id so that:
+    #   1. they are valid gcp labels (max 64 char, no special chars, no uppercase, etc.):
+    #      https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
+    #   2. encoding can be reversed by webhook cloud function to determine:
+    #       (a) where (i.e. url) to post job completion webhook
+    #       (b) the recipe run id assocated with the job (in the database used by the backend
+    #           deployed at this url
+    # This feels brittle and has room for improvement but just doing it this way for now
+    # to get *something* wired together and working.
+    p = urlparse(github_app_webhook_url)
+    # if this is a named deployment (review, staging, or prod) we don't need to include the path
+    # because it will always be "/github/hooks/" and we don't want to waste valuable space in our
+    # 64 char length limit encoding that. but if the path is something else, this is local proxy
+    # server, and so we do need to preseve that.
+    to_encode = p.netloc if p.path == "/github/hooks/" else p.netloc + p.path
+    to_encode += "%"  # control character to separate webhook url encoding from recipe run id
+    as_hex = "".join(["{:02x}".format(ord(x)) for x in to_encode])
+    # decoding is easier if recipe_run id encoded with an even length, so zero-pad if odd.
+    # note we are using ``f"0{recipe_run.id}"``, *not* ``f"{recipe_run_id:02}"`` to pad if odd,
+    # because we want the *number of digits* to be even regardless of the length of the odd input.
+    recipe_run_id_str = f"0{recipe_run.id}" if len(str(recipe_run.id)) % 2 else str(recipe_run.id)
+    encoded_webhook_url_plus_recipe_run_id = as_hex + recipe_run_id_str
+    # so, this will be reversable with:
+    #   ```
+    #   as_pairs = [
+    #       a + b for a, b in zip(
+    #           encoded_webhook_url_plus_recipe_run_id[::2],
+    #           encoded_webhook_url_plus_recipe_run_id[1::2],
+    #       )
+    #   ]
+    #   control_character_idx = [
+    #       i for i, val in enumerate(as_pairs) if chr(int(val, 16)) == "%"
+    #   ].pop(0)
+    #   recipe_run_id = int("".join(as_pairs[control_character_idx + 1:]))
+    #   webhook_url = "".join(
+    #       [chr(int(val, 16)) for val in as_pairs[:control_character_idx]]
+    #   )
+    #   ```
+    # Finally, dataflow job names *have to* start with a lowercase letter, so prepending "a":
+    return f"a{encoded_webhook_url_plus_recipe_run_id}"
+
+
 # Background tasks --------------------------------------------------------------------------------
 
 
@@ -617,7 +664,6 @@ async def run_recipe_test(
 ):
     """ """
     api_url = html_to_api_url(html_url)
-    github_app_webhook_url = await get_app_webhook_url(gh)
 
     statement = select(MODELS["bakery"].table).where(
         MODELS["bakery"].table.id == recipe_run.bakery_id
@@ -637,46 +683,8 @@ async def run_recipe_test(
     bakery_config.MetadataCacheStorage.root_path = (
         bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
     )
-    # Encode webhook url + recipe run id so that:
-    #   1. they are valid gcp labels (max 64 char, no special chars, no uppercase, etc.):
-    #      https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
-    #   2. encoding can be reversed by webhook cloud function to determine:
-    #       (a) where (i.e. url) to post job completion webhook
-    #       (b) the recipe run id assocated with the job (in the database used by the backend
-    #           deployed at this url
-    # This feels brittle and has room for improvement but just doing it this way for now
-    # to get *something* wired together and working.
-    p = urlparse(github_app_webhook_url)
-    # if this is a named deployment (review, staging, or prod) we don't need to include the path
-    # because it will always be "/github/hooks/" and we don't want to waste valuable space in our
-    # 64 char length limit encoding that. but if the path is something else, this is local proxy
-    # server, and so we do need to preseve that.
-    to_encode = p.netloc if p.path == "/github/hooks/" else p.netloc + p.path
-    to_encode += "%"  # control character to separate webhook url encoding from recipe run id
-    as_hex = "".join(["{:02x}".format(ord(x)) for x in to_encode])
-    # decoding is easier if recipe_run id encoded with an even length, so zero-pad if odd.
-    # note we are using ``f"0{recipe_run.id}"``, *not* ``f"{recipe_run_id:02}"`` to pad if odd,
-    # because we want the *number of digits* to be even regardless of the length of the odd input.
-    recipe_run_id_str = f"0{recipe_run.id}" if len(str(recipe_run.id)) % 2 else str(recipe_run.id)
-    encoded_webhook_url_plus_recipe_run_id = as_hex + recipe_run_id_str
-    # so, this will be reversable with:
-    #   ```
-    #   as_pairs = [
-    #       a + b for a, b in zip(
-    #           encoded_webhook_url_plus_recipe_run_id[::2],
-    #           encoded_webhook_url_plus_recipe_run_id[1::2],
-    #       )
-    #   ]
-    #   control_character_idx = [
-    #       i for i, val in enumerate(as_pairs) if chr(int(val, 16)) == "%"
-    #   ].pop(0)
-    #   recipe_run_id = int("".join(as_pairs[control_character_idx + 1:]))
-    #   webhook_url = "".join(
-    #       [chr(int(val, 16)) for val in as_pairs[:control_character_idx]]
-    #   )
-    #   ```
-    # Finally, dataflow job names *have to* start with a lowercase letter, so prepending "a":
-    bakery_config.Bake.job_name = f"a{encoded_webhook_url_plus_recipe_run_id}"
+
+    bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
 
     logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
