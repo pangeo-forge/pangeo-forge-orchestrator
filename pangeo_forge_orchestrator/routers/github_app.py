@@ -298,14 +298,28 @@ async def receive_github_hook(  # noqa: C901
         qs = parse_qs(payload_bytes.decode("utf-8"))
         payload = {k: v.pop(0) for k, v in qs.items()}
 
+    logger.info("Checking to see if PR has github-app-dev label...")
+    if event in ["pull_request", "issue_comment"]:
+        obj = payload[event] if event == "pull_request" else payload["issue"]
+        if obj["labels"][0]["name"] != "github-app-dev":
+            logger.info("PR does not have github-app-dev label, skipping")
+            return {"message": "not a github-app-dev pr, skipping"}
+
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
 
-        maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
-        if maybe_pass["status"] == "pass":
-            return maybe_pass
+        # FIXME
+        # maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
+        # if maybe_pass["status"] == "pass":
+        #    return maybe_pass
 
-        args = (pr["base"]["repo"]["html_url"], pr["head"]["sha"], pr["number"])
+        args = (
+            pr["head"]["repo"]["html_url"],
+            pr["head"]["sha"],
+            pr["number"],
+            pr["base"]["repo"]["url"],
+            pr["base"]["repo"]["full_name"],
+        )
         background_tasks.add_task(synchronize, *args, **session_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
@@ -316,9 +330,10 @@ async def receive_github_hook(  # noqa: C901
 
         pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
 
-        maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
-        if maybe_pass["status"] == "pass":
-            return maybe_pass
+        # FIXME
+        # maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
+        # if maybe_pass["status"] == "pass":
+        #     return maybe_pass
 
         if not comment_body.startswith("/"):
             # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
@@ -585,15 +600,16 @@ async def run(
 
 
 async def synchronize(
-    html_url: str,
+    head_html_url: str,
     head_sha: str,
     pr_number: str,
+    base_api_url: str,
+    base_full_name: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
 ):
-    logger.info(f"Synchronizing {html_url} at {head_sha}.")
-    api_url = html_to_api_url(html_url)
+    logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
     create_request = dict(
         name="synchronize",
         head_sha=head_sha,
@@ -605,7 +621,7 @@ async def synchronize(
         ),
         details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
     )
-    checks_response = await create_check_run(gh, api_url, create_request)
+    checks_response = await create_check_run(gh, base_api_url, create_request)
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
     # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
@@ -616,11 +632,11 @@ async def synchronize(
     cmd = [
         "pangeo-forge-runner",
         "expand-meta",
-        f"--repo={html_url}",
+        f"--repo={head_html_url}",
         f"--ref={head_sha}",
         "--json",
     ]
-    cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
+    cmd = await maybe_specify_feedstock_subdir(cmd, base_api_url, pr_number, gh)
     try:
         out = subprocess.check_output(cmd)
     except subprocess.CalledProcessError as e:
@@ -628,6 +644,7 @@ async def synchronize(
             p = json.loads(line)
             if p["status"] == "failed":
                 tracelines = p["exc_info"].splitlines()
+                logger.debug(f"Syncronize errored with:\n {tracelines}")
                 if tracelines[-1].startswith("FileNotFoundError"):
                     # A required file is missing: either meta.yaml or recipe.py
                     update_request = dict(
@@ -636,7 +653,9 @@ async def synchronize(
                         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
                         output=dict(title="FileNotFoundError", summary=tracelines[-1]),
                     )
-                    _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+                    _ = await update_check_run(
+                        gh, base_api_url, checks_response["id"], update_request
+                    )
                     raise ValueError(tracelines[-1]) from e
                 else:
                     raise NotImplementedError from e
@@ -652,7 +671,7 @@ async def synchronize(
 
     try:
         feedstock_statement = select(MODELS["feedstock"].table).where(
-            MODELS["feedstock"].table.spec == html_url_to_repo_full_name(html_url)
+            MODELS["feedstock"].table.spec == base_full_name
         )
         feedstock_id = [result.id for result in db_session.exec(feedstock_statement)].pop(0)
         bakery_statement = select(MODELS["bakery"].table).where(
@@ -669,15 +688,15 @@ async def synchronize(
                 summary=dedent(
                     f"""\
                     To resolve, a maintainer must ensure both of the following are in database:
-                    - **Feedstock**: {html_url}
+                    - **Feedstock**: {base_full_name}
                     - **Bakery**: `{meta["bakery"]["id"]}`
                     """
                 ),
             ),
         )
-        _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+        _ = await update_check_run(gh, base_api_url, checks_response["id"], update_request)
         raise ValueError(
-            f"Feedstock {html_url} and/or bakery {meta['bakery']['id']} not in database."
+            f"Feedstock {base_full_name} and/or bakery {meta['bakery']['id']} not in database."
         ) from e
 
     new_models = [
@@ -719,7 +738,7 @@ async def synchronize(
         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
         output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
-    _ = await update_check_run(gh, api_url, checks_response["id"], update_request)
+    _ = await update_check_run(gh, base_api_url, checks_response["id"], update_request)
 
 
 async def run_recipe_test(
