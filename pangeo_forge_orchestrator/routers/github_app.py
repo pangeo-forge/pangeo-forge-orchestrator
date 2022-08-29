@@ -510,6 +510,74 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
     return f"a{encoded_webhook_url_plus_recipe_run_id}"
 
 
+async def run(
+    html_url: str,
+    head_sha: str,
+    pr_number: str,
+    recipe_run: SQLModel,  # maybe not required for production run?
+    *,
+    gh: GitHubAPI,
+    db_session: Session,
+):
+    api_url = html_to_api_url(html_url)
+
+    statement = select(MODELS["bakery"].table).where(
+        MODELS["bakery"].table.id == recipe_run.bakery_id
+    )
+    matching_bakery = db_session.exec(statement).one()
+    bakery_config = get_config().bakeries[matching_bakery.name]
+
+    subpath = get_storage_subpath_identifier(recipe_run)
+    # root paths are an interesting configuration edge-case because they combine some stable
+    # config (the base path) with some per-recipe config (the subpath). so they are partially
+    # initialized when we get them, but we need to complete them here.
+    # NOTE: redundant with {job_name} formatting feature in pangeo-forge-runner, but we want to
+    # use job_name for identifying the webhook url so we're rolling our own solution for this.
+    bakery_config.TargetStorage.root_path = bakery_config.TargetStorage.root_path.format(
+        subpath=subpath
+    )
+    bakery_config.MetadataCacheStorage.root_path = (
+        bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
+    )
+
+    bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
+
+    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
+    # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
+    with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
+        json.dump(bakery_config.dict(), f)
+        f.flush()
+        cmd = [
+            "pangeo-forge-runner",
+            "bake",
+            f"--repo={html_url}",
+            f"--ref={head_sha}",
+            "--json",
+            "--prune",
+            f"--Bake.recipe_id={recipe_run.recipe_id}",  # NOTE: under development
+            f"-f={f.name}",
+        ]
+        cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
+        logger.debug(f"Running command: {cmd}")
+
+        # We're about to run this recipe, let's update its status to "in_progress"
+        recipe_run.status = "in_progress"
+        # TODO: update recipe_run.started_at time? It was initially set on creation.
+        db_session.add(recipe_run)
+        db_session.commit()
+        try:
+            out = subprocess.check_output(cmd)
+            logger.debug(f"Command output is {out.decode('utf-8')}")
+        except subprocess.CalledProcessError as e:
+            # Something went wrong, let's update the recipe_run status to "failed"
+            # TODO: Confirm this works. I don't think we need to get the model back from the database.
+            recipe_run.status = "completed"
+            recipe_run.conclusion = "failure"
+            db_session.add(recipe_run)
+            db_session.commit()
+            raise e
+
+
 # Background tasks --------------------------------------------------------------------------------
 
 
@@ -663,65 +731,20 @@ async def run_recipe_test(
     gh_kws: dict,
 ):
     """ """
-    api_url = html_to_api_url(html_url)
+    await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
 
-    statement = select(MODELS["bakery"].table).where(
-        MODELS["bakery"].table.id == recipe_run.bakery_id
-    )
-    matching_bakery = db_session.exec(statement).one()
-    bakery_config = get_config().bakeries[matching_bakery.name]
-
-    subpath = get_storage_subpath_identifier(recipe_run)
-    # root paths are an interesting configuration edge-case because they combine some stable
-    # config (the base path) with some per-recipe config (the subpath). so they are partially
-    # initialized when we get them, but we need to complete them here.
-    # NOTE: redundant with {job_name} formatting feature in pangeo-forge-runner, but we want to
-    # use job_name for identifying the webhook url so we're rolling our own solution for this.
-    bakery_config.TargetStorage.root_path = bakery_config.TargetStorage.root_path.format(
-        subpath=subpath
-    )
-    bakery_config.MetadataCacheStorage.root_path = (
-        bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
-    )
-
-    bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
-
-    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
-    # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
-    with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-        json.dump(bakery_config.dict(), f)
-        f.flush()
-        cmd = [
-            "pangeo-forge-runner",
-            "bake",
-            f"--repo={html_url}",
-            f"--ref={head_sha}",
-            "--json",
-            "--prune",
-            f"--Bake.recipe_id={recipe_run.recipe_id}",  # NOTE: under development
-            f"-f={f.name}",
-        ]
-        cmd = await maybe_specify_feedstock_subdir(cmd, api_url, pr_number, gh)
-        logger.debug(f"Running command: {cmd}")
-
-        # We're about to run this recipe, let's update its status to "in_progress"
-        recipe_run.status = "in_progress"
-        # TODO: update recipe_run.started_at time? It was initially set on creation.
-        db_session.add(recipe_run)
-        db_session.commit()
-        _ = await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
-        try:
-            out = subprocess.check_output(cmd)
-            logger.debug(f"Command output is {out.decode('utf-8')}")
-        except subprocess.CalledProcessError as e:
-            # Something went wrong, let's update the recipe_run status to "failed"
-            # TODO: Confirm this works. I don't think we need to get the model back from the database.
-            recipe_run.status = "completed"
-            recipe_run.conclusion = "failure"
-            db_session.add(recipe_run)
-            db_session.commit()
-            _ = await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
-            raise ValueError(e.output) from e
+    try:
+        await run(
+            html_url,
+            head_sha,
+            pr_number,
+            recipe_run,
+            gh=gh,
+            db_session=db_session,
+        )
+    except subprocess.CalledProcessError as e:
+        await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
+        raise e
 
 
 async def triage_test_run_complete(
