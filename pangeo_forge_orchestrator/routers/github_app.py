@@ -190,9 +190,6 @@ async def maybe_specify_feedstock_subdir(
             oauth_token=token,
             accept=ACCEPT,
         )
-        # TODO: make subdir parsing more robust. currently, the next line will parse
-        #   ``[{'filename': 'recipes/new-dataset/recipe.py'}]`` --> 'new-dataset'
-        # but does not account for any edge cases or error conditions.
         subdir = files[0]["filename"].split("/")[1]
         cmd.append(f"--feedstock-subdir=recipes/{subdir}")
 
@@ -417,7 +414,11 @@ async def receive_github_hook(  # noqa: C901
             if ...:
                 return {"message": "not a recipes PR"}
 
-            args = (payload["pull_request"]["base"]["repo"]["owner"],)  # type: ignore
+            args = (  # type: ignore
+                payload["pull_request"]["base"]["repo"]["owner"],
+                payload["pull_request"]["number"],
+                payload["pull_request"]["base"]["repo"]["url"],
+            )
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
         else:
             # this is not staged recipes
@@ -805,32 +806,76 @@ async def triage_prod_run_complete():
 
 async def create_feedstock_repo(
     owner: dict,
+    pr_number: str,
+    api_url: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
     # (1) check changed files, if we're in a subdir of recipes, then proceed
-    ...
+    files = await gh.getitem(f"{api_url}/pulls/{pr_number}/files", **gh_kws)
+    subdir = files[0]["filename"].split("/")[1]
     # (2) make a new repo with name `subdir-feedstock`, plus license + readme
-    route = f"/orgs/{owner['login']}/repos" if owner["type"] != "User" else "/user/repos"
+    create_route = f"/orgs/{owner['login']}/repos" if owner["type"] != "User" else "/user/repos"
+    name = f"{subdir}-feedstock"
     data = dict(
-        name="",
-        description="",
-        homepage="",
+        name=name,
+        description=f"Pangeo Forge feedstock for {subdir}.",
+        # TODO: link directly to feedstock in database? Problem is we don't know that we're in a
+        # production deployment, so will need to conditionally append orchestratorEndpoint param.
+        homepage="https://pangeo-forge.org",
+        private=False,
+        has_issues=True,
+        has_projects=False,
+        has_wiki=False,
+        auto_init=True,
+        gitignore_template="Python",
+        license_template="apache-2.0",
     )
-    _ = await gh.post(route, data=data, **gh_kws)
+    await gh.post(create_route, data=data, **gh_kws)
+    feedstock_spec = f"{owner['login']}/{name}"
     # (3) add all contributors to PR as collaborators w/ write permission on repo
     ...
-    # (4) cache contents of PR changed files (in memory or tempfile, tbd)
-    ...
-    # (5) open PR against new feedstock repository with changed files from PR
-    ...
-    # (6) add new feedstock to database
-
-    # (7) merge PR - this boomerangs us back to this route, but to the `else` block below!
-    ...
-    # (8) open PR on staged-recipes to delete (or do this on chron? conda forge uses chron)
+    # (4) create a new branch on feedstock repo
+    main = await gh.getitem(f"/repos/{feedstock_spec}/git/matching-refs/main", **gh_kws)
+    await gh.post(
+        f"/repos/{feedstock_spec}/git/refs",
+        data=dict(
+            ref="/refs/heads/create-feedstock",
+            sha=main[0]["object"]["sha"],
+        ),
+        **gh_kws,
+    )
+    # (5) add contents to new branch
+    for f in files:
+        await gh.post(
+            f"/repos/{feedstock_spec}/contents/feedstock/{f['name']}",
+            data=dict(
+                message=f"Adding {f['name']}",
+                content=f["content"],
+                branch="create-feedstock",
+            ),
+            **gh_kws,
+        )
+    # (6) open PR
+    open_pr = await gh.post(
+        f"/repos/{feedstock_spec}/pulls",
+        data=dict(
+            title=f"Create {feedstock_spec}",
+            head="create-feedstock",
+            base="main",
+        ),
+        **gh_kws,
+    )
+    # (7) add new feedstock to database
+    new_fstock_model = MODELS["feedstock"].creation(spec=feedstock_spec)
+    db_model = MODELS["feedstock"].table.from_orm(new_fstock_model)
+    db_session.add(db_model)
+    db_session.commit()
+    # (8) merge PR - this deploys prod run via another call to /github/hooks route
+    await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge", **gh_kws)
+    # (9) open PR on staged-recipes to delete (or do this on chron? conda forge uses chron)
     ...
 
 
