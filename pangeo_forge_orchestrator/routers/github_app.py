@@ -253,7 +253,7 @@ async def get_feedstock_check_runs(
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
 )
-async def receive_github_hook(
+async def receive_github_hook(  # noqa: C901
     request: Request,
     background_tasks: BackgroundTasks,
     http_session: aiohttp.ClientSession = Depends(http_session),
@@ -405,6 +405,28 @@ async def receive_github_hook(
             background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
         else:
             background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+
+    elif (
+        event == "pull_request"
+        and payload["action"] == "closed"
+        and payload["pull_request"]["merged"]
+    ):
+        if "staged-recipes" in payload["pull_request"]["base"]["repo"]["full_name"]:
+            # this is staged-recipes, so (probably) create a new feedstock repository
+            # make sure this is a recipe PR (not top-level config or something)
+            if ...:
+                return {"message": "not a recipes PR"}
+
+            args = (payload["pull_request"]["base"]["repo"]["owner"],)  # type: ignore
+            background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
+        else:
+            # this is not staged recipes
+            # make sure this is a recipe PR (not config, readme, etc)
+            if ...:
+                return {"message": "PR didn't change recipe or meta.yaml, not deploying"}
+
+            args = ()  # type: ignore
+            background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
     else:
         raise HTTPException(
@@ -747,4 +769,39 @@ async def triage_test_run_complete(
 
 
 async def triage_prod_run_complete():
+    pass
+
+
+async def create_feedstock_repo(
+    owner: dict,
+    *,
+    gh: GitHubAPI,
+    db_session: Session,
+    gh_kws: dict,
+):
+    # (1) check changed files, if we're in a subdir of recipes, then proceed
+    ...
+    # (2) make a new repo with name `subdir-feedstock`, plus license + readme
+    route = f"/orgs/{owner['login']}/repos" if owner["type"] != "User" else "/user/repos"
+    data = dict(
+        name="",
+        description="",
+        homepage="",
+    )
+    _ = await gh.post(route, data=data, **gh_kws)
+    # (3) add all contributors to PR as collaborators w/ write permission on repo
+    ...
+    # (4) cache contents of PR changed files (in memory or tempfile, tbd)
+    ...
+    # (5) open PR against new feedstock repository with changed files from PR
+    ...
+    # (6) add new feedstock to database
+
+    # (7) merge PR - this boomerangs us back to this route, but to the `else` block below!
+    ...
+    # (8) open PR on staged-recipes to delete (or do this on chron? conda forge uses chron)
+    ...
+
+
+async def deploy_prod_run():
     pass
