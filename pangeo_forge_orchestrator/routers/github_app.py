@@ -199,6 +199,11 @@ async def maybe_specify_feedstock_subdir(
     return cmd
 
 
+def get_storage_subpath_identifier(recipe_run: SQLModel):
+    # TODO: make this identifier better, and **differentiate test vs. prod runs**.
+    return f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
+
+
 # Routes ------------------------------------------------------------------------------------------
 
 
@@ -377,13 +382,19 @@ async def receive_github_hook(
                 MODELS["feedstock"].table.id == recipe_run.feedstock_id
             )
         ).one()
+        bakery = db_session.exec(
+            select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
+        ).one()
 
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
         if recipe_run.conclusion == "success":
-            # FIXME: Add the dataset_public_url here! Will require using same formating method
-            # as used to deploy recipe. (So that could be factored out to a separate func).
-            recipe_run.dataset_public_url = "..."
+            bakery_config = get_config().bakeries[bakery.name]
+            subpath = get_storage_subpath_identifier(recipe_run)
+            root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
+            recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
+                root_path=root_path
+            )
         db_session.add(recipe_run)
         db_session.commit()
 
@@ -592,13 +603,12 @@ async def run_recipe_test(
     matching_bakery = db_session.exec(statement).one()
     bakery_config = get_config().bakeries[matching_bakery.name]
 
-    # TODO: make this identifier better
-    # NOTE: redundant with {job_name} formatting feature in pangeo-forge-runner, but we want to
-    # use job_name for identifying the webhook url so we're rolling our own solution for this.
-    subpath = f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
+    subpath = get_storage_subpath_identifier(recipe_run)
     # root paths are an interesting configuration edge-case because they combine some stable
     # config (the base path) with some per-recipe config (the subpath). so they are partially
     # initialized when we get them, but we need to complete them here.
+    # NOTE: redundant with {job_name} formatting feature in pangeo-forge-runner, but we want to
+    # use job_name for identifying the webhook url so we're rolling our own solution for this.
     bakery_config.TargetStorage.root_path = bakery_config.TargetStorage.root_path.format(
         subpath=subpath
     )
@@ -697,9 +707,42 @@ async def triage_test_run_complete(
             break
 
     if recipe_run.conclusion == "failure":
-        comment = ":-( The test failed."
+        comment = dedent(
+            """\
+            The test failed, but I'm sure we can find out why!
+
+            Pangeo Forge maintainers are working diligently to provide public logs for contributors.
+            That feature is not quite ready yet, however, so please reach out on this thread to a
+            maintainer, and they'll help you diagnose the problem.
+            """
+        )
     elif recipe_run.conclusion == "success":
-        comment = ":-) The test succeeded!"
+        if recipe_run.dataset_type == "zarr":
+            to_open = dedent(
+                f"""\
+                import xarray as xr
+
+                store = "{recipe_run.dataset_public_url}"
+                ds = xr.open_dataset(store, engine='zarr', chunks={{}})
+                ds
+                """
+            )
+        else:
+            to_open = dedent(
+                f"""\
+                Demonstration code for opening {recipe_run.dataset_type = } not implemented yet.
+                """
+            )
+        comment = dedent(
+            """\
+            :tada: The test run of `{recipe_id}` at {sha} succeeded!
+
+            ```python
+            {to_open}
+            ```
+            """
+        ).format(recipe_id=recipe_run.recipe_id, sha=recipe_run.head_sha, to_open=to_open)
+
     _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
 
 

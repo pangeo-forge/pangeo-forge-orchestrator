@@ -28,6 +28,7 @@ class Storage(BaseModel):
     fsspec_class: str
     fsspec_args: dict
     root_path: str
+    public_url: Optional[str]
 
 
 class DataflowBakery(BaseModel):
