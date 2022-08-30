@@ -16,6 +16,7 @@ REDIRECT = "redirect.html"
 PORT = 3000
 AUTHORIZE_URL = f"http://localhost:{PORT}/{AUTHORIZE}"
 PLACEHOLDER_HOOK_URL = "https://example.com/github/events"
+TEST_ORG = "pforgetest"
 
 if not os.path.exists(CACHEDIR):
     os.mkdir(CACHEDIR)
@@ -23,41 +24,27 @@ if not os.path.exists(CACHEDIR):
 
 def get_app_name_and_desc(github_username, deployment, pr_number=None):
     """For a given github_username and deployment type, return a name and description for the app.
-    - ``prod`` deployment is always named ``pangeo-forge`` and can only be created in the
-      pangeo-forge organization (not in a user account).
-    - ``staging`` deployment is always named ``pangeo-forge-staging`` and can only be created
-      in the pangeo-forge organization (not in a user account).
-    - ``review`` deployment is named ``pforge-review-pr-{pr_number}`` where pr_number is the
-      number of the PR on ``pangeo-forge-orchestrator`` from which this review app is deployed.
-    - ``local`` deployment is named ``pforge-local-{github_username}``. This deployment is a
-      private deployment in the developer's user account.
+    Names are determined as follows:
+      - `prod` deployment is always named `pangeo-forge`.
+      - `staging` deployment is always named `pangeo-forge-staging`.
+      - `review` deployment is named `pforge-pr-{pr_number}` where pr_number is the number of the
+        PR on `pangeo-forge-orchestrator` from which the review app is deployed.
+      - `local` deployment is named `pforge-local-{github_username}`. This deployment is for the
+        named developer's personal use, and is run via a proxy to their local machine.
     """
 
-    if github_username == "pangeo-forge":
-        if deployment in ("review", "local"):
-            raise ValueError(
-                "GitHub Apps for `review` and `local` deployments should not be created in the "
-                "`pangeo-forge` organization. The developer should create these apps in their own "
-                "user account."
-            )
+    if deployment in ("prod", "staging"):
         github_app_name = "pangeo-forge"  # the name of the production app
         desc = "The official pangeo-forge github app."
         if deployment == "staging":
             github_app_name += "-staging"
             desc = desc.replace("The", "A staging deployment of the")
-    else:  # this is a developer's user account
-        if deployment in ("prod", "staging"):
-            raise ValueError(
-                "GitHub Apps for `prod` and `staging` deployments should not be created in a "
-                "developer's user account. These apps should only be created within the "
-                "`pangeo-forge` organization."
-            )
-        github_app_name = f"pforge-{deployment}"
+    else:
         desc = "A development version of the pangeo-forge github app."
         if deployment == "review":
-            github_app_name += f"-{pr_number}"
+            github_app_name = f"pforge-pr-{pr_number}"
         elif deployment == "local":
-            github_app_name += f"-{github_username}"
+            github_app_name = f"pforge-local-{github_username}"
 
     return github_app_name, desc
 
@@ -99,9 +86,12 @@ def main(github_username, deployment, pr_number=None):
 
     # This page content adapted from official GitHub docs, here:
     # https://docs.github.com/en/developers/apps/building-github-apps/creating-a-github-app-from-a-manifest#examples
+    org = "pangeo-forge" if deployment in ("prod", "staging") else TEST_ORG
     content = f"""
     <html>
-        <form action="https://github.com/settings/apps/new?state=abc123" method="post">
+        <form
+         action="https://github.com/organizations/{org}/settings/apps/new?state=abc123"
+         method="post">
             Create a GitHub App from Manifest: <input type="text" name="manifest" id="manifest"><br>
             <input type="submit" value="Submit">
         </form>
@@ -114,6 +104,8 @@ def main(github_username, deployment, pr_number=None):
 
     with open(f"{CACHEDIR}/{AUTHORIZE}", "w") as f:
         f.write(content)
+
+    return app_name, org
 
 
 if __name__ == "__main__":
@@ -143,7 +135,12 @@ if __name__ == "__main__":
     with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
         f.write(f"<html>Authorization complete! Creds stored in <b>{creds_outpath}</b></html>")
 
-    main(*sys.argv[1:])
+    app_name, org = main(*sys.argv[1:])
+
+    print(f"Create new app with {app_name=}, {deployment=}, {org=}?\nInput 'yes' to continue.")
+    yes = input()
+    if yes != "yes":
+        sys.exit()
 
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
