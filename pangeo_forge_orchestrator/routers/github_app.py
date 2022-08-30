@@ -148,33 +148,6 @@ async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session:
     return repo_id, feedstock.spec
 
 
-async def pass_if_deployment_not_selected(pr_labels: List[str], gh: aiohttp.ClientSession):
-    """The specific deployment identifier should follow "only-backend-".
-
-    There are three types of specific deployments:
-      1. A persistent Heroku deployment (i.e. production, staging, etc.)
-      2. An ephemeral Heroku deployment (e.g, a review app linked to a PR)
-      3. A tunnel (i.e. smee channel) to a local dev server, as recommended in:
-         https://docs.github.com/en/github-ae@latest/developers/apps/getting-started-with-apps/setting-up-your-development-environment-to-create-a-github-app
-    """
-    # TODO: THIS WONT WORK W/OUT GENERALIZING ``GH_APP_ID`` & ``INSTALLATION_ID`` CONSTANTS
-
-    specific_deployments = [label for label in pr_labels if label.startswith("only-backend-")]
-    if specific_deployments:
-        app_webhook_url = await get_app_webhook_url(gh)
-        for sd in specific_deployments:
-            sd_identifier = sd.replace("only-backend-", "")
-            if sd_identifier not in app_webhook_url:
-                return {
-                    "status": "pass",
-                    "message": (
-                        f"This deployment receives webhooks from {app_webhook_url}, which is "
-                        f"not identified in the label set {specific_deployments}."
-                    ),
-                }
-    return {"status": "ok"}
-
-
 async def maybe_specify_feedstock_subdir(
     cmd: List[str],
     api_url: str,
@@ -298,21 +271,18 @@ async def receive_github_hook(  # noqa: C901
         qs = parse_qs(payload_bytes.decode("utf-8"))
         payload = {k: v.pop(0) for k, v in qs.items()}
 
-    logger.info("Checking to see if PR has github-app-dev label...")
-    if event in ["pull_request", "issue_comment"]:
-        obj = payload[event] if event == "pull_request" else payload["issue"]
-        if obj["labels"][0]["name"] != "github-app-dev":
-            logger.info("PR does not have github-app-dev label, skipping")
-            return {"message": "not a github-app-dev pr, skipping"}
-    logger.info("PR label found, continuing...")
+    # TODO: maybe bring this back as a way to filter which PRs run on which apps.
+    # With addition of `pforgetest` org, might not be necessary, however. TBD.
+    # logger.info("Checking to see if PR has {label} label...")
+    # if event in ["pull_request", "issue_comment"]:
+    #    obj = payload[event] if event == "pull_request" else payload["issue"]
+    #    if obj["labels"][0]["name"] != "{label}":
+    #        logger.info("PR does not have {label} label, skipping")
+    #        return {"message": "not a {label} pr, skipping"}
+    #    logger.info("PR label found, continuing...")
 
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
-
-        # FIXME
-        # maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
-        # if maybe_pass["status"] == "pass":
-        #    return maybe_pass
 
         args = (
             pr["head"]["repo"]["html_url"],
@@ -330,11 +300,6 @@ async def receive_github_hook(  # noqa: C901
         reactions_url = comment["reactions"]["url"]
 
         pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
-
-        # FIXME
-        # maybe_pass = await pass_if_deployment_not_selected(pr["labels"], gh=gh)
-        # if maybe_pass["status"] == "pass":
-        #     return maybe_pass
 
         if not comment_body.startswith("/"):
             # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
