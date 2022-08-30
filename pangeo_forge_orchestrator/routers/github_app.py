@@ -671,6 +671,14 @@ async def synchronize(
             meta = p["meta"]
     logger.debug(meta)
 
+    # TODO[IMPORTANT]:
+    #   - Add MetaYaml pydantic model to this somewhere. i'd say top level of this repo,
+    #     but actually we want it to be user facing somehow). pangeo-forge-runner? its own
+    #     repo? or maybe the top-level of this repo, but export a JSON spec on deploy?
+    #   - Then at this point in the synchronize task, parse ``meta`` dict into the model?
+    #   - As I now think about this, I guess we want to parse ``meta`` dict into pydantic in
+    #     pangeo-forge-runner, so that functionality is available to users.
+
     try:
         feedstock_statement = select(MODELS["feedstock"].table).where(
             MODELS["feedstock"].table.spec == base_full_name
