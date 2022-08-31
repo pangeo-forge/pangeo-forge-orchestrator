@@ -284,7 +284,8 @@ async def receive_github_hook(  # noqa: C901
 
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
-
+        if pr["title"].startswith("Cleanup"):
+            return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
         args = (
             pr["head"]["repo"]["html_url"],
             pr["head"]["sha"],
@@ -393,17 +394,22 @@ async def receive_github_hook(  # noqa: C901
         and payload["pull_request"]["merged"]
     ):
         logger.info("Received PR merged event...")
-        if "staged-recipes" in payload["pull_request"]["base"]["repo"]["full_name"]:
+        pr = payload["pull_request"]
+
+        if "staged-recipes" in pr["base"]["repo"]["full_name"]:
             # this is staged-recipes, so (probably) create a new feedstock repository
             # TODO: make sure this is a recipe PR (not top-level config or something)
             # if ...:
             #    return {"message": "not a recipes PR"}
 
+            if pr["title"].startswith("Cleanup"):
+                return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
+
             args = (  # type: ignore
-                payload["pull_request"]["base"]["repo"]["owner"]["login"],
-                payload["pull_request"]["base"]["ref"],
-                payload["pull_request"]["number"],
-                payload["pull_request"]["base"]["repo"]["url"],
+                pr["base"]["repo"]["owner"]["login"],
+                pr["base"]["ref"],
+                pr["number"],
+                pr["base"]["repo"]["url"],
             )
             logger.info(f"Calling create_feedstock with args {args}")
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
