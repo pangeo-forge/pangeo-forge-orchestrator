@@ -7,7 +7,7 @@ import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
-from typing import List, Tuple
+from typing import Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -151,11 +151,10 @@ async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session:
 
 
 async def maybe_specify_feedstock_subdir(
-    cmd: List[str],
     api_url: str,
     pr_number: str,
     gh: GitHubAPI,
-) -> List[str]:
+) -> Optional[str]:
     """If this is staged-recipes, add the --feedstock-subdir option to the command."""
 
     if "staged-recipes" in api_url:
@@ -166,9 +165,9 @@ async def maybe_specify_feedstock_subdir(
             accept=ACCEPT,
         )
         subdir = files[0]["filename"].split("/")[1]
-        cmd.append(f"--feedstock-subdir=recipes/{subdir}")
+        return f"recipes/{subdir}"
 
-    return cmd
+    return None
 
 
 def get_storage_subpath_identifier(recipe_run: SQLModel):
@@ -415,15 +414,22 @@ async def receive_github_hook(  # noqa: C901
             logger.info(f"Calling create_feedstock with args {args}")
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
         else:
-            # this is not staged recipes
-            # make sure this is a feedstock
+            # this is not staged recipes, but make sure it's a feedstock, and not some other repo
             if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
                 return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
-            # make sure this is a recipe PR (not config, readme, etc)
+
+            # TODO: make sure this is a recipe PR (not config, readme, etc)
             # if ...:
             #    return {"message": "PR didn't change recipe or meta.yaml, not deploying"}
 
-            args = ()  # type: ignore
+            # mypy doesn't like that `args` can have variable length depending on which
+            # conditional block it's defined within
+            args = (  # type: ignore
+                pr["base"]["html_url"],
+                pr["base"]["sha"],
+                pr["base"]["full_name"],
+                pr["base"]["url"],
+            )
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
     else:
@@ -509,11 +515,10 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
 
 
 async def run(
-    head_html_url: str,
-    base_api_url: str,
-    head_sha: str,
-    pr_number: str,
+    html_url: str,
+    ref: str,
     recipe_run: SQLModel,
+    feedstock_subdir: Optional[str] = None,
     *,
     gh: GitHubAPI,
     db_session: Session,
@@ -547,8 +552,8 @@ async def run(
         cmd = [
             "pangeo-forge-runner",
             "bake",
-            f"--repo={head_html_url}",
-            f"--ref={head_sha}",
+            f"--repo={html_url}",
+            f"--ref={ref}",
             "--json",
         ]
         if recipe_run.is_test:
@@ -556,25 +561,40 @@ async def run(
 
         cmd += [f"--Bake.recipe_id={recipe_run.recipe_id}", f"-f={f.name}"]
 
-        cmd = await maybe_specify_feedstock_subdir(cmd, base_api_url, pr_number, gh)
+        if feedstock_subdir:
+            cmd.append(f"--feedstock-subdir={feedstock_subdir}")
+
         logger.debug(f"Running command: {cmd}")
 
         # We're about to run this recipe, let's update its status to "in_progress"
         recipe_run.status = "in_progress"
-        # TODO: update recipe_run.started_at time? It was initially set on creation.
+        # Start time was first set when recipe run was queued, which could have been ages ago,
+        # so if we don't update it now, we won't capture how long the pipeline actually took.
+        recipe_run.started_at = datetime.utcnow().replace(microsecond=0)
         db_session.add(recipe_run)
         db_session.commit()
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
         except subprocess.CalledProcessError as e:
-            # Something went wrong, let's update the recipe_run status to "failed"
-            # TODO: Confirm this works. I don't think we need to get the model back from the database.
+            for line in e.output.splitlines():
+                p = json.loads(line)
+                if p["status"] == "failed":
+                    trace = p["exc_info"]
+
+            logger.error(f"Recipe run {recipe_run} failed with: {trace}")
+
             recipe_run.status = "completed"
             recipe_run.conclusion = "failure"
+            # Add the traceback for this deployment failure to the recipe run, otherwise it could
+            # easily get buried in the server logs. TODO: Consider: is there anything of security
+            # significance in the call stack captured in the trace?
+            message = json.loads(recipe_run.message)
+            recipe_run.message = json.dumps(message | {"trace": trace})
             db_session.add(recipe_run)
             db_session.commit()
-            raise e
+            db_session.refresh(recipe_run)
+            raise e  # raise the error, so that the calling function knows what happened
 
 
 # Background tasks --------------------------------------------------------------------------------
@@ -617,7 +637,9 @@ async def synchronize(
         f"--ref={head_sha}",
         "--json",
     ]
-    cmd = await maybe_specify_feedstock_subdir(cmd, base_api_url, pr_number, gh)
+    feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
+    if feedstock_subdir:
+        cmd.append(f"--feedstock-subdir={feedstock_subdir}")
     try:
         out = subprocess.check_output(cmd)
     except subprocess.CalledProcessError as e:
@@ -744,13 +766,21 @@ async def run_recipe_test(
 ):
     """ """
     await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
-    args = (head_html_url, base_api_url, head_sha, pr_number, recipe_run)
-    logger.info(f"Calling run with args: {args}")
+
+    # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
+    # check which one this is, and if it's staged-recipes, specify the subdirectoy name kwarg.
+    feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
+    args = (head_html_url, head_sha, recipe_run)
+    kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
+    logger.info(f"Calling run with args, kws: {args}, {kws}")
+    # TODO: create a check run on the head_sha this was deployed from to give
+    # a point of user engagement & a details link to recipe run page on pangeo-forge.org
     try:
-        await run(*args, gh=gh, db_session=db_session)
-    except subprocess.CalledProcessError as e:
+        await run(*args, **kws, gh=gh, db_session=db_session)
+    except subprocess.CalledProcessError:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
-        raise e
+        # We don't need to update the recipe_run in the database or handle the trace here,
+        # because that's taken care of inside `run`.
 
 
 async def triage_test_run_complete(
@@ -805,8 +835,22 @@ async def triage_test_run_complete(
     _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
 
 
-async def triage_prod_run_complete():
-    pass
+async def triage_prod_run_complete(
+    recipe_run: SQLModel,
+    *,
+    gh: GitHubAPI,
+    gh_kws: dict,
+):
+    deployment_id = json.loads(recipe_run.message)["deployment_id"]
+    await gh.post(
+        f"/repos/{recipe_run.feedstock.spec}/deployments/{deployment_id}/statuses",
+        # Here's a fun thing we can do because our recipe run model fields are modeled on the
+        # GitHub API: pass the recipe_run.conclusion directly through to deployment status.
+        data=dict(status=recipe_run.conclusion),
+        **gh_kws,
+    )
+    # Don't need to link deployment to recipe run page here; that was already done when the
+    # recipe run was moved to "in_progress" (either by `recipe_run_test` or `deploy_prod_run`).
 
 
 async def create_feedstock_repo(
@@ -941,6 +985,7 @@ async def deploy_prod_run(
         f"--ref={base_sha}",
         "--json",
     ]
+    logger.info(f"Calling subprocess {cmd}")
     try:
         out = subprocess.check_output(cmd)
     except subprocess.CalledProcessError as e:
@@ -951,9 +996,9 @@ async def deploy_prod_run(
         p = json.loads(line)
         if p["status"] == "completed":
             meta = p["meta"]
-    logger.debug(meta)
+    logger.debug(f"Retrieved meta: {meta}")
 
-    # (2) create recipe runs for every recipe in meta
+    # (2) find the feedstock and bakery in the database
     try:
         feedstock_statement = select(MODELS["feedstock"].table).where(
             MODELS["feedstock"].table.spec == base_full_name
@@ -966,8 +1011,11 @@ async def deploy_prod_run(
     except NoResultFound as e:
         # TODO: notify the user of this somehow
         raise e
+    logger.debug(f"Found feedstock: {feedstock}")
+    logger.debug(f"Found bakery: {bakery}")
 
-    new_models = []
+    # (3) create recipe runs for every recipe in meta
+    created = []
     for recipe in meta["recipes"]:
         gh_deployment = await gh.post(
             f"{base_api_url}/deployments",
@@ -977,6 +1025,7 @@ async def deploy_prod_run(
             ),
             **gh_kws,
         )
+        logger.debug(f"Created github deployment: {gh_deployment}")
         model = MODELS["recipe_run"].creation(
             recipe_id=recipe["id"],
             bakery_id=bakery.id,
@@ -991,43 +1040,39 @@ async def deploy_prod_run(
             dataset_type="zarr",
             message=json.dumps({"deployment_id": gh_deployment["id"]}),
         )
-        new_models.append(model)
-
-    created = []
-    for nm in new_models:
-        db_model = MODELS["recipe_run"].table.from_orm(nm)
+        db_model = MODELS["recipe_run"].table.from_orm(model)
         db_session.add(db_model)
         db_session.commit()
         db_session.refresh(db_model)
+        logger.debug(f"Created recipe run: {gh_deployment}")
         created.append(db_model)
 
-    # (4) deploy every recipe run, without pruning
+    # (4) deploy every recipe run; `recipe_run.is_test=False` ensures `run` won't prune.
     for recipe_run in created:
-        # FIXME: pr_number can possibly be dropped from the run signature? or made optional?
-        args = (
-            base_html_url,
-            base_api_url,
-            base_sha,
-        )  # pr_number, recipe_run)
+        args = (base_html_url, base_api_url, base_sha, recipe_run)
         logger.info(f"Calling run with args: {args}")
         try:
             await run(*args, gh=gh, db_session=db_session)  # type: ignore
-        except subprocess.CalledProcessError as e:
-            # TODO: alert the use of an error somehow
-            raise e
-
-        # TODO: (4.25) Update database for recipe up with status "in_progress"
-
-        # (4.5) Update deployment with link to recipe run page, once it's running
-        # eventually, users will be able to follow live logs here
-
+        except subprocess.CalledProcessError:
+            deployment_id = json.loads(recipe_run.message)["deployment_id"]
+            await gh.post(
+                f"{base_api_url}/deployments/{deployment_id}/statuses",
+                data=dict(status="failure"),
+                **gh_kws,
+            )
+            # Don't update recipe_run as "failed" here, that's handled inside `run`.
+        # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
+        # (4.5) Update deployment with link to recipe run page
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
+        # This url will not (currently) work if this is not a production deployment, because
+        # pangeo-forge.org will assume that the recipe_run.id and feedstock.id refer to objects
+        # in the production database (which if this is not running in prod, they do not).
+        # FIXME: We can make this work for any public deployment (review, staging) as well by
+        # conditionally appending the `orchestratorEndpoint={deployment_netloc}` to this url.
         environment_url = (
             "https://pangeo-forge.org/dashboard/"
             f"recipe-run/{recipe_run.id}?feedstock_id={feedstock.id}"
         )
-        # TODO: if not DEFAULT_BACKEND_NETLOC:
-        #           environment_url += ?orchestratorEndpoint=WhereverWeAreNow.
         await gh.post(
             f"{base_api_url}/deployments/{deployment_id}/statuses",
             data=dict(
