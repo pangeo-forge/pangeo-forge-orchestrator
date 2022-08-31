@@ -3,6 +3,7 @@
 aiohttp==3.8.1
 fastapi==0.71.0
 gidgethub==5.1.0
+# TODO: bump to sqlmodel==0.0.7 and remove sqlalchemy pin.
 sqlmodel==0.0.6
 sqlalchemy==1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
 alembic==1.7.5
