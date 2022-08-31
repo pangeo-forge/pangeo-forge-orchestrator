@@ -1,0 +1,3 @@
+[submodule "dataflow-status-monitoring"]
+	path = dataflow-status-monitoring
+	url = https://github.com/pangeo-forge/dataflow-status-monitoring.git
