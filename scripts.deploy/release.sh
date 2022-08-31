@@ -1,5 +1,6 @@
 #!/bin/sh
 
+set -e
 export APP_CONFIG="./secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml"
 export TF_IN_AUTOMATION=true
 export TF_DIR="./dataflow-status-monitoring/terraform"
@@ -29,6 +30,19 @@ terraform -chdir=${TF_DIR} plan -out tfplan \
 -var 'project='${GCP_PROJECT} \
 -var 'app_name='${APP_NAME} \
 -var 'webhook_secret='${WEBHOOK_SECRET}
-terraform -chdir=${TF_DIR} apply tfplan
+# terraform -chdir=${TF_DIR} apply tfplan
+
+echo "re-encrypting secrets..."
+# if AGE_PUBLIC_KEY is set, include it in encryption recipients.
+# this is never set in a real release, but is useful for testing this script.
+if [[ -z "${AGE_PUBLIC_KEY}" ]]; then
+  export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt)
+else
+  export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt),${AGE_PUBLIC_KEY}
+fi
+
+sops -e -i ${TF_STATE}
+sops -e -i ${TF_CREDS}
+sops -e -i ${APP_CONFIG}
 
 echo "release complete!"
