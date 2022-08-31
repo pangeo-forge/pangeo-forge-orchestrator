@@ -15,6 +15,7 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
+from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import Session, SQLModel, select
 
 from ..config import get_config
@@ -415,9 +416,12 @@ async def receive_github_hook(  # noqa: C901
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
         else:
             # this is not staged recipes
+            # make sure this is a feedstock
+            if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
+                return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
             # make sure this is a recipe PR (not config, readme, etc)
-            if ...:
-                return {"message": "PR didn't change recipe or meta.yaml, not deploying"}
+            # if ...:
+            #    return {"message": "PR didn't change recipe or meta.yaml, not deploying"}
 
             args = ()  # type: ignore
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
@@ -509,7 +513,7 @@ async def run(
     base_api_url: str,
     head_sha: str,
     pr_number: str,
-    recipe_run: SQLModel,  # maybe not required for production run?
+    recipe_run: SQLModel,
     *,
     gh: GitHubAPI,
     db_session: Session,
@@ -546,10 +550,12 @@ async def run(
             f"--repo={head_html_url}",
             f"--ref={head_sha}",
             "--json",
-            "--prune",
-            f"--Bake.recipe_id={recipe_run.recipe_id}",  # NOTE: under development
-            f"-f={f.name}",
         ]
+        if recipe_run.is_test:
+            cmd.append("--prune")
+
+        cmd += [f"--Bake.recipe_id={recipe_run.recipe_id}", f"-f={f.name}"]
+
         cmd = await maybe_specify_feedstock_subdir(cmd, base_api_url, pr_number, gh)
         logger.debug(f"Running command: {cmd}")
 
@@ -656,12 +662,12 @@ async def synchronize(
         feedstock_statement = select(MODELS["feedstock"].table).where(
             MODELS["feedstock"].table.spec == base_full_name
         )
-        feedstock_id = [result.id for result in db_session.exec(feedstock_statement)].pop(0)
+        feedstock = db_session.exec(feedstock_statement).one()
         bakery_statement = select(MODELS["bakery"].table).where(
             MODELS["bakery"].table.name == meta["bakery"]["id"]
         )
-        bakery_id = [result.id for result in db_session.exec(bakery_statement)].pop(0)
-    except IndexError as e:
+        bakery = db_session.exec(bakery_statement).one()
+    except NoResultFound as e:
         update_request = dict(
             status="completed",
             conclusion="failure",
@@ -685,8 +691,8 @@ async def synchronize(
     new_models = [
         MODELS["recipe_run"].creation(
             recipe_id=recipe["id"],
-            bakery_id=bakery_id,
-            feedstock_id=feedstock_id,
+            bakery_id=bakery.id,
+            feedstock_id=feedstock.id,
             head_sha=head_sha,
             version="",  # TODO: Are we using this?
             started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
@@ -917,5 +923,116 @@ async def create_feedstock_repo(
     await gh.delete(cleanup_branch["url"], **gh_kws)
 
 
-async def deploy_prod_run():
-    pass
+async def deploy_prod_run(
+    base_html_url: str,
+    base_sha: str,
+    base_full_name: str,
+    base_api_url: str,
+    *,
+    gh: GitHubAPI,
+    db_session: Session,
+    gh_kws: dict,
+):
+    # (1) expand meta
+    cmd = [
+        "pangeo-forge-runner",
+        "expand-meta",
+        f"--repo={base_html_url}",
+        f"--ref={base_sha}",
+        "--json",
+    ]
+    try:
+        out = subprocess.check_output(cmd)
+    except subprocess.CalledProcessError as e:
+        # TODO: report this error to users somehow
+        raise e
+
+    for line in out.splitlines():
+        p = json.loads(line)
+        if p["status"] == "completed":
+            meta = p["meta"]
+    logger.debug(meta)
+
+    # (2) create recipe runs for every recipe in meta
+    try:
+        feedstock_statement = select(MODELS["feedstock"].table).where(
+            MODELS["feedstock"].table.spec == base_full_name
+        )
+        feedstock = db_session.exec(feedstock_statement).one()
+        bakery_statement = select(MODELS["bakery"].table).where(
+            MODELS["bakery"].table.name == meta["bakery"]["id"]
+        )
+        bakery = db_session.exec(bakery_statement).one()
+    except NoResultFound as e:
+        # TODO: notify the user of this somehow
+        raise e
+
+    new_models = []
+    for recipe in meta["recipes"]:
+        gh_deployment = await gh.post(
+            f"{base_api_url}/deployments",
+            data=dict(
+                ref=base_sha,
+                environment=recipe["id"],
+            ),
+            **gh_kws,
+        )
+        model = MODELS["recipe_run"].creation(
+            recipe_id=recipe["id"],
+            bakery_id=bakery.id,
+            feedstock_id=feedstock.id,
+            head_sha=base_sha,
+            version="",  # TODO: Are we using this?
+            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            is_test=False,
+            # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
+            # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
+            # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
+            dataset_type="zarr",
+            message=json.dumps({"deployment_id": gh_deployment["id"]}),
+        )
+        new_models.append(model)
+
+    created = []
+    for nm in new_models:
+        db_model = MODELS["recipe_run"].table.from_orm(nm)
+        db_session.add(db_model)
+        db_session.commit()
+        db_session.refresh(db_model)
+        created.append(db_model)
+
+    # (4) deploy every recipe run, without pruning
+    for recipe_run in created:
+        # FIXME: pr_number can possibly be dropped from the run signature? or made optional?
+        args = (
+            base_html_url,
+            base_api_url,
+            base_sha,
+        )  # pr_number, recipe_run)
+        logger.info(f"Calling run with args: {args}")
+        try:
+            await run(*args, gh=gh, db_session=db_session)  # type: ignore
+        except subprocess.CalledProcessError as e:
+            # TODO: alert the use of an error somehow
+            raise e
+
+        # TODO: (4.25) Update database for recipe up with status "in_progress"
+
+        # (4.5) Update deployment with link to recipe run page, once it's running
+        # eventually, users will be able to follow live logs here
+
+        deployment_id = json.loads(recipe_run.message)["deployment_id"]
+        environment_url = (
+            "https://pangeo-forge.org/dashboard/"
+            f"recipe-run/{recipe_run.id}?feedstock_id={feedstock.id}"
+        )
+        # TODO: if not DEFAULT_BACKEND_NETLOC:
+        #           environment_url += ?orchestratorEndpoint=WhereverWeAreNow.
+        await gh.post(
+            f"{base_api_url}/deployments/{deployment_id}/statuses",
+            data=dict(
+                status="in_progress",
+                environment_url=environment_url,
+            ),
+            **gh_kws,
+        )
