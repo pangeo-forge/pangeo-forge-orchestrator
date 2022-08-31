@@ -7,7 +7,7 @@ import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
-from typing import Optional, Tuple
+from typing import List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -382,10 +382,13 @@ async def receive_github_hook(  # noqa: C901
 
         # Wow not every day you google a error and see a comment on it by Guido van Rossum
         # https://github.com/python/mypy/issues/1174#issuecomment-175854832
-        args: Tuple[SQLModel, SQLModel] = (recipe_run, feedstock)  # type: ignore
+        args: List[SQLModel] = [recipe_run]  # type: ignore
         if recipe_run.is_test:
+            args.append(feedstock.spec)  # type: ignore
+            logger.info(f"Calling `triage_test_run_complete` with {args=}")
             background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
         else:
+            logger.info(f"Calling `triage_prod_run_complete` with {args=}")
             background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
 
     elif (
@@ -786,12 +789,12 @@ async def run_recipe_test(
 
 async def triage_test_run_complete(
     recipe_run: SQLModel,
-    feedstock: SQLModel,
+    feedstock_spec: str,
     *,
     gh: GitHubAPI,
     gh_kws: dict,
 ):
-    async for pr in gh.getiter(f"/repos/{feedstock.spec}/pulls", **gh_kws):
+    async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls", **gh_kws):
         if pr["head"]["sha"] == recipe_run.head_sha:
             comments_url = pr["comments_url"]
             break
@@ -843,11 +846,15 @@ async def triage_prod_run_complete(
     gh_kws: dict,
 ):
     deployment_id = json.loads(recipe_run.message)["deployment_id"]
+    environment_url = json.loads(recipe_run.message)["environment_url"]
     await gh.post(
         f"/repos/{recipe_run.feedstock.spec}/deployments/{deployment_id}/statuses",
         # Here's a fun thing we can do because our recipe run model fields are modeled on the
         # GitHub API: pass the recipe_run.conclusion directly through to deployment state.
-        data=dict(state=recipe_run.conclusion),
+        data=dict(
+            state=recipe_run.conclusion,
+            environment_url=environment_url,
+        ),
         **gh_kws,
     )
     # Don't need to link deployment to recipe run page here; that was already done when the
@@ -1083,3 +1090,9 @@ async def deploy_prod_run(
             ),
             **gh_kws,
         )
+        message = json.loads(recipe_run.message)
+        # save environment url for reuse when job completes, in `triage_prod_run_complete`
+        recipe_run.message = json.dumps(message | {"environment_url": environment_url})
+        db_session.add(recipe_run)
+        db_session.commit()
+        db_session.refresh(recipe_run)
