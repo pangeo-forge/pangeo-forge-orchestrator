@@ -425,10 +425,10 @@ async def receive_github_hook(  # noqa: C901
             # mypy doesn't like that `args` can have variable length depending on which
             # conditional block it's defined within
             args = (  # type: ignore
-                pr["base"]["html_url"],
+                pr["base"]["repo"]["html_url"],
                 pr["base"]["sha"],
-                pr["base"]["full_name"],
-                pr["base"]["url"],
+                pr["base"]["repo"]["full_name"],
+                pr["base"]["repo"]["url"],
             )
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
