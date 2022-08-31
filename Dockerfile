@@ -39,3 +39,5 @@ RUN python3.9 -m pip install -r requirements.txt
 
 COPY . /opt/app
 WORKDIR /opt/app
+
+RUN chmod +x scripts.deploy/release.sh

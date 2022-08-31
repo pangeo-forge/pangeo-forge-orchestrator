@@ -39,7 +39,7 @@ services:
     #     - We bind to 0.0.0.0 (as opposed to default 127.0.0.1) to make port binding to host work
     entrypoint: >
       /bin/sh -c 'sleep 1
-      && python3.9 -m alembic upgrade head
+      && ./scripts.deploy/release.sh
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
       && sops -d -i ./secrets/dataflow.json
       && gcloud auth activate-service-account --key-file=./secrets/dataflow.json
