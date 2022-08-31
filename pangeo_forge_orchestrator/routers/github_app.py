@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -399,7 +400,8 @@ async def receive_github_hook(  # noqa: C901
             #    return {"message": "not a recipes PR"}
 
             args = (  # type: ignore
-                payload["pull_request"]["base"]["repo"]["owner"],
+                payload["pull_request"]["base"]["repo"]["owner"]["login"],
+                payload["pull_request"]["base"]["repo"]["ref"],
                 payload["pull_request"]["number"],
                 payload["pull_request"]["base"]["repo"]["url"],
             )
@@ -796,20 +798,19 @@ async def triage_prod_run_complete():
 
 
 async def create_feedstock_repo(
-    owner: dict,
+    base_repo_owner_login: dict,
+    base_repo_ref: str,
     pr_number: str,
-    api_url: str,
+    base_repo_api_url: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
     # (1) check changed files, if we're in a subdir of recipes, then proceed
-    files = await gh.getitem(f"{api_url}/pulls/{pr_number}/files", **gh_kws)
-    logger.debug(f"PR has files: {files}")
-    subdir = files[0]["filename"].split("/")[1]
+    src_files = await gh.getitem(f"{base_repo_api_url}/pulls/{pr_number}/files", **gh_kws)
+    subdir = src_files[0]["filename"].split("/")[1]
     # (2) make a new repo with name `subdir-feedstock`, plus license + readme
-    create_route = f"/orgs/{owner['login']}/repos" if owner["type"] != "User" else "/user/repos"
     name = f"{subdir}-feedstock"
     data = dict(
         name=name,
@@ -826,29 +827,32 @@ async def create_feedstock_repo(
         license_template="apache-2.0",
     )
     logger.debug(f"Creating new feedstock with kws: {data}")
-    await gh.post(create_route, data=data, **gh_kws)
-    feedstock_spec = f"{owner['login']}/{name}"
-    # (3) add all contributors to PR as collaborators w/ write permission on repo
-    ...
+    await gh.post(f"/orgs/{base_repo_owner_login}/repos", data=data, **gh_kws)
+    feedstock_spec = f"{base_repo_owner_login}/{name}"
+    # (3) TODO: add all contributors to PR as collaborators w/ write permission on repo
     # (4) create a new branch on feedstock repo
     logger.debug(f"Adding 'create-feedstock' branch on feedstock {feedstock_spec}")
-    main = await gh.getitem(f"/repos/{feedstock_spec}/git/matching-refs/main", **gh_kws)
-    await gh.post(
+    main = await gh.getitem(f"/repos/{feedstock_spec}/branches/main", **gh_kws)
+    working_branch = await gh.post(
         f"/repos/{feedstock_spec}/git/refs",
         data=dict(
-            ref="/refs/heads/create-feedstock",
-            sha=main[0]["object"]["sha"],
+            ref="refs/heads/create-feedstock",
+            sha=main["commit"]["sha"],
         ),
         **gh_kws,
     )
     # (5) add contents to new branch
-    for f in files:
-        logger.debug(f"Adding file {f}")
-        await gh.post(
-            f"/repos/{feedstock_spec}/contents/feedstock/{f['name']}",
+    for f in src_files:
+        src = f["filename"]
+        dst = f"feedstock/{os.path.basename(src)}"
+        logger.debug(f"Copying file {src} -> {dst}")
+
+        content = await gh.getitem(f["contents_url"], **gh_kws)
+        await gh.put(
+            f"/repos/{feedstock_spec}/contents/{dst}",
             data=dict(
-                message=f"Adding {f['name']}",
-                content=f["content"],
+                message=f"Adding {dst}",
+                content=content["content"],
                 branch="create-feedstock",
             ),
             **gh_kws,
@@ -869,9 +873,41 @@ async def create_feedstock_repo(
     db_session.add(db_model)
     db_session.commit()
     # (8) merge PR - this deploys prod run via another call to /github/hooks route
-    await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge", **gh_kws)
-    # (9) open PR on staged-recipes to delete (or do this on chron? conda forge uses chron)
-    ...
+    merged = await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge", **gh_kws)
+    # (9) delete PR branch
+    assert merged["merged"]
+    await gh.delete(working_branch["url"], **gh_kws)
+    # (9) delete files from staged-recipes
+    base_branch = await gh.getitem(f"{base_repo_api_url}/branches/{base_repo_ref}", **gh_kws)
+    cleanup_branch = await gh.post(
+        f"{base_repo_api_url}/git/refs",
+        data=dict(
+            ref=f"refs/heads/cleanup-{int(datetime.now().timestamp())}",
+            sha=base_branch["commit"]["sha"],
+        ),
+        **gh_kws,
+    )
+    for f in src_files:
+        await gh.delete(
+            f"{base_repo_api_url}/contents/{f['filename']}",
+            data=dict(
+                message=f"Delete {f['filename']}",
+                sha=f["sha"],
+            ),
+            **gh_kws,
+        )
+    cleanup_pr = await gh.post(
+        f"{base_repo_api_url}/pulls",
+        data=dict(
+            title=f"Cleanup {feedstock_spec}",
+            head=cleanup_branch["ref"],
+            base=base_repo_ref,
+        ),
+        **gh_kws,
+    )
+    merged = await gh.put(f"{base_repo_api_url}/pulls/{cleanup_pr['number']}/merge", **gh_kws)
+    assert merged["merged"]
+    await gh.delete(cleanup_branch["url"], **gh_kws)
 
 
 async def deploy_prod_run():
