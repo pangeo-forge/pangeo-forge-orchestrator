@@ -401,7 +401,7 @@ async def receive_github_hook(  # noqa: C901
 
             args = (  # type: ignore
                 payload["pull_request"]["base"]["repo"]["owner"]["login"],
-                payload["pull_request"]["base"]["repo"]["ref"],
+                payload["pull_request"]["base"]["ref"],
                 payload["pull_request"]["number"],
                 payload["pull_request"]["base"]["repo"]["url"],
             )
@@ -799,7 +799,7 @@ async def triage_prod_run_complete():
 
 async def create_feedstock_repo(
     base_repo_owner_login: dict,
-    base_repo_ref: str,
+    base_ref: str,
     pr_number: str,
     base_repo_api_url: str,
     *,
@@ -878,7 +878,7 @@ async def create_feedstock_repo(
     assert merged["merged"]
     await gh.delete(working_branch["url"], **gh_kws)
     # (9) delete files from staged-recipes
-    base_branch = await gh.getitem(f"{base_repo_api_url}/branches/{base_repo_ref}", **gh_kws)
+    base_branch = await gh.getitem(f"{base_repo_api_url}/branches/{base_ref}", **gh_kws)
     cleanup_branch = await gh.post(
         f"{base_repo_api_url}/git/refs",
         data=dict(
@@ -893,6 +893,7 @@ async def create_feedstock_repo(
             data=dict(
                 message=f"Delete {f['filename']}",
                 sha=f["sha"],
+                branch=cleanup_branch["ref"],
             ),
             **gh_kws,
         )
@@ -901,7 +902,7 @@ async def create_feedstock_repo(
         data=dict(
             title=f"Cleanup {feedstock_spec}",
             head=cleanup_branch["ref"],
-            base=base_repo_ref,
+            base=base_ref,
         ),
         **gh_kws,
     )
