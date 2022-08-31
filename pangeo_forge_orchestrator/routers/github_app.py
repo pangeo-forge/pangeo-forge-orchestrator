@@ -429,6 +429,7 @@ async def receive_github_hook(  # noqa: C901
                 pr["base"]["sha"],
                 pr["base"]["repo"]["full_name"],
                 pr["base"]["repo"]["url"],
+                pr["base"]["ref"],
             )
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
@@ -845,8 +846,8 @@ async def triage_prod_run_complete(
     await gh.post(
         f"/repos/{recipe_run.feedstock.spec}/deployments/{deployment_id}/statuses",
         # Here's a fun thing we can do because our recipe run model fields are modeled on the
-        # GitHub API: pass the recipe_run.conclusion directly through to deployment status.
-        data=dict(status=recipe_run.conclusion),
+        # GitHub API: pass the recipe_run.conclusion directly through to deployment state.
+        data=dict(state=recipe_run.conclusion),
         **gh_kws,
     )
     # Don't need to link deployment to recipe run page here; that was already done when the
@@ -972,6 +973,7 @@ async def deploy_prod_run(
     base_sha: str,
     base_full_name: str,
     base_api_url: str,
+    base_ref: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
@@ -1020,7 +1022,7 @@ async def deploy_prod_run(
         gh_deployment = await gh.post(
             f"{base_api_url}/deployments",
             data=dict(
-                ref=base_sha,
+                ref=base_ref,
                 environment=recipe["id"],
             ),
             **gh_kws,
@@ -1049,7 +1051,7 @@ async def deploy_prod_run(
 
     # (4) deploy every recipe run; `recipe_run.is_test=False` ensures `run` won't prune.
     for recipe_run in created:
-        args = (base_html_url, base_api_url, base_sha, recipe_run)
+        args = (base_html_url, base_sha, recipe_run)
         logger.info(f"Calling run with args: {args}")
         try:
             await run(*args, gh=gh, db_session=db_session)  # type: ignore
@@ -1076,7 +1078,7 @@ async def deploy_prod_run(
         await gh.post(
             f"{base_api_url}/deployments/{deployment_id}/statuses",
             data=dict(
-                status="in_progress",
+                state="in_progress",
                 environment_url=environment_url,
             ),
             **gh_kws,
