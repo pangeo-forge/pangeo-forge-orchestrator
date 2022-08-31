@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 
 import jwt
 import pytest
+from sqlalchemy.orm.exc import NoResultFound
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
@@ -512,10 +513,21 @@ def synchronize_request():
         "pull_request": {
             "number": 1,
             "base": {
-                "repo": {"html_url": "https://github.com/pangeo-forge/staged-recipes"},
+                "repo": {
+                    "html_url": "https://github.com/pangeo-forge/staged-recipes",
+                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
+                    "full_name": "pangeo-forge/staged-recipes",
+                },
             },
-            "head": {"sha": "abc"},
+            "head": {
+                "repo": {
+                    "html_url": "https://github.com/contributor-username/staged-recipes",
+                    "url": "https://api.github.com/repos/contributor-username/staged-recipes",
+                },
+                "sha": "abc",
+            },
             "labels": [],
+            "title": "Add XYZ awesome dataset",
         },
     }
     return {"headers": headers, "payload": payload}
@@ -541,7 +553,7 @@ def github_webhook_request(request, webhook_secret):
     return request.param
 
 
-@pytest.mark.parametrize("raises_missing_database_dependencies_error", [True, False])
+@pytest.mark.parametrize("raises_database_dependencies_error", [True, False])
 @pytest.mark.asyncio
 async def test_receive_github_hook(
     mocker,
@@ -550,7 +562,7 @@ async def test_receive_github_hook(
     async_app_client,
     github_webhook_request,
     private_key,
-    raises_missing_database_dependencies_error,
+    raises_database_dependencies_error,
     admin_key,
 ):
     os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
@@ -563,8 +575,8 @@ async def test_receive_github_hook(
     # PEM_FILE is used to authenticate with github in background tasks
     os.environ["PEM_FILE"] = private_key
 
-    if raises_missing_database_dependencies_error:
-        with pytest.raises(ValueError, match=r"Feedstock .* and\/or bakery .* not in database."):
+    if raises_database_dependencies_error:
+        with pytest.raises(NoResultFound):
             response = await async_app_client.post(
                 "/github/hooks/",
                 json=github_webhook_request["payload"],
@@ -584,12 +596,23 @@ async def test_receive_github_hook(
             headers=admin_headers,
         )
         assert bakery_create_response.status_code == 200
-        feedstock_create_response = await async_app_client.post(
-            "/feedstocks/",
-            json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
-            headers=admin_headers,
-        )
-        assert feedstock_create_response.status_code == 200
+
+        # FIXME: the database *should* be empty before the test? but for some reason that's not
+        # happening. so just hack around it for now, like this:
+        existing_feedstocks = await async_app_client.get("/feedstocks/")
+        existing_matching = [
+            f for f in existing_feedstocks.json() if f["spec"] == "pangeo-forge/staged-recipes"
+        ]
+        if not existing_matching:
+            feedstock_create_response = await async_app_client.post(
+                "/feedstocks/",
+                json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+                headers=admin_headers,
+            )
+            assert feedstock_create_response.status_code == 200
+            fstock_id = feedstock_create_response.json()["id"]
+        else:
+            fstock_id = existing_matching[0]["id"]
 
         # Now that the database is pre-populated with pre-requisites, we can actually test.
         response = await async_app_client.post(
@@ -626,7 +649,6 @@ async def test_receive_github_hook(
                 assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
 
         # then assert that the check runs were created as expected
-        fstock_id = feedstock_create_response.json()["id"]
         commit_sha = recipe_runs_response.json()[0]["head_sha"]
         check_runs_response = await async_app_client.get(
             f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
@@ -675,7 +697,7 @@ async def test_receive_github_hook(
         )
         assert bakery_delete_response.status_code == 200
         feedstock_delete_response = await async_app_client.delete(
-            f"/feedstocks/{feedstock_create_response.json()['id']}",
+            f"/feedstocks/{fstock_id}",
             headers=admin_headers,
         )
         assert feedstock_delete_response.status_code == 200

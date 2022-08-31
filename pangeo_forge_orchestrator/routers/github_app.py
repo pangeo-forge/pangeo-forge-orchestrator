@@ -15,7 +15,7 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
 from ..config import get_config
@@ -693,12 +693,9 @@ async def synchronize(
             MODELS["bakery"].table.name == meta["bakery"]["id"]
         )
         bakery = db_session.exec(bakery_statement).one()
-    except NoResultFound as e:
-        update_request = dict(
-            status="completed",
-            conclusion="failure",
-            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-            output=dict(
+    except (MultipleResultsFound, NoResultFound) as e:
+        if isinstance(e, NoResultFound):
+            output = dict(
                 title="Feedstock and/or bakery not present in database.",
                 summary=dedent(
                     f"""\
@@ -707,12 +704,29 @@ async def synchronize(
                     - **Bakery**: `{meta["bakery"]["id"]}`
                     """
                 ),
-            ),
+            )
+        elif isinstance(e, MultipleResultsFound):
+            output = dict(
+                title="Duplicate feedstock(s) and/or bakeries found in database.",
+                summary=dedent(
+                    f"""\
+                    To resolve, a maintainer must ensure there is only one each of:
+                    - **Feedstock**: {base_full_name}
+                    - **Bakery**: `{meta["bakery"]["id"]}`
+                    in the database.
+                    """
+                ),
+            )
+        update_request = dict(
+            status="completed",
+            conclusion="failure",
+            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            output=output,
         )
-        _ = await update_check_run(gh, base_api_url, checks_response["id"], update_request)
-        raise ValueError(
-            f"Feedstock {base_full_name} and/or bakery {meta['bakery']['id']} not in database."
-        ) from e
+        await update_check_run(gh, base_api_url, checks_response["id"], update_request)
+        # ok, this seems maybe like the wrong way to do this?
+        # just want to raise the same error type but with a custom message
+        raise type(e)(json.dumps(output)) from e
 
     new_models = [
         MODELS["recipe_run"].creation(
