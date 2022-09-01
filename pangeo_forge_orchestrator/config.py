@@ -56,8 +56,6 @@ def get_app_config_path() -> str:
     deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT")
     if not deployment:
         raise ValueError("Env var PANGEO_FORGE_DEPLOYMENT must be set, but is not.")
-    # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
-    # prevent commiting unencyrpted secrets to this directory.
     persistent_deployments = {
         "prod": "pangeo-forge",
         "staging": "pangeo-forge-staging",
@@ -67,6 +65,8 @@ def get_app_config_path() -> str:
     else:
         # this is an ephemeral deployment, so the name should be passed explicitly in the env
         app_name = deployment
+    # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
+    # prevent commiting unencyrpted secrets to this directory.
     return f"{root}/secrets/config.{app_name}.yaml"
 
 
