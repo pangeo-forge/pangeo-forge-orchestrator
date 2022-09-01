@@ -28,6 +28,7 @@ export APPS_WITH_SECRETS="{\"${APP_0}\":\"${APP_0_SECRET}\",\"${APP_1}\":\"${APP
 echo "dynamically setting gcp project from service account keyfile..."
 sops -d -i ${TF_CREDS}
 export GCP_PROJECT=$(cat ./${TF_CREDS} | python3.9 -c "${GET_GCP_PROJECT}")
+export GOOGLE_APPLICATION_CREDENTIALS=${TF_CREDS}
 
 echo "running terraform..."
 terraform -chdir=${TF_DIR} init
