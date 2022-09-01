@@ -47,6 +47,7 @@ WORKDIR /opt/app
 # https://devcenter.heroku.com/articles/github-integration#does-github-integration-work-with-git-submodules
 # so even though we have this in the repo (for development & testing convenience), we actually .dockerignore
 # it, and then clone it from github at build time (otherwise we don't actually get these contents on heroku)
-RUN git clone https://github.com/pangeo-forge/dataflow-status-monitoring
+# TODO: remove `-b github-app-hook --single-branch` once that PR branch is merged into main
+RUN git clone -b github-app-hook --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring
 
 RUN chmod +x scripts.deploy/release.sh
