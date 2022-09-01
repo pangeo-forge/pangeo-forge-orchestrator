@@ -127,15 +127,15 @@ if __name__ == "__main__":
     if deployment == "review" and not pr_number:
         raise ValueError("PR number must be given for review app.")
 
-    creds_outpath = REPO_ROOT / f"secrets/config.{deployment}.yaml"
+    app_name, org = main(*sys.argv[1:])
+
+    creds_outpath = REPO_ROOT / f"secrets/config.{app_name}.yaml"
     if os.path.exists(creds_outpath):
         raise ValueError(f"{creds_outpath} already exists. Delete this file to continue.")
 
     # Write the redirect page to disk
     with open(f"{CACHEDIR}/{REDIRECT}", "w") as f:
         f.write(f"<html>Authorization complete! Creds stored in <b>{creds_outpath}</b></html>")
-
-    app_name, org = main(*sys.argv[1:])
 
     print(f"Create new app with {app_name=}, {deployment=}, {org=}?\nInput 'yes' to continue.")
     yes = input()

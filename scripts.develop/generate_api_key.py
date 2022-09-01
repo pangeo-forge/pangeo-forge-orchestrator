@@ -9,8 +9,8 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def main(deployment):
-    creds_outpath = REPO_ROOT / f"secrets/config.{deployment}.yaml"
+def main(app_name):
+    creds_outpath = REPO_ROOT / f"secrets/config.{app_name}.yaml"
 
     salt = uuid.uuid4().hex
     raw_key = uuid.uuid4().hex
@@ -32,8 +32,5 @@ def main(deployment):
 
 
 if __name__ == "__main__":
-    deployment = sys.argv[1]
-    allowed_deployments = ("prod", "staging", "review", "local")
-    if deployment not in allowed_deployments:
-        raise ValueError(f"{deployment =} not in {allowed_deployments =}.")
-    sys.exit(main(deployment))
+    app_name = sys.argv[1]
+    sys.exit(main(app_name))
