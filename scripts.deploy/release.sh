@@ -9,7 +9,8 @@ export APP_1="pforge-pr-80"
 
 export TF_IN_AUTOMATION=true
 export TF_DIR="./dataflow-status-monitoring/terraform"
-export TF_CREDS="./secrets/dataflow-status-monitoring.json"
+export TF_CREDS="`pwd`/secrets/dataflow-status-monitoring.json"
+export GOOGLE_APPLICATION_CREDENTIALS=${TF_CREDS}
 export GET_WEBHOOK_SECRET="import sys, yaml; print(yaml.safe_load(sys.stdin)['github_app']['webhook_secret'].strip())"
 export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
 
@@ -28,7 +29,6 @@ export APPS_WITH_SECRETS="{\"${APP_0}\":\"${APP_0_SECRET}\",\"${APP_1}\":\"${APP
 echo "dynamically setting gcp project from service account keyfile..."
 sops -d -i ${TF_CREDS}
 export GCP_PROJECT=$(cat ./${TF_CREDS} | python3.9 -c "${GET_GCP_PROJECT}")
-export GOOGLE_APPLICATION_CREDENTIALS=${TF_CREDS}
 
 echo "running terraform..."
 terraform -chdir=${TF_DIR} init
