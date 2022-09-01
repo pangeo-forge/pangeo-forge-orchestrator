@@ -3,3 +3,18 @@ key.txt
 
 # development scripts
 scripts.develop
+
+# config, tests, docs
+.coveragerc
+.github
+.github_app_manifest_flow
+.mypy_cache
+.pre-commit-config.yaml
+.prettierrc.toml
+.pytest_cache
+codecov.yml
+*.sqlite
+docker-compose.yml
+docs
+*.egg-info
+tests
