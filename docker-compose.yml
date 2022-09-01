@@ -19,7 +19,8 @@ services:
       # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
       # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
-      PANGEO_FORGE_DEPLOYMENT: 'local'
+      # TODO: variablize this so others can use with their own local config
+      PANGEO_FORGE_DEPLOYMENT: 'pforge-local-cisaacstern'
       # In Heroku, we use the SOPS_AGE_KEY variable instead, for description of both options, see:
       # https://github.com/mozilla/sops#22encrypting-using-age
       SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
@@ -27,6 +28,7 @@ services:
       # Python command for parsing JSON is set as env var because putting it directly in
       # entrypoint is too many layers of nested quotation marks.
       GET_PROJECT_ID: "import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
+      DATAFLOW_CREDS: './secrets/dataflow-job-submission.json'
     # Note on this entrypoint:
     # - Sleep at start to allow postgres enought time to start. There are some more involved
     #   solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
@@ -39,12 +41,12 @@ services:
     #     - We bind to 0.0.0.0 (as opposed to default 127.0.0.1) to make port binding to host work
     entrypoint: >
       /bin/sh -c 'sleep 1
-      && ./scripts.deploy/release.sh
+      && python3.9 -m alembic upgrade head
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
-      && sops -d -i ./secrets/dataflow.json
-      && gcloud auth activate-service-account --key-file=./secrets/dataflow.json
-      && cat ./secrets/dataflow.json | python3.9 -c "$$GET_PROJECT_ID" | xargs -I{} gcloud config set project {}
-      && export GOOGLE_APPLICATION_CREDENTIALS=./secrets/dataflow.json
+      && sops -d -i $${DATAFLOW_CREDS}
+      && gcloud auth activate-service-account --key-file=$${DATAFLOW_CREDS}
+      && cat $${DATAFLOW_CREDS} | python3.9 -c "$$GET_PROJECT_ID" | xargs -I{} gcloud config set project {}
+      && export GOOGLE_APPLICATION_CREDENTIALS=$${DATAFLOW_CREDS}
       && gunicorn -w 1 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app -b 0.0.0.0:8000'
   db:
     platform: linux/amd64

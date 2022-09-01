@@ -1,6 +1,8 @@
 setup:
   addons:
     - plan: heroku-postgresql:standard-0
+  config:
+    DATAFLOW_CREDS: './secrets/dataflow-job-submission.json'
 build:
   docker:
     web: Dockerfile
@@ -11,10 +13,10 @@ release:
 run:
   web: >
     sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
-    && sops -d -i ./secrets/dataflow.json
-    && gcloud auth activate-service-account --key-file=./secrets/dataflow.json
-    && cat ./secrets/dataflow.json
+    && sops -d -i ${DATAFLOW_CREDS}
+    && gcloud auth activate-service-account --key-file=${DATAFLOW_CREDS}
+    && cat ${DATAFLOW_CREDS}
     | python3.9 -c "import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
     | xargs -I{} gcloud config set project {}
-    && export GOOGLE_APPLICATION_CREDENTIALS=./secrets/dataflow.json
+    && export GOOGLE_APPLICATION_CREDENTIALS=${DATAFLOW_CREDS}
     && gunicorn -w 3 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app

@@ -13,7 +13,7 @@
   "environments": {
     "review": {
       "env": {
-        "PANGEO_FORGE_DEPLOYMENT": "review"
+        "PANGEO_FORGE_DEPLOYMENT": "pforge-pr-80"
       }
     }
   }
