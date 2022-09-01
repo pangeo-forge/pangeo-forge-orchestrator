@@ -53,22 +53,31 @@ root = Path(__file__).resolve().parent.parent
 
 
 def get_app_config_path() -> str:
-    # Named Heroku deployments set the PANGEO_FORGE_DEPLOYMENT env variable: for production, this
-    # is `prod`; for staging, it's `staging`. Therefore, in a named deployment context, config
-    # filenames will resolve to `config.prod.yaml` and `config.staging.yaml`, respectively.
-    # If PANGEO_FORGE_DEPLOYMENT is unset, assume we're in a local environment.
-    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", "local")
+    deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT")
+    if not deployment:
+        raise ValueError("Env var PANGEO_FORGE_DEPLOYMENT must be set, but is not.")
     # The pre-commit-hook-ensure-sops hook installed in this repo's .pre-commit-config.yaml will
     # prevent commiting unencyrpted secrets to this directory.
-    return f"{root}/secrets/config.{deployment}.yaml"
+    persistent_deployments = {
+        "prod": "pangeo-forge",
+        "staging": "pangeo-forge-staging",
+    }
+    if deployment in list(persistent_deployments):
+        app_name = persistent_deployments[deployment]
+    else:
+        # this is an ephemeral deployment, so the name should be passed explicitly in the env
+        app_name = deployment
+    return f"{root}/secrets/config.{app_name}.yaml"
 
 
 def get_config() -> Config:
     # bakeries public config files are organized like this
     #   ```
     #   ├── bakeries
-    #   │   ├── pangeo-forge-ldeo-earthcube.local.yaml
-    #   │   ├── pangeo-forge-ldeo-earthcube.review.yaml
+    #   │   ├── pangeo-forge-ldeo-earthcube.pforge-local-cisaacstern.yaml
+    #   │   ├── pangeo-forge-ldeo-earthcube.review-80.yaml
+    #   │   ├── pangeo-forge-ldeo-earthcube.pangeo-forge-staging.yaml
+    #   │   ├── pangeo-forge-ldeo-earthcube.pangeo-forge.yaml
     #   ```
     # so the following retrieves only the bakery config for the current deployment.
     # bakeries may want to customize their config on a per-deployment basis, for example if staging
@@ -76,7 +85,7 @@ def get_config() -> Config:
     bakery_config_paths = [
         p
         for p in os.listdir(f"{root}/bakeries")
-        if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT", "local")
+        if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
     ]
     bakery_kws = {}
     for p in bakery_config_paths:
