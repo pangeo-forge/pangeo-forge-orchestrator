@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 # TODO: it would be good to loop over files in secrets, and grap these values dynamically
