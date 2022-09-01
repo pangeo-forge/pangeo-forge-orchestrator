@@ -1,3 +1,6 @@
+# terraform
+secrets/terraform.tfstate.backup
+
 # age keys
 key.txt
 
