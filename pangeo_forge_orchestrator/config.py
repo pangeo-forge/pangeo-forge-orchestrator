@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -77,9 +78,13 @@ class Bakery(BaseModel):
         # method is called on `FsspecArgs` directly. This is good! It prevents us from
         # leaking secrets to logs, even if `Bakery.json()` is called. The only way to get
         # the full config, including secrets, it to call `Bakery.export_with_secrets()`.
-        d["TargetStorage"]["fsspec_args"] = self.TargetStorage.fsspec_args.json()
-        d["InputCacheStorage"]["fsspec_args"] = self.InputCacheStorage.fsspec_args.json()
-        d["MetadataCacheStorage"]["fsspec_args"] = self.MetadataCacheStorage.fsspec_args.json()
+        d["TargetStorage"]["fsspec_args"] = json.loads(self.TargetStorage.fsspec_args.json())
+        d["InputCacheStorage"]["fsspec_args"] = json.loads(
+            self.InputCacheStorage.fsspec_args.json()
+        )
+        d["MetadataCacheStorage"]["fsspec_args"] = json.loads(
+            self.MetadataCacheStorage.fsspec_args.json()
+        )
         return d
 
 
