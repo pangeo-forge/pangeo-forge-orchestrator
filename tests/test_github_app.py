@@ -468,8 +468,19 @@ def mock_subprocess_check_output(cmd: List[str]):
         )
 
 
+def add_hash_signature(request: dict, webhook_secret: str):
+    payload_bytes = bytes(json.dumps(request["payload"]), "utf-8")
+    hash_signature = hmac.new(
+        bytes(webhook_secret, encoding="utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    request["headers"].update({"X-Hub-Signature-256": f"sha256={hash_signature}"})
+    return request
+
+
 @pytest.fixture
-def synchronize_request():
+def synchronize_request(webhook_secret):
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
         "action": "synchronize",
@@ -493,37 +504,18 @@ def synchronize_request():
             "title": "Add XYZ awesome dataset",
         },
     }
-    return {"headers": headers, "payload": payload}
-
-
-@pytest.fixture(
-    scope="session",
-    params=[
-        pytest.lazy_fixture("synchronize_request"),
-    ],
-)
-def github_webhook_request(request, webhook_secret):
-    """ """
-
-    payload_bytes = bytes(json.dumps(request.param["payload"]), "utf-8")
-    hash_signature = hmac.new(
-        bytes(webhook_secret, encoding="utf-8"),
-        payload_bytes,
-        hashlib.sha256,
-    ).hexdigest()
-    request.param["headers"].update({"X-Hub-Signature-256": f"sha256={hash_signature}"})
-
-    return request.param
+    request = {"headers": headers, "payload": payload}
+    return add_hash_signature(request, webhook_secret)
 
 
 @pytest.mark.parametrize("raises_database_dependencies_error", [True, False])
 @pytest.mark.asyncio
-async def test_receive_github_hook(
+async def test_receive_synchronize_request(
     mocker,
     get_mock_github_session,
     webhook_secret,
     async_app_client,
-    github_webhook_request,
+    synchronize_request,
     private_key,
     raises_database_dependencies_error,
     admin_key,
@@ -542,8 +534,8 @@ async def test_receive_github_hook(
         with pytest.raises(NoResultFound):
             response = await async_app_client.post(
                 "/github/hooks/",
-                json=github_webhook_request["payload"],
-                headers=github_webhook_request["headers"],
+                json=synchronize_request["payload"],
+                headers=synchronize_request["headers"],
             )
     else:
         # In order for the recipe run creation process to succeed, both the bakery and feedstock
@@ -580,8 +572,8 @@ async def test_receive_github_hook(
         # Now that the database is pre-populated with pre-requisites, we can actually test.
         response = await async_app_client.post(
             "/github/hooks/",
-            json=github_webhook_request["payload"],
-            headers=github_webhook_request["headers"],
+            json=synchronize_request["payload"],
+            headers=synchronize_request["headers"],
         )
         assert response.status_code == 202
 
