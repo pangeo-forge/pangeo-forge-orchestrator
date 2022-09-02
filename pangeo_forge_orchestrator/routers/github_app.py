@@ -156,9 +156,22 @@ async def maybe_specify_feedstock_subdir(
     return None
 
 
-def get_storage_subpath_identifier(recipe_run: SQLModel):
-    # TODO: make this identifier better, and **differentiate test vs. prod runs**.
-    return f"{recipe_run.recipe_id}-{int(datetime.now().timestamp())}"
+def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
+    # TODO: Other storage locations may prefer a different layout, but this is how
+    # we're solving this for OSN. Eventaully we could expose higher up in Traitlets
+    # config of `pangeo-forge-runner`. The basic idea is that path should be determined
+    # by a combindation of *deployment* (don't want staging app overwriting production data),
+    # *is_test*, *feedstock.spec*, *recipe_run.id*, and *dataset_type* (i.e. file extension).
+    # The traitlets config doesn't offer this much configurability in `root_path` right now,
+    # so just doing this here for the moment.
+
+    app_name = get_config().github_app.app_name
+    if recipe_run.is_test:
+        prefix = f"{app_name}/test/{feedstock_spec}/recipe-run-{recipe_run.id}"
+    else:
+        prefix = f"{app_name}/{feedstock_spec}"
+
+    return f"{prefix}/{recipe_run.recipe_id}.{recipe_run.dataset_type}"
 
 
 # Routes ------------------------------------------------------------------------------------------
@@ -322,6 +335,7 @@ async def receive_github_hook(  # noqa: C901
                 pr["head"]["sha"],
                 pr["number"],
                 matching_recipe_run,
+                pr["base"]["repo"]["full_name"],
                 reactions_url,
             )
             logger.info(f"Creating run_recipe_test task with args: {args}")
@@ -358,7 +372,7 @@ async def receive_github_hook(  # noqa: C901
         recipe_run.conclusion = payload["conclusion"]
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
-            subpath = get_storage_subpath_identifier(recipe_run)
+            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
             root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
             recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
                 root_path=root_path
@@ -514,6 +528,7 @@ async def run(
     html_url: str,
     ref: str,
     recipe_run: SQLModel,
+    feedstock_spec: str,
     feedstock_subdir: Optional[str] = None,
     *,
     gh: GitHubAPI,
@@ -525,7 +540,7 @@ async def run(
     bakery = db_session.exec(statement).one()
     bakery_config = get_config().bakeries[bakery.name]
 
-    subpath = get_storage_subpath_identifier(recipe_run)
+    subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
     # root paths are an interesting configuration edge-case because they combine some stable
     # config (the base path) with some per-recipe config (the subpath). so they are partially
     # initialized when we get them, but we need to complete them here.
@@ -776,6 +791,7 @@ async def run_recipe_test(
     head_sha: str,
     pr_number: str,
     recipe_run: SQLModel,
+    feedstock_spec: str,
     reactions_url: str,
     *,
     gh: GitHubAPI,
@@ -788,7 +804,7 @@ async def run_recipe_test(
     # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
     # check which one this is, and if it's staged-recipes, specify the subdirectoy name kwarg.
     feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
-    args = (head_html_url, head_sha, recipe_run)
+    args = (head_html_url, head_sha, recipe_run, feedstock_spec)
     kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
     logger.info(f"Calling run with args, kws: {args}, {kws}")
     # TODO: create a check run on the head_sha this was deployed from to give
@@ -1072,7 +1088,7 @@ async def deploy_prod_run(
 
     # (4) deploy every recipe run; `recipe_run.is_test=False` ensures `run` won't prune.
     for recipe_run in created:
-        args = (base_html_url, merge_commit_sha, recipe_run)
+        args = (base_html_url, merge_commit_sha, recipe_run, feedstock.spec)
         logger.info(f"Calling run with args: {args}")
         try:
             await run(*args, gh=gh, db_session=db_session)  # type: ignore

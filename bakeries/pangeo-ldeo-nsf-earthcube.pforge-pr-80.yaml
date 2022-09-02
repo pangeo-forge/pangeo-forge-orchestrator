@@ -12,7 +12,7 @@ TargetStorage:
     default_cache_type: 'none'
     default_fill_cache: False
     use_listings_cache: False
-  root_path: 'Pangeo/pangeo-forge/{subpath}'
+  root_path: 'Pangeo/{subpath}'
   public_url: 'https://ncsa.osn.xsede.org/{root_path}'
 
 InputCacheStorage:

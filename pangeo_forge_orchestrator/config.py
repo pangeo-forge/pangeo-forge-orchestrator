@@ -15,6 +15,7 @@ class FastAPIConfig(BaseModel):
 
 class GitHubAppConfig(BaseModel):
     id: int
+    app_name: str
     webhook_secret: str
     private_key: str
     run_only_on: Optional[List[str]] = None
