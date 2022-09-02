@@ -544,10 +544,14 @@ async def run(
     if bakery_config.secret_env:
         env.update(bakery_config.secret_env)
 
-    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
+    # secret_env only exists at the orchestrator layer, not the runner layer, so we need
+    # to exclude it from the runner config, or else `pangeo-forge-runner` will be confused
+    runner_config = bakery_config.dict(exclude={"secret_env"})
+
+    logger.debug(f"Dumping bakery config to json: {runner_config}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-        json.dump(bakery_config.dict(), f)
+        json.dump(runner_config, f)
         f.flush()
         cmd = [
             "pangeo-forge-runner",
