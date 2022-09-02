@@ -98,7 +98,7 @@ def get_config() -> Config:
     bakery_env_paths = [p for p in os.listdir(f"{root}/secrets") if p.startswith("bakery-env")]
     for p in bakery_env_paths:
         bakery_name = p.split(".")[1]
-        with open(p) as f:
+        with open(f"{root}/secrets/{p}") as f:
             env = yaml.safe_load(f)
             bakeries[bakery_name].secret_env = env
 
