@@ -664,7 +664,7 @@ async def test_receive_github_hook(
                     "started_at": "2022-08-11T21:22:51Z",
                     "output": {
                         "title": "Recipe runs queued for latest commit",
-                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-run/1",
+                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-run/1?feedstock_id=1",
                     },
                     "details_url": "https://pangeo-forge.org/",
                     "id": 0,
