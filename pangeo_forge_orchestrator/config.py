@@ -79,17 +79,14 @@ class Bakery(BaseModel):
         # leaking secrets to logs, even if `Bakery.json()` is called. The only way to get
         # the full config, including secrets, it to call `Bakery.export_with_secrets()`.
 
-        def drop_none(d: dict):
-            return {k: v for k, v in d.items() if v is not None}
-
-        d["TargetStorage"]["fsspec_args"] = drop_none(
-            json.loads(self.TargetStorage.fsspec_args.json())
+        d["TargetStorage"]["fsspec_args"] = json.loads(
+            self.TargetStorage.fsspec_args.json(exclude_none=True)
         )
-        d["InputCacheStorage"]["fsspec_args"] = drop_none(
-            json.loads(self.InputCacheStorage.fsspec_args.json())
+        d["InputCacheStorage"]["fsspec_args"] = json.loads(
+            self.InputCacheStorage.fsspec_args.json(exclude_none=True)
         )
-        d["MetadataCacheStorage"]["fsspec_args"] = drop_none(
-            json.loads(self.MetadataCacheStorage.fsspec_args.json())
+        d["MetadataCacheStorage"]["fsspec_args"] = json.loads(
+            self.MetadataCacheStorage.fsspec_args.json(exclude_none=True)
         )
         return d
 
