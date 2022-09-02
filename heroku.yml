@@ -18,4 +18,6 @@ run:
     | python3.9 -c "import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
     | xargs -I{} gcloud config set project {}
     && export GOOGLE_APPLICATION_CREDENTIALS=${DATAFLOW_CREDS}
+    && export BAKERY_SECRETS='./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml'
+    && sops -d -i ${BAKERY_SECRETS}
     && gunicorn -w 3 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
