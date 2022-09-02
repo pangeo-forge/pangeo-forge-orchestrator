@@ -540,7 +540,7 @@ async def run(
     if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
         bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
 
-    env = {}
+    env = os.environ.copy()
     if bakery_config.secret_env:
         env.update(bakery_config.secret_env)
 
