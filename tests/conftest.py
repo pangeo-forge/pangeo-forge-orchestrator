@@ -24,7 +24,11 @@ from .interfaces import FastAPITestClientCRUD
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_and_teardown(session_mocker, mock_app_config_path):
+def setup_and_teardown(
+    session_mocker,
+    mock_app_config_path,
+    mock_secrets_dir,
+):
     # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
     if db_path.startswith("sqlite") and os.path.exists(db_path.replace("sqlite:///", "")):
@@ -44,10 +48,18 @@ def setup_and_teardown(session_mocker, mock_app_config_path):
     def get_mock_app_config_path():
         return mock_app_config_path
 
+    def get_mock_secrets_dir():
+        return mock_secrets_dir
+
     session_mocker.patch.object(
         pangeo_forge_orchestrator.config,
         "get_app_config_path",
         get_mock_app_config_path,
+    )
+    session_mocker.patch.object(
+        pangeo_forge_orchestrator.config,
+        "get_secrets_dir",
+        get_mock_secrets_dir,
     )
 
     yield
@@ -107,13 +119,29 @@ def mock_config_kwargs(webhook_secret, private_key, api_keys):
 
 
 @pytest.fixture(scope="session")
-def mock_app_config_path(mock_config_kwargs, tmp_path_factory):
+def mock_secrets_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("secrets")
+
+
+@pytest.fixture(scope="session")
+def mock_app_config_path(mock_config_kwargs, mock_secrets_dir):
     """ """
-    path = tmp_path_factory.mktemp("secrets") / "config.yaml"
+    path = mock_secrets_dir / "config.pytest-deployment.yaml"
     with open(path, "w") as f:
         yaml.dump(mock_config_kwargs, f)
 
     return path
+
+
+@pytest.fixture(scope="session")
+def mock_secret_bakery_args_paths(mock_secrets_dir):
+    """ """
+    path = mock_secrets_dir / "bakery-args.pangeo-ldeo-nsf-earthcube.yaml"
+    kws = dict()  # TODO: actually pass some values
+    with open(path, "w") as f:
+        yaml.dump(kws, f)
+
+    return [str(path)]  # TODO: test with > 1 bakery env
 
 
 # For this general pattern, see
