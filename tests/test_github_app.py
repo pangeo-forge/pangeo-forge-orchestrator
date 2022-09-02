@@ -14,7 +14,6 @@ from sqlalchemy.orm.exc import NoResultFound
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
 from pangeo_forge_orchestrator.routers.github_app import (
-    create_check_run,
     get_access_token,
     get_app_webhook_url,
     get_jwt,
@@ -22,7 +21,6 @@ from pangeo_forge_orchestrator.routers.github_app import (
     html_to_api_url,
     html_url_to_repo_full_name,
     list_accessible_repos,
-    update_check_run,
 )
 
 
@@ -314,43 +312,6 @@ def check_run_create_kwargs():
     )
 
 
-@pytest.mark.asyncio
-async def test_create_check_run(private_key, get_mock_github_session, check_run_create_kwargs):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
-    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
-    response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
-    assert isinstance(response["id"], int)
-    for k in check_run_create_kwargs:
-        assert response[k] == check_run_create_kwargs[k]
-
-
-@pytest.mark.asyncio
-async def test_update_check_run(private_key, get_mock_github_session, check_run_create_kwargs):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
-    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
-    update_kwargs = dict(
-        status="completed",
-        conclusion="success",
-        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(
-            title="Recipe runs queued for latest commit",
-            summary="",
-        ),
-    )
-    create_response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
-    update_response = await update_check_run(
-        mock_gh,
-        api_url,
-        create_response["id"],
-        update_kwargs,
-    )
-    assert create_response["id"] == update_response["id"]
-    for k in update_kwargs:
-        assert update_response[k] == update_kwargs[k]
-
-
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
 @pytest.mark.asyncio
 async def test_get_repo_id(private_key, get_mock_github_session, repo_full_name):
@@ -436,8 +397,10 @@ async def test_get_feedstock_check_runs(
 
     # populate mock github backend with check runs for the feedstock (only 1 for now)
     mock_gh = get_mock_github_session(http_session)
-    api_url = "https://api.github.com/repos/pangeo-forge/staged-recipes"  # TODO: fixturize
-    check_run_response = await create_check_run(mock_gh, api_url, check_run_create_kwargs)
+    check_run_response = await mock_gh.post(
+        "/repos/pangeo-forge/staged-recipes/check-runs",
+        data=check_run_create_kwargs,
+    )
     commit_sha = check_run_response["head_sha"]
 
     # now that the data is in the mock github backend, retrieve it

@@ -87,20 +87,6 @@ async def get_app_webhook_url(gh: GitHubAPI):
     return response["url"]
 
 
-async def create_check_run(gh: GitHubAPI, api_url: str, data: dict):
-    token = await get_access_token(gh)
-    kw = dict(oauth_token=token, accept=ACCEPT, data=data)
-    response = await gh.post(f"{api_url}/check-runs", **kw)
-    return response
-
-
-async def update_check_run(gh: GitHubAPI, api_url: str, id_: str, data: dict):
-    token = await get_access_token(gh)
-    kw = dict(oauth_token=token, accept=ACCEPT, data=data)
-    response = await gh.patch(f"{api_url}/check-runs/{id_}", **kw)
-    return response
-
-
 async def get_repo_id(repo_full_name: str, gh: GitHubAPI):
     token = await get_access_token(gh)
     repo_response = await gh.getitem(
@@ -293,7 +279,7 @@ async def receive_github_hook(  # noqa: C901
             pr["base"]["repo"]["url"],
             pr["base"]["repo"]["full_name"],
         )
-        background_tasks.add_task(synchronize, *args, **session_kws)
+        background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
     elif event == "issue_comment" and payload["action"] == "created":
@@ -435,6 +421,12 @@ async def receive_github_hook(  # noqa: C901
                 pr["base"]["ref"],
             )
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
+
+    elif event == "check_suite":
+        # We create check runs directly using the head_sha from the assocaited PR.
+        # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
+        # of these requests from GitHub, so just conveying that we expect that here, for now.
+        return {"status": "ok"}
 
     else:
         raise HTTPException(
@@ -613,6 +605,7 @@ async def synchronize(
     *,
     gh: GitHubAPI,
     db_session: Session,
+    gh_kws: dict,
 ):
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
     create_request = dict(
@@ -626,7 +619,7 @@ async def synchronize(
         ),
         details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
     )
-    checks_response = await create_check_run(gh, base_api_url, create_request)
+    checks_response = await gh.post(f"{base_api_url}/check-runs", data=create_request, **gh_kws)
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
     # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
@@ -651,7 +644,7 @@ async def synchronize(
             p = json.loads(line)
             if p["status"] == "failed":
                 tracelines = p["exc_info"].splitlines()
-                logger.debug(f"Syncronize errored with:\n {tracelines}")
+                logger.debug(f"Synchronize errored with:\n {tracelines}")
                 if tracelines[-1].startswith("FileNotFoundError"):
                     # A required file is missing: either meta.yaml or recipe.py
                     update_request = dict(
@@ -660,8 +653,10 @@ async def synchronize(
                         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
                         output=dict(title="FileNotFoundError", summary=tracelines[-1]),
                     )
-                    _ = await update_check_run(
-                        gh, base_api_url, checks_response["id"], update_request
+                    await gh.patch(
+                        f"{base_api_url}/check-runs/{checks_response['id']}",
+                        data=update_request,
+                        **gh_kws,
                     )
                     raise ValueError(tracelines[-1]) from e
                 else:
@@ -723,7 +718,11 @@ async def synchronize(
             completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             output=output,
         )
-        await update_check_run(gh, base_api_url, checks_response["id"], update_request)
+        await gh.patch(
+            f"{base_api_url}/check-runs/{checks_response['id']}",
+            data=update_request,
+            **gh_kws,
+        )
         # ok, this seems maybe like the wrong way to do this?
         # just want to raise the same error type but with a custom message
         raise type(e)(json.dumps(output)) from e
@@ -766,7 +765,9 @@ async def synchronize(
         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
         output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
-    _ = await update_check_run(gh, base_api_url, checks_response["id"], update_request)
+    await gh.patch(
+        f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
+    )
 
 
 async def run_recipe_test(
