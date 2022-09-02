@@ -555,7 +555,7 @@ async def run(
     if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
         bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
 
-    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
+    logger.debug(f"Dumping bakery config to json: {bakery_config.dict(exclude_none=True)}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
         json.dump(bakery_config.export_with_secrets(), f)
