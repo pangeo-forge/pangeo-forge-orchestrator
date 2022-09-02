@@ -5,7 +5,6 @@ export TF_IN_AUTOMATION=true
 export TF_DIR="./dataflow-status-monitoring/terraform"
 export TF_CREDS="secrets/dataflow-status-monitoring.json"
 export GOOGLE_APPLICATION_CREDENTIALS="`pwd`/${TF_CREDS}"
-export GET_WEBHOOK_SECRET="import sys, yaml; print(yaml.safe_load(sys.stdin)['github_app']['webhook_secret'].strip())"
 export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
 
 echo "running database migration..."
