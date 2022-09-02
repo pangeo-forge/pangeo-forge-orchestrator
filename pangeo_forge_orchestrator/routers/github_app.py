@@ -429,7 +429,7 @@ async def receive_github_hook(  # noqa: C901
             # conditional block it's defined within
             args = (  # type: ignore
                 pr["base"]["repo"]["html_url"],
-                pr["base"]["sha"],
+                pr["merge_commit_sha"],
                 pr["base"]["repo"]["full_name"],
                 pr["base"]["repo"]["url"],
                 pr["base"]["ref"],
@@ -754,13 +754,12 @@ async def synchronize(
     summary = f"Recipe runs created at commit `{head_sha}`:"
     backend_app_webhook_url = await get_app_webhook_url(gh)
     backend_netloc = urlparse(backend_app_webhook_url).netloc
-    query_param = (
-        ""
-        if backend_netloc == DEFAULT_BACKEND_NETLOC
-        else f"?orchestratorEndpoint={backend_netloc}"
-    )
+    # TODO: using urllib.parse.parse_qs / urlencode here would be more robust
+    query_param = f"feedstock_id={feedstock.id}"
+    if backend_netloc != DEFAULT_BACKEND_NETLOC:
+        query_param += f"&orchestratorEndpoint={backend_netloc}"
     for model in created:
-        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-run/{model.id}{query_param}"
+        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-run/{model.id}?{query_param}"
     update_request = dict(
         status="completed",
         conclusion="success",
@@ -991,7 +990,7 @@ async def create_feedstock_repo(
 
 async def deploy_prod_run(
     base_html_url: str,
-    base_sha: str,
+    merge_commit_sha: str,
     base_full_name: str,
     base_api_url: str,
     base_ref: str,
@@ -1005,7 +1004,7 @@ async def deploy_prod_run(
         "pangeo-forge-runner",
         "expand-meta",
         f"--repo={base_html_url}",
-        f"--ref={base_sha}",
+        f"--ref={merge_commit_sha}",
         "--json",
     ]
     logger.info(f"Calling subprocess {cmd}")
@@ -1053,7 +1052,7 @@ async def deploy_prod_run(
             recipe_id=recipe["id"],
             bakery_id=bakery.id,
             feedstock_id=feedstock.id,
-            head_sha=base_sha,
+            head_sha=merge_commit_sha,
             version="",  # TODO: Are we using this?
             started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             is_test=False,
@@ -1072,7 +1071,7 @@ async def deploy_prod_run(
 
     # (4) deploy every recipe run; `recipe_run.is_test=False` ensures `run` won't prune.
     for recipe_run in created:
-        args = (base_html_url, base_sha, recipe_run)
+        args = (base_html_url, merge_commit_sha, recipe_run)
         logger.info(f"Calling run with args: {args}")
         try:
             await run(*args, gh=gh, db_session=db_session)  # type: ignore

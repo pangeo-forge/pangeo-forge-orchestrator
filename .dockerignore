@@ -9,7 +9,7 @@ scripts.develop
 # so we'll ignore this, and then clone it from github at build time
 dataflow-status-monitoring
 
-# config, tests, docs
+# config, docs
 .coveragerc
 .github
 .github_app_manifest_flow
@@ -22,4 +22,3 @@ codecov.yml
 docker-compose.yml
 docs
 *.egg-info
-tests
