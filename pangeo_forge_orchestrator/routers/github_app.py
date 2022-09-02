@@ -1086,15 +1086,16 @@ async def deploy_prod_run(
         # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
         # (4.5) Update deployment with link to recipe run page
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
-        # This url will not (currently) work if this is not a production deployment, because
-        # pangeo-forge.org will assume that the recipe_run.id and feedstock.id refer to objects
-        # in the production database (which if this is not running in prod, they do not).
-        # FIXME: We can make this work for any public deployment (review, staging) as well by
-        # conditionally appending the `orchestratorEndpoint={deployment_netloc}` to this url.
         environment_url = (
             "https://pangeo-forge.org/dashboard/"
             f"recipe-run/{recipe_run.id}?feedstock_id={feedstock.id}"
         )
+        # TODO: using urllib.parse.parse_qs / urlencode here would be more robust
+        # NOTE: redundant with one other block above. could combine into one function.
+        backend_app_webhook_url = await get_app_webhook_url(gh)
+        backend_netloc = urlparse(backend_app_webhook_url).netloc
+        if backend_netloc != DEFAULT_BACKEND_NETLOC:
+            environment_url += f"&orchestratorEndpoint={backend_netloc}"
         await gh.post(
             f"{base_api_url}/deployments/{deployment_id}/statuses",
             data=dict(
