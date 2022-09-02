@@ -46,7 +46,7 @@ terraform -chdir=${TF_DIR} plan -out tfplan \
 -var 'credentials_file=../../'${TF_CREDS} \
 -var 'project='${GCP_PROJECT} \
 -var 'apps_with_secrets='"${APPS_WITH_SECRETS}"
-# terraform -chdir=${TF_DIR} apply tfplan
+terraform -chdir=${TF_DIR} apply tfplan
 
 echo "re-encrypting secrets..."
 # if AGE_PUBLIC_KEY is set, include it in encryption recipients.
