@@ -522,8 +522,8 @@ async def run(
     statement = select(MODELS["bakery"].table).where(
         MODELS["bakery"].table.id == recipe_run.bakery_id
     )
-    matching_bakery = db_session.exec(statement).one()
-    bakery_config = get_config().bakeries[matching_bakery.name]
+    bakery = db_session.exec(statement).one()
+    bakery_config = get_config().bakeries[bakery.name]
 
     subpath = get_storage_subpath_identifier(recipe_run)
     # root paths are an interesting configuration edge-case because they combine some stable
@@ -537,8 +537,12 @@ async def run(
     bakery_config.MetadataCacheStorage.root_path = (
         bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
     )
+    if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
+        bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
 
-    bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
+    env = {}
+    if bakery_config.secret_env:
+        env.update(bakery_config.secret_env)
 
     logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
@@ -570,7 +574,7 @@ async def run(
         db_session.add(recipe_run)
         db_session.commit()
         try:
-            out = subprocess.check_output(cmd)
+            out = subprocess.check_output(cmd, env=env)
             logger.debug(f"Command output is {out.decode('utf-8')}")
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():

@@ -41,6 +41,7 @@ class Bakery(BaseModel):
     InputCacheStorage: Storage
     MetadataCacheStorage: Storage
     DataflowBakery: Optional[DataflowBakery]
+    secret_env: Optional[dict]
 
 
 class Config(BaseModel):
@@ -93,6 +94,13 @@ def get_config() -> Config:
             bakery_kws.update({p.split(".")[0]: yaml.safe_load(f)})
 
     bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
+
+    bakery_env_paths = [p for p in os.listdir(f"{root}/secrets") if p.startswith("bakery-env")]
+    for p in bakery_env_paths:
+        bakery_name = p.split(".")[1]
+        with open(p) as f:
+            env = yaml.safe_load(f)
+            bakeries[bakery_name].secret_env = env
 
     app_config_path = get_app_config_path()
     with open(app_config_path) as c:
