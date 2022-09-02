@@ -70,19 +70,6 @@ flowchart LR
     local-->review-->staging-->prod
 ```
 
-Each of these deployments requires a set of credentials to run. These are kept in the
-`secrets` directory of this repo.
-
-```
-...
-├── secrets
-│   ├── config.local.yaml
-│   ├── config.review.yaml
-│   ├── config.staging.yaml
-│   └── config.prod.yaml
-...
-```
-
 The user creates and provides `local` and `review` credentials for their PRs, whereas the organization
 (i.e., `pangeo-forge`) manages credentials for the `staging` and `prod` deployments.
 
@@ -95,6 +82,19 @@ flowchart LR
     local-->review
     end
     review-->staging
+```
+
+Each of these deployments requires a set of credentials to run. These are kept in the
+`secrets` directory of this repo.
+
+```
+...
+├── secrets
+│   ├── config.pforge-local-cisaacstern.yaml    <- local creds for developer `cisaacstern`
+│   ├── config.pforge-pr-80.yaml                <- review creds for `orchestrator` PR 80
+│   ├── config.pangeo-forge-staging.yaml        <- staging creds
+│   └── config.pangeo-forge.yaml                <- prod creds
+...
 ```
 
 Credentials for each deployment are commited to the `pangeo-forge-orchestrator` repo as encrypted YAML.
