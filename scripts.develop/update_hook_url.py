@@ -9,7 +9,7 @@ from pangeo_forge_orchestrator.routers.github_app import get_jwt
 if __name__ == "__main__":
     deployment, webhook_url = sys.argv[1:3]
 
-    env_deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT", "local")
+    env_deployment = os.environ.get("PANGEO_FORGE_DEPLOYMENT")
     if deployment != env_deployment:
         raise ValueError(
             f"Mismatch between arg {deployment = } and {os.environ['PANGEO_FORGE_DEPLOYMENT'] = }"
