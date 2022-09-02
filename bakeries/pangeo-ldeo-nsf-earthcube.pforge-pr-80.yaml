@@ -4,12 +4,15 @@ Bake:
 DataflowBakery:
   temp_gcs_location: 'gs://beam-dataflow-test/temp'
 
-TargetStorage: # TODO: Use OSN for target
-  fsspec_class: 'gcsfs.GCSFileSystem'
+TargetStorage:
+  fsspec_class: 's3fs.S3FileSystem'
   fsspec_args:
-    bucket: 'pfcsb-bucket'
-  # TODO: Fix this to match target path spec for OSN
-  root_path: 'pfcsb-bucket/{subpath}'
+    client_kwargs:
+      endpoint_url: 'https://ncsa.osn.xsede.org'
+    default_cache_type: 'none'
+    default_fill_cache: False
+    use_listings_cache: False
+  root_path: 'Pangeo/pangeo-forge/{subpath}'
   public_url: 'https://ncsa.osn.xsede.org/{root_path}'
 
 InputCacheStorage:
