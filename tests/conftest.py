@@ -111,6 +111,7 @@ def mock_config_kwargs(webhook_secret, private_key, api_keys):
         },
         "github_app": {
             "id": 1234567,
+            "app_name": "pytest-mock-github-app",
             "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
             "webhook_secret": webhook_secret,
             "private_key": private_key,
