@@ -540,18 +540,10 @@ async def run(
     if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
         bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
 
-    env = os.environ.copy()
-    if bakery_config.secret_env:
-        env.update(bakery_config.secret_env)
-
-    # secret_env only exists at the orchestrator layer, not the runner layer, so we need
-    # to exclude it from the runner config, or else `pangeo-forge-runner` will be confused
-    runner_config = bakery_config.dict(exclude={"secret_env"})
-
-    logger.debug(f"Dumping bakery config to json: {runner_config}")
+    logger.debug(f"Dumping bakery config to json: {bakery_config.dict()}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-        json.dump(runner_config, f)
+        json.dump(bakery_config.export_with_secrets(), f)
         f.flush()
         cmd = [
             "pangeo-forge-runner",
@@ -578,7 +570,7 @@ async def run(
         db_session.add(recipe_run)
         db_session.commit()
         try:
-            out = subprocess.check_output(cmd, env=env)
+            out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():

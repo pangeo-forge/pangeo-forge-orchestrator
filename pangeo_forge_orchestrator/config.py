@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra, SecretStr
 
 
 class FastAPIConfig(BaseModel):
@@ -24,9 +24,38 @@ class Bake(BaseModel):
     job_name: Optional[str]
 
 
+class FsspecArgs(BaseModel):
+    # Universal container for all fsspec filesystem types. All fields are optional, so
+    # any combination could theoretically be passed, but they are grouped according to
+    # the filesystem they should be used with.
+
+    # GCSFileSystem
+    bucket: Optional[str]
+
+    # S3FileSystem
+    client_kwargs: Optional[dict]
+    default_cache_type: Optional[str]
+    default_fill_cache: Optional[bool]
+    use_listings_cache: Optional[bool]
+    key: Optional[SecretStr]
+    secret: Optional[SecretStr]
+
+    class Config:
+        # Extras are forbidden here (see `Config` attribute) because this model might contain
+        # secrets. Any secret values should have type `Optional[SecretStr]` so they are not
+        # accidentally printed to the logs. If we don't forbid extras, some secrets might be
+        # passed into this model, without being parsed to `SecretStr`.
+        extra = Extra.forbid
+        # Only allow resolution of secret values via `.json()`, all other methods conceal values.
+        # https://pydantic-docs.helpmanual.io/usage/types/#secret-types
+        json_encoders = {
+            SecretStr: lambda v: v.get_secret_value() if v else None,
+        }
+
+
 class Storage(BaseModel):
     fsspec_class: str
-    fsspec_args: dict
+    fsspec_args: FsspecArgs
     root_path: str
     public_url: Optional[str]
 
@@ -41,7 +70,17 @@ class Bakery(BaseModel):
     InputCacheStorage: Storage
     MetadataCacheStorage: Storage
     DataflowBakery: Optional[DataflowBakery]
-    secret_env: Optional[dict]
+
+    def export_with_secrets(self):
+        d = self.dict()
+        # `FsspecArgs` might contain secrets, which cannot be resolved unless the `.json()`
+        # method is called on `FsspecArgs` directly. This is good! It prevents us from
+        # leaking secrets to logs, even if `Bakery.json()` is called. The only way to get
+        # the full config, including secrets, it to call `Bakery.export_with_secrets()`.
+        d["TargetStorage"]["fsspec_args"] = self.TargetStorage.fsspec_args.json()
+        d["InputCacheStorage"]["fsspec_args"] = self.InputCacheStorage.fsspec_args.json()
+        d["MetadataCacheStorage"]["fsspec_args"] = self.MetadataCacheStorage.fsspec_args.json()
+        return d
 
 
 class Config(BaseModel):
@@ -71,6 +110,14 @@ def get_app_config_path() -> str:
     return f"{root}/secrets/config.{app_name}.yaml"
 
 
+def get_secrets_dir():
+    return f"{root}/secrets"
+
+
+def get_secret_bakery_args_paths() -> List[str]:
+    return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
+
+
 def get_config() -> Config:
     # bakeries public config files are organized like this
     #   ```
@@ -93,14 +140,19 @@ def get_config() -> Config:
         with open(f"{root}/bakeries/{p}") as f:
             bakery_kws.update({p.split(".")[0]: yaml.safe_load(f)})
 
-    bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
-
-    bakery_env_paths = [p for p in os.listdir(f"{root}/secrets") if p.startswith("bakery-env")]
-    for p in bakery_env_paths:
+    for p in get_secret_bakery_args_paths():
         bakery_name = p.split(".")[1]
-        with open(f"{root}/secrets/{p}") as f:
-            env = yaml.safe_load(f)
-            bakeries[bakery_name].secret_env = env
+        this_bakery = bakery_kws[bakery_name]
+        with open(f"{get_secrets_dir()}/{p}") as f:
+            bakery_secret_args = yaml.safe_load(f)
+            for storage_type in list(bakery_secret_args):
+                # assumes secrets are only for storage,
+                # all storage types have "fsspec_args"
+                existing_args = this_bakery[storage_type]["fsspec_args"]
+                additional_args = bakery_secret_args[storage_type]["fsspec_args"]
+                existing_args.update(additional_args)
+
+    bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
 
     app_config_path = get_app_config_path()
     with open(app_config_path) as c:
