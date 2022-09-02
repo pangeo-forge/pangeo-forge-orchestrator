@@ -20,8 +20,8 @@ print(apps)
 "
 app_array=$(python3.9 -c "${PARSE_APP_NAMES}")
 for app in ${app_array[@]}; do
-  # sops -d -i "./secrets/config.${app}.yaml"
-  echo $app
+  echo "decrypting secrets for ${app}..."
+  sops -d -i "./secrets/config.${app}.yaml"
 done
 echo "dynamically setting webhook secrets from app config..."
 export GET_APPS_WITH_SECRETS="
@@ -34,12 +34,7 @@ for a in apps:
         apps_with_secrets.update({a: secret})
 print(json.dumps(apps_with_secrets))
 "
-echo $(python3.9 -c "${GET_APPS_WITH_SECRETS}")
-exit
-export APP_0_SECRET=
-export APP_1_SECRET=$(cat ./secrets/config.${APP_1}.yaml | python3.9 -c "${GET_WEBHOOK_SECRET}")
-# TODO: set this dynamically, maybe with a python -c list comprehension?
-export APPS_WITH_SECRETS="{\"${APP_0}\":\"${APP_0_SECRET}\",\"${APP_1}\":\"${APP_1_SECRET}\"}"
+export APPS_WITH_SECRETS=$(python3.9 -c "${GET_APPS_WITH_SECRETS}")
 
 echo "dynamically setting gcp project from service account keyfile..."
 sops -d -i "./${TF_CREDS}"
@@ -50,8 +45,8 @@ terraform -chdir=${TF_DIR} init
 terraform -chdir=${TF_DIR} plan -out tfplan \
 -var 'credentials_file=../../'${TF_CREDS} \
 -var 'project='${GCP_PROJECT} \
--var 'apps_with_secrets='${APPS_WITH_SECRETS}
-terraform -chdir=${TF_DIR} apply tfplan
+-var 'apps_with_secrets='"${APPS_WITH_SECRETS}"
+# terraform -chdir=${TF_DIR} apply tfplan
 
 echo "re-encrypting secrets..."
 # if AGE_PUBLIC_KEY is set, include it in encryption recipients.
@@ -62,9 +57,11 @@ else
     export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt),${AGE_PUBLIC_KEY}
 fi
 
+echo "re-encrypting terraform secrets..."
 sops -e -i "./${TF_CREDS}"
-# TODO: do this in a loop
-sops -e -i "./secrets/config.${APP_0}.yaml"
-sops -e -i "./secrets/config.${APP_1}.yaml"
+for app in ${app_array[@]}; do
+  echo "re-encrypting secrets for ${app}..."
+  sops -e -i "./secrets/config.${app}.yaml"
+done
 
 echo "release complete!"
