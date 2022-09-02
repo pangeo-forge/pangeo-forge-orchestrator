@@ -26,6 +26,7 @@ jobs:
       - name: Test
         run: >
           docker-compose run
+          -v ${PWD}/tests:/tests
           --entrypoint="/bin/sh -c 'sleep 1
           && python3.9 -m alembic upgrade head
           && apt-get install -y git
