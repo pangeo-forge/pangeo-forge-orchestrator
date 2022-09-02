@@ -86,7 +86,7 @@ def main(github_username, deployment, pr_number=None):
 
     # This page content adapted from official GitHub docs, here:
     # https://docs.github.com/en/developers/apps/building-github-apps/creating-a-github-app-from-a-manifest#examples
-    org = "pangeo-forge" if deployment in ("prod", "staging") else TEST_ORG
+    org = "pangeo-forge" if deployment == "prod" else TEST_ORG
     content = f"""
     <html>
         <form
