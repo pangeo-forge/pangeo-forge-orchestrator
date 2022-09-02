@@ -66,6 +66,6 @@ done
 echo "decrypting bakery secrets..."
 # TODO: make this a loop over files starting with 'secrets/bakery-env',
 # so we don't need to know the names ahead of time
-sops -d -i "./secrets/bakery-env.pangeo-ldeo-nsf-earthcube.yaml"
+sops -d -i "./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml"
 
 echo "release complete!"
