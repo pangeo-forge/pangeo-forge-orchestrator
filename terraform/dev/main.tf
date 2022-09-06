@@ -18,11 +18,12 @@ module "dataflow_status_monitoring" {
   credentials_file  = var.credentials_file
   apps_with_secrets = var.apps_with_secrets
   function_src_dir  = "../../dataflow-status-monitoring/src"
+  env               = "dev"
 }
 
 terraform {
   backend "gcs" {
     bucket  = "pforge-tfstate"
-    prefix  = "terraform/state"
+    prefix  = "terraform/state/dev"
   }
 }
