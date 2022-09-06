@@ -2,7 +2,7 @@
 
 set -e
 export TF_IN_AUTOMATION=true
-export TF_DIR="./dataflow-status-monitoring/terraform"
+export TF_DIR="./terraform/dev"  # this would be variablized
 export TF_CREDS="secrets/dataflow-status-monitoring.json"
 export GOOGLE_APPLICATION_CREDENTIALS="`pwd`/${TF_CREDS}"
 export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
@@ -45,7 +45,7 @@ terraform -chdir=${TF_DIR} plan -out tfplan \
 -var 'credentials_file=../../'${TF_CREDS} \
 -var 'project='${GCP_PROJECT} \
 -var 'apps_with_secrets='"${APPS_WITH_SECRETS}"
-terraform -chdir=${TF_DIR} apply tfplan
+# terraform -chdir=${TF_DIR} apply tfplan
 
 echo "re-encrypting secrets..."
 # if AGE_PUBLIC_KEY is set, include it in encryption recipients.
