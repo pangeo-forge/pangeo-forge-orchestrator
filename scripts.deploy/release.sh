@@ -10,22 +10,49 @@ export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id
 echo "running database migration..."
 python3.9 -m alembic upgrade head
 
+echo "setting terraform env..."
+export SET_TF_ENV="
+import os;
+deployment = os.environ['PANGEO_FORGE_DEPLOYMENT'];
+if deployment not in ('pangeo-forge', 'pangeo-forge-staging'):
+    os.environ['TF_ENV'] = 'dev'
+else:
+    os.environ['TF_ENV'] = deployment
+"
+python -c "${SET_TF_ENV}"
+echo "terraform env set to '${TF_ENV}'"
+
 echo "decrypting app secrets..."
 export PARSE_APP_NAMES="
 import os;
+deployment = os.environ['PANGEO_FORGE_DEPLOYMENT'];
 apps = [f.split('.')[1] for f in os.listdir('secrets') if f.startswith('config')];
+if deployment in ('pangeo-forge', 'pangeo-forge-staging'):
+    apps = [a for a in apps if a == deployment]
+else:
+    apps = [a for a in apps if a not in ('pangeo-forge', 'pangeo-forge-staging')]
 apps = ' '.join(apps);
 print(apps)
 "
 app_array=$(python3.9 -c "${PARSE_APP_NAMES}")
 for app in ${app_array[@]}; do
+  echo "found app ${app}"
+done
+
+for app in ${app_array[@]}; do
   echo "decrypting secrets for ${app}..."
   sops -d -i "./secrets/config.${app}.yaml"
 done
+
 echo "dynamically setting webhook secrets from app config..."
 export GET_APPS_WITH_SECRETS="
 import json, os, yaml;
+deployment = os.environ['PANGEO_FORGE_DEPLOYMENT'];
 apps = [f.split('.')[1] for f in os.listdir('secrets') if f.startswith('config')];
+if deployment in ('pangeo-forge', 'pangeo-forge-staging'):
+    apps = [a for a in apps if a == deployment]
+else:
+    apps = [a for a in apps if a not in ('pangeo-forge', 'pangeo-forge-staging')]
 apps_with_secrets = {};
 for a in apps:
     with open(f'secrets/config.{a}.yaml') as f:
