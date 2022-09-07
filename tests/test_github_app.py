@@ -23,6 +23,8 @@ from pangeo_forge_orchestrator.routers.github_app import (
     list_accessible_repos,
 )
 
+from .conftest import clear_database
+
 
 def mock_access_token_from_jwt(jwt: str):
     """Certain GitHub API actions are authenticated via JWT and others are authenticated with an
@@ -378,16 +380,7 @@ async def check_run_create_kwargs(admin_key, async_app_client):
     )
 
     # database teardown
-    from sqlmodel import Session
-
-    from pangeo_forge_orchestrator.database import engine
-    from pangeo_forge_orchestrator.models import MODELS
-
-    from .conftest import clear_table
-
-    with Session(engine) as session:
-        for k in MODELS:
-            clear_table(session, MODELS[k].table)  # make sure the database is empty
+    clear_database()
 
 
 @pytest.mark.asyncio
@@ -540,16 +533,7 @@ async def synchronize_request(
     yield add_hash_signature(request, webhook_secret)
 
     # database teardown
-    from sqlmodel import Session
-
-    from pangeo_forge_orchestrator.database import engine
-    from pangeo_forge_orchestrator.models import MODELS
-
-    from .conftest import clear_table
-
-    with Session(engine) as session:
-        for k in MODELS:
-            clear_table(session, MODELS[k].table)  # make sure the database is empty
+    clear_database()
 
 
 @pytest.mark.asyncio
