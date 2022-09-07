@@ -1,6 +1,11 @@
 # See: https://github.com/pangeo-forge/pangeo-forge-recipes/blob/master/.pre-commit-config.yaml
 
 repos:
+  - repo: https://github.com/yuvipanda/pre-commit-hook-ensure-sops
+    rev: v1.0
+    hooks:
+      - id: sops-encryption
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.3.0
     hooks:

@@ -1,0 +1,25 @@
+# age private keys
+key.txt
+
+# development scripts
+scripts.develop
+
+# heroku can't fetch submodule contents from github:
+# https://devcenter.heroku.com/articles/github-integration#does-github-integration-work-with-git-submodules
+# so we'll ignore this, and then clone it from github at build time
+dataflow-status-monitoring
+
+# config, tests, docs
+.coveragerc
+.github
+.github_app_manifest_flow
+.mypy_cache
+.pre-commit-config.yaml
+.prettierrc.toml
+.pytest_cache
+codecov.yml
+*.sqlite
+docker-compose.yml
+docs
+*.egg-info
+tests

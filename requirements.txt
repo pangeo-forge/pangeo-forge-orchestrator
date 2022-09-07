@@ -3,17 +3,21 @@
 aiohttp==3.8.1
 fastapi==0.71.0
 gidgethub==5.1.0
+# TODO: bump to sqlmodel==0.0.7 and remove sqlalchemy pin.
 sqlmodel==0.0.6
 sqlalchemy==1.4.35  # https://github.com/tiangolo/sqlmodel/issues/315
-typer==0.4.0
-click==8.0.4  # https://github.com/tiangolo/typer/issues/377
 alembic==1.7.5
+PyYAML==6.0
+cffi
 
 # for deployment
 gunicorn==20.1.0
 uvicorn==0.17.0
-psycopg2==2.9.3
+psycopg2-binary==2.9.3
 
-# install the pangeo-forge-orchestrator package
-# -e .
-# actually not necessary
+# these will eventually move out of the app container, and instead be
+# installed within the docker sibling container used for recipe handling
+# pangeo-forge-runner==0.5 -> use this once released
+git+https://github.com/yuvipanda/pangeo-forge-runner@main
+gcsfs
+s3fs
