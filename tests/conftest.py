@@ -170,6 +170,20 @@ def clear_table(session: Session, table_model: SQLModel):
     assert len(session.query(table_model).all()) == 0  # make sure the database is empty
 
 
+def clear_database():
+    # note this function is redundant with the `session` fixture below
+    # the difference is that this called explictly by the newer fixtures in `test_github_app`
+    # whereas the `session` fixture is called implicitly for the older fixtues used by `test_api`
+    # eventually, we should replace the older implict `session` with this more explicit approach
+    # for all tests. in the short term, to avoid breaking the older tests, we'll keep this as two
+    # separate approaches.
+    from pangeo_forge_orchestrator.database import engine
+
+    with Session(engine) as session:
+        for k in MODELS:
+            clear_table(session, MODELS[k].table)  # make sure the database is empty
+
+
 @pytest.fixture(scope="session")
 def api_keys():
     salt = uuid.uuid4().hex
