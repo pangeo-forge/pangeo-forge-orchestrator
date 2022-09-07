@@ -284,9 +284,9 @@ async def receive_github_hook(  # noqa: C901
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
         base_repo_name = pr["base"]["repo"]["full_name"]
-        if not base_repo_name.lower().endswith("-feedstock") and not base_repo_name.lower().endswith(
-            "staged-recipes"
-        ):
+        if not base_repo_name.lower().endswith(
+            "-feedstock"
+        ) and not base_repo_name.lower().endswith("staged-recipes"):
             return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
 
         if pr["title"].lower().startswith("cleanup"):
