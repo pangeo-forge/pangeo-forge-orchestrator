@@ -9,7 +9,7 @@ from typing import List, Optional, Union
 
 import jwt
 import pytest
-from sqlalchemy.orm.exc import NoResultFound
+import pytest_asyncio
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.http import HttpSession, http_session
@@ -22,6 +22,8 @@ from pangeo_forge_orchestrator.routers.github_app import (
     html_url_to_repo_full_name,
     list_accessible_repos,
 )
+
+from .conftest import clear_database
 
 
 def mock_access_token_from_jwt(jwt: str):
@@ -297,21 +299,6 @@ async def test_get_app_webhook_url(private_key, get_mock_github_session):
     assert url == "https://api.pangeo-forge.org/github/hooks/"
 
 
-@pytest.fixture
-def check_run_create_kwargs():
-    return dict(
-        name="synchronize",
-        head_sha="abcdefg",  # TODO: fixturize
-        status="in_progress",
-        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(
-            title="Syncing latest commit to Pangeo Forge Cloud",
-            summary="",  # required
-        ),
-        details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
-    )
-
-
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
 @pytest.mark.asyncio
 async def test_get_repo_id(private_key, get_mock_github_session, repo_full_name):
@@ -369,23 +356,9 @@ async def test_get_delivery(
         assert response.json() == delivery
 
 
-@pytest.mark.asyncio
-async def test_get_feedstock_check_runs(
-    mocker,
-    private_key,
-    get_mock_github_session,
-    check_run_create_kwargs,
-    async_app_client,
-    admin_key,
-):
-    os.environ["PEM_FILE"] = private_key
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_github_session",
-        get_mock_github_session,
-    )
-
-    # populate the pangeo forge database with a feedstock
+@pytest_asyncio.fixture
+async def check_run_create_kwargs(admin_key, async_app_client):
+    # setup database
     admin_headers = {"X-API-Key": admin_key}
     fstock_response = await async_app_client.post(
         "/feedstocks/",
@@ -393,7 +366,37 @@ async def test_get_feedstock_check_runs(
         headers=admin_headers,
     )
     assert fstock_response.status_code == 200
-    fstock_id = fstock_response.json()["id"]
+
+    yield dict(
+        name="synchronize",
+        head_sha="abcdefg",  # TODO: fixturize
+        status="in_progress",
+        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+        output=dict(
+            title="Syncing latest commit to Pangeo Forge Cloud",
+            summary="",  # required
+        ),
+        details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
+    )
+
+    # database teardown
+    clear_database()
+
+
+@pytest.mark.asyncio
+async def test_get_feedstock_check_runs(
+    mocker,
+    private_key,
+    get_mock_github_session,
+    check_run_create_kwargs,
+    async_app_client,
+):
+    os.environ["PEM_FILE"] = private_key
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
 
     # populate mock github backend with check runs for the feedstock (only 1 for now)
     mock_gh = get_mock_github_session(http_session)
@@ -404,9 +407,7 @@ async def test_get_feedstock_check_runs(
     commit_sha = check_run_response["head_sha"]
 
     # now that the data is in the mock github backend, retrieve it
-    response = await async_app_client.get(
-        f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
-    )
+    response = await async_app_client.get(f"/feedstocks/1/commits/{commit_sha}/check-runs")
     json_ = response.json()
     assert json_["total_count"] == 1  # this value represents the number of check runs created
     for k in check_run_create_kwargs:
@@ -479,8 +480,13 @@ def add_hash_signature(request: dict, webhook_secret: str):
     return request
 
 
-@pytest.fixture
-def synchronize_request(webhook_secret):
+@pytest_asyncio.fixture
+async def synchronize_request(
+    webhook_secret,
+    async_app_client,
+    admin_key,
+    request,
+):
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
         "action": "synchronize",
@@ -488,9 +494,9 @@ def synchronize_request(webhook_secret):
             "number": 1,
             "base": {
                 "repo": {
-                    "html_url": "https://github.com/pangeo-forge/staged-recipes",
-                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
-                    "full_name": "pangeo-forge/staged-recipes",
+                    "html_url": f"https://github.com/{request.param}",
+                    "url": f"https://api.github.com/repos/{request.param}",
+                    "full_name": request.param,
                 },
             },
             "head": {
@@ -505,11 +511,38 @@ def synchronize_request(webhook_secret):
         },
     }
     request = {"headers": headers, "payload": payload}
-    return add_hash_signature(request, webhook_secret)
+
+    # setup database for this test
+    admin_headers = {"X-API-Key": admin_key}
+    bakery_create_response = await async_app_client.post(
+        "/bakeries/",
+        json={  # TODO: set dynamically
+            "region": "us-central1",
+            "name": "pangeo-ldeo-nsf-earthcube",
+            "description": "A great bakery to test with!",
+        },
+        headers=admin_headers,
+    )
+    assert bakery_create_response.status_code == 200
+    feedstock_create_response = await async_app_client.post(
+        "/feedstocks/",
+        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+        headers=admin_headers,
+    )
+    assert feedstock_create_response.status_code == 200
+
+    yield add_hash_signature(request, webhook_secret)
+
+    # database teardown
+    clear_database()
 
 
-@pytest.mark.parametrize("raises_database_dependencies_error", [True, False])
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "synchronize_request",
+    ["pangeo-forge/staged-recipes", "pangeo-forge/pangeo-forge.org"],
+    indirect=True,
+)
 async def test_receive_synchronize_request(
     mocker,
     get_mock_github_session,
@@ -517,66 +550,26 @@ async def test_receive_synchronize_request(
     async_app_client,
     synchronize_request,
     private_key,
-    raises_database_dependencies_error,
-    admin_key,
 ):
     os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
     mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_github_session",
-        get_mock_github_session,
+        pangeo_forge_orchestrator.routers.github_app, "get_github_session", get_mock_github_session
     )
+
     mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
-    # PEM_FILE is used to authenticate with github in background tasks
     os.environ["PEM_FILE"] = private_key
+    response = await async_app_client.post(
+        "/github/hooks/",
+        json=synchronize_request["payload"],
+        headers=synchronize_request["headers"],
+    )
 
-    if raises_database_dependencies_error:
-        with pytest.raises(NoResultFound):
-            response = await async_app_client.post(
-                "/github/hooks/",
-                json=synchronize_request["payload"],
-                headers=synchronize_request["headers"],
-            )
+    if synchronize_request["payload"]["pull_request"]["base"]["repo"]["full_name"].endswith(
+        "pangeo-forge.org"
+    ):
+        assert "Skipping synchronize for repo" in response.json()["message"]
     else:
-        # In order for the recipe run creation process to succeed, both the bakery and feedstock
-        # specified in the meta.yaml must already exist in the database.
-        admin_headers = {"X-API-Key": admin_key}
-        bakery_create_response = await async_app_client.post(
-            "/bakeries/",
-            json={  # TODO: set dynamically
-                "region": "us-central1",
-                "name": "pangeo-ldeo-nsf-earthcube",
-                "description": "A great bakery to test with!",
-            },
-            headers=admin_headers,
-        )
-        assert bakery_create_response.status_code == 200
-
-        # FIXME: the database *should* be empty before the test? but for some reason that's not
-        # happening. so just hack around it for now, like this:
-        existing_feedstocks = await async_app_client.get("/feedstocks/")
-        existing_matching = [
-            f for f in existing_feedstocks.json() if f["spec"] == "pangeo-forge/staged-recipes"
-        ]
-        if not existing_matching:
-            feedstock_create_response = await async_app_client.post(
-                "/feedstocks/",
-                json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
-                headers=admin_headers,
-            )
-            assert feedstock_create_response.status_code == 200
-            fstock_id = feedstock_create_response.json()["id"]
-        else:
-            fstock_id = existing_matching[0]["id"]
-
-        # Now that the database is pre-populated with pre-requisites, we can actually test.
-        response = await async_app_client.post(
-            "/github/hooks/",
-            json=synchronize_request["payload"],
-            headers=synchronize_request["headers"],
-        )
         assert response.status_code == 202
-
         # first assert that the recipe runs were created as expected
         recipe_runs_response = await async_app_client.get("/recipe_runs/")
         assert recipe_runs_response.status_code == 200
@@ -599,15 +592,17 @@ async def test_receive_synchronize_request(
                 "id": 1,
             }
         ]
+
         for k in expected_recipe_runs_response[0]:
-            if not k == "started_at" and not k == "completed_at":
+            if k not in ["started_at", "completed_at"]:
                 assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
 
         # then assert that the check runs were created as expected
         commit_sha = recipe_runs_response.json()[0]["head_sha"]
         check_runs_response = await async_app_client.get(
-            f"/feedstocks/{fstock_id}/commits/{commit_sha}/check-runs"
+            f"/feedstocks/1/commits/{commit_sha}/check-runs"
         )
+
         # TODO: fixturize expected_check_runs_response
         expected_check_runs_response = {
             "total_count": 1,
@@ -628,31 +623,11 @@ async def test_receive_synchronize_request(
                 }
             ],
         }
+
         assert expected_check_runs_response["total_count"] == 1
         for k in expected_check_runs_response["check_runs"][0]:
-            if not k == "started_at" and not k == "completed_at":
+            if k not in ["started_at", "completed_at"]:
                 assert (
                     expected_check_runs_response["check_runs"][0][k]
                     == check_runs_response.json()["check_runs"][0][k]
                 )
-
-        # Teardown. TODO: move this into a fixture, with a teardown block after `yield`.
-        # If we don't delete, they'll persist in session-scoped database, and mess up other tests.
-        # NOTE: Must delete recipe runs first, otherwise null-pointing foreign keys cause errors.
-        for r in recipe_runs_response.json():
-            delete_response = await async_app_client.delete(
-                f"/recipe_runs/{r['id']}",
-                headers=admin_headers,
-            )
-            assert delete_response.status_code == 200
-
-        bakery_delete_response = await async_app_client.delete(
-            f"/bakeries/{bakery_create_response.json()['id']}",
-            headers=admin_headers,
-        )
-        assert bakery_delete_response.status_code == 200
-        feedstock_delete_response = await async_app_client.delete(
-            f"/feedstocks/{fstock_id}",
-            headers=admin_headers,
-        )
-        assert feedstock_delete_response.status_code == 200

@@ -34,6 +34,12 @@ github_app_router = APIRouter()
 # Helpers -----------------------------------------------------------------------------------------
 
 
+def ignore_repo(repo):
+    """Return True if the repo should be ignored."""
+
+    return not repo.lower().endswith("-feedstock") and not repo.lower().endswith("staged-recipes")
+
+
 def get_github_session(http_session: aiohttp.ClientSession):
     return GitHubAPI(http_session, "pangeo-forge")
 
@@ -283,7 +289,12 @@ async def receive_github_hook(  # noqa: C901
 
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
-        if pr["title"].startswith("Cleanup"):
+        base_repo_name = pr["base"]["repo"]["full_name"]
+
+        if ignore_repo(base_repo_name):
+            return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
+
+        if pr["title"].lower().startswith("cleanup"):
             return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
         args = (
             pr["head"]["repo"]["html_url"],
