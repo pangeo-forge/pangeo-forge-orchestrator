@@ -567,7 +567,7 @@ async def test_receive_synchronize_request(
     if synchronize_request["payload"]["pull_request"]["base"]["repo"]["full_name"].endswith(
         "pangeo-forge.org"
     ):
-        assert "Skipping" in response.json()["message"]
+        assert "Skipping synchronize for repo" in response.json()["message"]
     else:
         assert response.status_code == 202
         # first assert that the recipe runs were created as expected
