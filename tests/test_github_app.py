@@ -85,7 +85,12 @@ class MockGitHubAPI:
                 {"response": d} for d in self._backend._app_hook_deliveries if d["id"] == id_
             ].pop(0)
         elif "pulls" in path and path.endswith("files"):
-            return [{"filename": "recipes/new-dataset/recipe.py"}]
+            return [
+                {
+                    "filename": "recipes/new-dataset/recipe.py",
+                    "contents_url": "",  # TODO: return a realistic contents url
+                }
+            ]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -122,7 +127,12 @@ class MockGitHubAPI:
             # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
             return {"token": mock_access_token_from_jwt(jwt=get_jwt())}
         elif path == "/orgs/pangeo-forge/repos":
+            # mocks creating a new repo. used in `create_feedstock_repo` background task.
+            # the return value is not used, so not providing one.
             pass
+        elif path.endswith("/git/refs"):
+            # mock creating a new git ref on a repo.
+            return {"url", ""}  # TODO: return a realistic url
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
