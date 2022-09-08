@@ -306,11 +306,7 @@ async def receive_github_hook(  # noqa: C901
         background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
-    elif (
-        not ignore_repo(pr["base"]["repo"]["full_name"])
-        and event == "issue_comment"
-        and payload["action"] == "created"
-    ):
+    elif event == "issue_comment" and payload["action"] == "created":
         comment = payload["comment"]
         comment_body = comment["body"]
         reactions_url = comment["reactions"]["url"]
