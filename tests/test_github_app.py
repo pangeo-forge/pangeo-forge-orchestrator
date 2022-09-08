@@ -483,6 +483,7 @@ async def synchronize_request(
     webhook_secret,
     async_app_client,
     admin_key,
+    request,
 ):
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
@@ -491,9 +492,9 @@ async def synchronize_request(
             "number": 1,
             "base": {
                 "repo": {
-                    "html_url": "https://github.com/pangeo-forge/staged-recipes",
-                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
-                    "full_name": "pangeo-forge/staged-recipes",
+                    "html_url": f"https://github.com/{request.param}",
+                    "url": f"https://api.github.com/repos/{request.param}",
+                    "full_name": request.param,
                 },
             },
             "head": {
@@ -535,6 +536,11 @@ async def synchronize_request(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "synchronize_request",
+    ["pangeo-forge/staged-recipes", "pangeo-forge/pangeo-forge.org"],
+    indirect=True,
+)
 async def test_receive_synchronize_request(
     mocker,
     get_mock_github_session,
@@ -545,79 +551,84 @@ async def test_receive_synchronize_request(
 ):
     os.environ["GITHUB_WEBHOOK_SECRET"] = webhook_secret
     mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_github_session",
-        get_mock_github_session,
+        pangeo_forge_orchestrator.routers.github_app, "get_github_session", get_mock_github_session
     )
-    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
-    # PEM_FILE is used to authenticate with github in background tasks
-    os.environ["PEM_FILE"] = private_key
 
+    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+    os.environ["PEM_FILE"] = private_key
     response = await async_app_client.post(
         "/github/hooks/",
         json=synchronize_request["payload"],
         headers=synchronize_request["headers"],
     )
-    assert response.status_code == 202
 
-    # first assert that the recipe runs were created as expected
-    recipe_runs_response = await async_app_client.get("/recipe_runs/")
-    assert recipe_runs_response.status_code == 200
-    # TODO: fixturize expected_recipe_runs_response
-    expected_recipe_runs_response = [
-        {
-            "recipe_id": "gpcp",
-            "bakery_id": 1,
-            "feedstock_id": 1,
-            "head_sha": "abc",
-            "version": "",
-            "started_at": "2022-08-11T21:03:56",
-            "completed_at": None,
-            "conclusion": None,
-            "status": "queued",
-            "is_test": True,
-            "dataset_type": "zarr",
-            "dataset_public_url": None,
-            "message": None,
-            "id": 1,
-        }
-    ]
-    for k in expected_recipe_runs_response[0]:
-        if not k == "started_at" and not k == "completed_at":
-            assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
-
-    # then assert that the check runs were created as expected
-    commit_sha = recipe_runs_response.json()[0]["head_sha"]
-    check_runs_response = await async_app_client.get(
-        f"/feedstocks/1/commits/{commit_sha}/check-runs"
-    )
-    # TODO: fixturize expected_check_runs_response
-    expected_check_runs_response = {
-        "total_count": 1,
-        "check_runs": [
+    if synchronize_request["payload"]["pull_request"]["base"]["repo"]["full_name"].endswith(
+        "pangeo-forge.org"
+    ):
+        assert "Skipping synchronize for repo" in response.json()["message"]
+    else:
+        assert response.status_code == 202
+        # first assert that the recipe runs were created as expected
+        recipe_runs_response = await async_app_client.get("/recipe_runs/")
+        assert recipe_runs_response.status_code == 200
+        # TODO: fixturize expected_recipe_runs_response
+        expected_recipe_runs_response = [
             {
-                "name": "synchronize",
+                "recipe_id": "gpcp",
+                "bakery_id": 1,
+                "feedstock_id": 1,
                 "head_sha": "abc",
-                "status": "completed",
-                "started_at": "2022-08-11T21:22:51Z",
-                "output": {
-                    "title": "Recipe runs queued for latest commit",
-                    "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-run/1?feedstock_id=1",
-                },
-                "details_url": "https://pangeo-forge.org/",
-                "id": 0,
-                "conclusion": "success",
-                "completed_at": "2022-08-11T21:22:51Z",
+                "version": "",
+                "started_at": "2022-08-11T21:03:56",
+                "completed_at": None,
+                "conclusion": None,
+                "status": "queued",
+                "is_test": True,
+                "dataset_type": "zarr",
+                "dataset_public_url": None,
+                "message": None,
+                "id": 1,
             }
-        ],
-    }
-    assert expected_check_runs_response["total_count"] == 1
-    for k in expected_check_runs_response["check_runs"][0]:
-        if not k == "started_at" and not k == "completed_at":
-            assert (
-                expected_check_runs_response["check_runs"][0][k]
-                == check_runs_response.json()["check_runs"][0][k]
-            )
+        ]
+
+        for k in expected_recipe_runs_response[0]:
+            if k not in ["started_at", "completed_at"]:
+                assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
+
+        # then assert that the check runs were created as expected
+        commit_sha = recipe_runs_response.json()[0]["head_sha"]
+        check_runs_response = await async_app_client.get(
+            f"/feedstocks/1/commits/{commit_sha}/check-runs"
+        )
+
+        # TODO: fixturize expected_check_runs_response
+        expected_check_runs_response = {
+            "total_count": 1,
+            "check_runs": [
+                {
+                    "name": "synchronize",
+                    "head_sha": "abc",
+                    "status": "completed",
+                    "started_at": "2022-08-11T21:22:51Z",
+                    "output": {
+                        "title": "Recipe runs queued for latest commit",
+                        "summary": "Recipe runs created at commit `abc`:\n- https://pangeo-forge.org/dashboard/recipe-run/1?feedstock_id=1",
+                    },
+                    "details_url": "https://pangeo-forge.org/",
+                    "id": 0,
+                    "conclusion": "success",
+                    "completed_at": "2022-08-11T21:22:51Z",
+                }
+            ],
+        }
+
+        assert expected_check_runs_response["total_count"] == 1
+        for k in expected_check_runs_response["check_runs"][0]:
+            if k not in ["started_at", "completed_at"]:
+                assert (
+                    expected_check_runs_response["check_runs"][0][k]
+                    == check_runs_response.json()["check_runs"][0][k]
+                )
 
 
 @pytest_asyncio.fixture
