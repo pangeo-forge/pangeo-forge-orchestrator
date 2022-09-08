@@ -71,6 +71,9 @@ class MockGitHubAPI:
                 commit_sha = path.split("/commits/")[-1].split("/check-runs")[0]
                 check_runs = [c for c in self._backend._check_runs if c["head_sha"] == commit_sha]
                 return {"total_count": len(check_runs), "check_runs": check_runs}
+            elif path.endswith("branches/main"):
+                # mocks getting a branch. used in create_feedstock_repo background task
+                return {"commit": {"sha": "abcdefg"}}
             else:
                 # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
                 return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
@@ -117,14 +120,9 @@ class MockGitHubAPI:
             return new_check_run
         elif path.startswith("/app/installations/") and path.endswith("/access_tokens"):
             # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
-            # We can't get a JWT without our private key. If we didn't have these checks here, and the
-            # key was missing, we would get an error in the call to ``get_jwt``, but checking for the
-            # private_key here allows us to catch errors faster, and more clearly illustrates the
-            # relationship of these secrets in the tests.
-            private_key = os.environ["PEM_FILE"]
-            assert private_key is not None
-            assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
             return {"token": mock_access_token_from_jwt(jwt=get_jwt())}
+        elif path == "/orgs/pangeo-forge/repos":
+            pass
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -620,3 +618,76 @@ async def test_receive_synchronize_request(
                 expected_check_runs_response["check_runs"][0][k]
                 == check_runs_response.json()["check_runs"][0][k]
             )
+
+
+@pytest_asyncio.fixture
+async def pr_merged_request(
+    webhook_secret,
+    async_app_client,
+    admin_key,
+):
+    headers = {"X-GitHub-Event": "pull_request"}
+    payload = {
+        "action": "closed",
+        "pull_request": {
+            "number": 1,
+            "merged": True,
+            "base": {
+                "repo": {
+                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
+                    "full_name": "pangeo-forge/staged-recipes",
+                    "owner": {
+                        "login": "pangeo-forge",
+                    },
+                },
+                "ref": "main",
+            },
+            "labels": [],
+            "title": "Add XYZ awesome dataset",
+        },
+    }
+    request = {"headers": headers, "payload": payload}
+
+    # setup database for this test
+    admin_headers = {"X-API-Key": admin_key}
+    bakery_create_response = await async_app_client.post(
+        "/bakeries/",
+        json={  # TODO: set dynamically
+            "region": "us-central1",
+            "name": "pangeo-ldeo-nsf-earthcube",
+            "description": "A great bakery to test with!",
+        },
+        headers=admin_headers,
+    )
+    assert bakery_create_response.status_code == 200
+    feedstock_create_response = await async_app_client.post(
+        "/feedstocks/",
+        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+        headers=admin_headers,
+    )
+    assert feedstock_create_response.status_code == 200
+
+    yield add_hash_signature(request, webhook_secret)
+
+    # database teardown
+    clear_database()
+
+
+@pytest.mark.asyncio
+async def test_receive_pr_merged_request(
+    mocker,
+    get_mock_github_session,
+    async_app_client,
+    pr_merged_request,
+):
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+    response = await async_app_client.post(
+        "/github/hooks/",
+        json=pr_merged_request["payload"],
+        headers=pr_merged_request["headers"],
+    )
+    assert response.status_code == 202
