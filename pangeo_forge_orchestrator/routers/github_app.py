@@ -34,6 +34,12 @@ github_app_router = APIRouter()
 # Helpers -----------------------------------------------------------------------------------------
 
 
+def ignore_repo(repo):
+    """Return True if the repo should be ignored."""
+
+    return not repo.lower().endswith("-feedstock") and not repo.lower().endswith("staged-recipes")
+
+
 def get_github_session(http_session: aiohttp.ClientSession):
     return GitHubAPI(http_session, "pangeo-forge")
 
@@ -284,9 +290,8 @@ async def receive_github_hook(  # noqa: C901
     if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
         pr = payload["pull_request"]
         base_repo_name = pr["base"]["repo"]["full_name"]
-        if not base_repo_name.lower().endswith(
-            "-feedstock"
-        ) and not base_repo_name.lower().endswith("staged-recipes"):
+
+        if ignore_repo(base_repo_name):
             return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
 
         if pr["title"].lower().startswith("cleanup"):
@@ -301,7 +306,11 @@ async def receive_github_hook(  # noqa: C901
         background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
-    elif event == "issue_comment" and payload["action"] == "created":
+    elif (
+        not ignore_repo(pr["base"]["repo"]["full_name"])
+        and event == "issue_comment"
+        and payload["action"] == "created"
+    ):
         comment = payload["comment"]
         comment_body = comment["body"]
         reactions_url = comment["reactions"]["url"]
