@@ -480,7 +480,7 @@ def add_hash_signature(request: dict, webhook_secret: str):
     return request
 
 
-@pytest_asyncio.fixture(param=["pangeo-forge/staged-recipes", "pangeo-forge/pangeo-forge.org"])
+@pytest_asyncio.fixture
 async def synchronize_request(
     webhook_secret,
     async_app_client,
@@ -538,6 +538,11 @@ async def synchronize_request(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "synchronize_request",
+    ["pangeo-forge/staged-recipes", "pangeo-forge/pangeo-forge.org"],
+    indirect=True,
+)
 async def test_receive_synchronize_request(
     mocker,
     get_mock_github_session,
