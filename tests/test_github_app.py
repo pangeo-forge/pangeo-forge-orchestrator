@@ -65,7 +65,8 @@ class MockGitHubAPI:
     ) -> Union[dict, List[dict]]:
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
-        elif path.startswith("/repos/"):
+        # gidgethub allows us to call either the relative or absolute path, and we do both
+        elif path.startswith("/repos/") or path.startswith("https://api.github.com/repos/"):
             if "/commits/" in path and path.endswith("/check-runs"):
                 # mocks getting a check run from the github api
                 commit_sha = path.split("/commits/")[-1].split("/check-runs")[0]
@@ -74,6 +75,29 @@ class MockGitHubAPI:
             elif path.endswith("branches/main"):
                 # mocks getting a branch. used in create_feedstock_repo background task
                 return {"commit": {"sha": "abcdefg"}}
+            elif "pulls" in path and path.endswith("files"):
+                return [  # TODO: fixturize
+                    {
+                        "filename": "recipes/new-dataset/recipe.py",
+                        "contents_url": (
+                            "https://api.github.com/repos/contributor-username/staged-recipes/"
+                            "contents/recipes/new-dataset/recipe.py"
+                        ),
+                    },
+                    {
+                        "filename": "recipes/new-dataset/meta.yaml",
+                        "contents_url": (
+                            "https://api.github.com/repos/contributor-username/staged-recipes/"
+                            "contents/recipes/new-dataset/meta.yaml"
+                        ),
+                    },
+                ]
+            elif "/contents/" in path:
+                # mocks getting the contents for a file
+                # TODO: make this more realistic. I believe the response is base64 encoded.
+                # TODO: the response should vary depending on the content path here:
+                relative_path_in_repo = path.split("/contents/")[-1]
+                return {"content": "=B4asdfaw3fk"}
             else:
                 # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
                 return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
@@ -84,13 +108,6 @@ class MockGitHubAPI:
             return [
                 {"response": d} for d in self._backend._app_hook_deliveries if d["id"] == id_
             ].pop(0)
-        elif "pulls" in path and path.endswith("files"):
-            return [
-                {
-                    "filename": "recipes/new-dataset/recipe.py",
-                    "contents_url": "",  # TODO: return a realistic contents url
-                }
-            ]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -147,6 +164,11 @@ class MockGitHubAPI:
             return self._backend._check_runs[id_]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
+
+    async def put(self, path: str, oauth_token: str, accept: str, data: dict):
+        """GitHub API uses the `put` method for adding content files to a repo."""
+        # TODO: actually alter state of the mock github backend here
+        pass
 
 
 @pytest.fixture
