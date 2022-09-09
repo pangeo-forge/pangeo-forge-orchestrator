@@ -83,6 +83,7 @@ class MockGitHubAPI:
                             "https://api.github.com/repos/contributor-username/staged-recipes/"
                             "contents/recipes/new-dataset/recipe.py"
                         ),
+                        "sha": "abcdefg",
                     },
                     {
                         "filename": "recipes/new-dataset/meta.yaml",
@@ -90,6 +91,7 @@ class MockGitHubAPI:
                             "https://api.github.com/repos/contributor-username/staged-recipes/"
                             "contents/recipes/new-dataset/meta.yaml"
                         ),
+                        "sha": "abcdefg",
                     },
                 ]
             elif "/contents/" in path:
@@ -149,7 +151,13 @@ class MockGitHubAPI:
             pass
         elif path.endswith("/git/refs"):
             # mock creating a new git ref on a repo.
-            return {"url", ""}  # TODO: return a realistic url
+            return {
+                "url": "",  # TODO: return a realistic url
+                "ref": data["ref"].split("/")[-1],  # More realistic w/ or w/out `.split()`?
+            }
+        elif path.endswith("/pulls"):
+            # mock opening a pr
+            return {"number": 1}  # TODO: fixturize
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -165,9 +173,20 @@ class MockGitHubAPI:
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
-    async def put(self, path: str, oauth_token: str, accept: str, data: dict):
-        """GitHub API uses the `put` method for adding content files to a repo."""
-        # TODO: actually alter state of the mock github backend here
+    async def put(self, path: str, oauth_token: str, accept: str, data: Optional[dict] = None):
+        # GitHub API uses the `put` method for:
+        #   (1) adding content files to a branch
+        #   (2) merging PRs
+        if path.endswith("/merge"):
+            return {"merged": True}
+        else:
+            # this is called for adding content files
+            # TODO: actually alter state of the mock github backend here
+            pass
+
+    async def delete(self, path, oauth_token: str, accept: str, data: Optional[dict] = None):
+        # used, e.g., for deleting branches (without `data` kwarg),
+        # or deleting files from a branch (with `data`, for commit message, etc.)
         pass
 
 
