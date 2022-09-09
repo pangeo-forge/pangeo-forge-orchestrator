@@ -96,7 +96,7 @@ class MockGitHubAPI:
                 # mocks getting the contents for a file
                 # TODO: make this more realistic. I believe the response is base64 encoded.
                 # TODO: the response should vary depending on the content path here:
-                relative_path_in_repo = path.split("/contents/")[-1]
+                relative_path_in_repo = path.split("/contents/")[-1]  # noqa: F841
                 return {"content": "=B4asdfaw3fk"}
             else:
                 # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
