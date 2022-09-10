@@ -687,6 +687,7 @@ async def pr_merged_request(
     webhook_secret,
     async_app_client,
     admin_key,
+    request,
 ):
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
@@ -705,7 +706,7 @@ async def pr_merged_request(
                 "ref": "main",
             },
             "labels": [],
-            "title": "Add XYZ awesome dataset",
+            "title": request.param,
         },
     }
     request = {"headers": headers, "payload": payload}
@@ -736,6 +737,11 @@ async def pr_merged_request(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pr_merged_request",
+    ["Add XYZ awesome dataset", "Cleanup: pangeo-forge/XYZ-feedstock"],
+    indirect=True,
+)
 async def test_receive_pr_merged_request(
     mocker,
     get_mock_github_session,
@@ -753,3 +759,6 @@ async def test_receive_pr_merged_request(
         headers=pr_merged_request["headers"],
     )
     assert response.status_code == 202
+
+    if pr_merged_request["payload"]["pull_request"]["title"].startswith("Cleanup"):
+        assert response.json()["message"] == "This is an automated cleanup PR. Skipping."

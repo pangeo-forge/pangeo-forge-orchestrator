@@ -416,7 +416,7 @@ async def receive_github_hook(  # noqa: C901
             # if ...:
             #    return {"message": "not a recipes PR"}
 
-            if pr["title"].startswith("Cleanup"):
+            if pr["title"].lower().startswith("cleanup"):
                 return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
 
             args = (  # type: ignore
