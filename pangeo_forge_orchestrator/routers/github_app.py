@@ -410,11 +410,25 @@ async def receive_github_hook(  # noqa: C901
         logger.info("Received PR merged event...")
         pr = payload["pull_request"]
 
+        files_changed = await gh.getitem(
+            f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files",
+            **gh_kws,
+        )
+        # TODO[**IMPORTANT**]: make sure that `synchronize` task fails check run if
+        # PRs attempt to mix recipe + config changes, and that this failure is somehow
+        # connected to a branch protection rule for feedstocks + staged-recipes.
+        # See: https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/109
+        # If we get to this stage (pr merged) and `fnames_changed` includes a mixture
+        # of top-level (i.e. README, etc) files *and* recipes files, it will be too late
+        # to easily decide what automation (if any) to run in response to the merge.
+        fnames_changed = [files_changed[i]["filename"] for i in range(len(files_changed))]
+
         if "staged-recipes" in pr["base"]["repo"]["full_name"]:
             # this is staged-recipes, so (probably) create a new feedstock repository
-            # TODO: make sure this is a recipe PR (not top-level config or something)
-            # if ...:
-            #    return {"message": "not a recipes PR"}
+
+            # make sure this is a recipe PR (not top-level config or something)
+            if not all([fname.startswith("recipes/") for fname in fnames_changed]):
+                return {"message": "not a recipes PR"}
 
             if pr["title"].lower().startswith("cleanup"):
                 return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
@@ -432,9 +446,9 @@ async def receive_github_hook(  # noqa: C901
             if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
                 return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
 
-            # TODO: make sure this is a recipe PR (not config, readme, etc)
-            # if ...:
-            #    return {"message": "PR didn't change recipe or meta.yaml, not deploying"}
+            # make sure this is a recipe PR (not config, readme, etc)
+            if not all([fname.startswith("feedstock/") for fname in fnames_changed]):
+                return {"message": "not a recipes PR"}
 
             # mypy doesn't like that `args` can have variable length depending on which
             # conditional block it's defined within

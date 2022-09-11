@@ -693,7 +693,7 @@ async def pr_merged_request(
     payload = {
         "action": "closed",
         "pull_request": {
-            "number": 1,
+            "number": request.param["number"],
             "merged": True,
             "base": {
                 "repo": {
@@ -706,7 +706,7 @@ async def pr_merged_request(
                 "ref": "main",
             },
             "labels": [],
-            "title": request.param,
+            "title": request.param["title"],
         },
     }
     request = {"headers": headers, "payload": payload}
