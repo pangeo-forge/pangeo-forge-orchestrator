@@ -167,7 +167,7 @@ To programmatically create GitHub Apps, GitHub requires authentication via an in
 we use to create the `local` app instance, therefore, starts a local webserver to walk you through this flow. From the repo root, run:
 
 ```console
-$ python3 scripts/new_github_app.py $YOUR_GITHUB_USERNAME local
+$ python3 scripts.develop/new_github_app.py $YOUR_GITHUB_USERNAME local
 ```
 
 You should see the following in your terminal:
@@ -183,7 +183,7 @@ Navigate to http://localhost:3000/authorize.html. You should see something like 
 > **Do not** manually edit any of the JSON parameters in the input field; they have been programmatically
 > generated for you by `scripts/new_github_app.py`. **_Do_ be aware**, however, that from this point forward
 > you will be authorizing creation of a new GitHub App in your _real_ user account. If you have any
-> reservations about this, please review `scripts/new_github_app.py` closely and/or dicuss with a Pangeo Forge
+> reservations about this, please review `scripts.develop/new_github_app.py` closely and/or dicuss with a Pangeo Forge
 > maintainer before proceeding.
 
 If you are ready to create a new GitHub App in your user account, click **Submit**. This button will redirect
@@ -221,7 +221,7 @@ are used to authorize protected actions on such as creating, patching, and delet
 To generate these credentials for the `local` deployment, from the repo root, run:
 
 ```console
-$ python3 scripts/generate_api_key.py local
+$ python3 scripts.develop/generate_api_key.py local
 ```
 
 If you look at `secrets/config.local.yaml` now, you should see that creds have been added to it under the
