@@ -9,6 +9,7 @@ from .http import http_session
 from .metadata import app_metadata
 from .routers.github_app import github_app_router
 from .routers.model_router import router as model_router
+from .routers.repr import repr_router
 from .routers.security import api_key_router
 from .routers.stats import stats_router
 from .security import create_admin_api_key
@@ -47,6 +48,7 @@ app.include_router(model_router)
 app.include_router(api_key_router)
 app.include_router(stats_router)
 app.include_router(github_app_router)
+app.include_router(repr_router)
 
 
 @app.get("/", include_in_schema=False)

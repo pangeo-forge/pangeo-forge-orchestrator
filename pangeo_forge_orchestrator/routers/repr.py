@@ -1,10 +1,11 @@
 import pydantic
-from fastapi import APIRouter, JSONResponse, Query, status
+from fastapi import APIRouter, Query, status
+from fastapi.responses import JSONResponse
 
 repr_router = APIRouter()
 
 
-@repr_router.get("/xarray/", summary="Get xarray representation of dataset", tags=["repr"])
+@repr_router.get("/repr/xarray/", summary="Get xarray representation of dataset", tags=["repr"])
 def xarray(
     url: pydantic.AnyUrl = Query(
         ...,
