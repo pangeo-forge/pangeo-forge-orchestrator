@@ -21,3 +21,9 @@ psycopg2-binary==2.9.3
 git+https://github.com/yuvipanda/pangeo-forge-runner@main
 gcsfs
 s3fs
+
+# for `/repr/xarray/` route
+zarr
+xarray>=2022.06
+cftime
+dask[complete]
