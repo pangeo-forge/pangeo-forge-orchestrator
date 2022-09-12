@@ -95,7 +95,7 @@ class Bakery(BaseModel):
 class Config(BaseModel):
     fastapi: FastAPIConfig
     github_app: GitHubAppConfig
-    bakeries: Dict[str, Bakery]
+    bakeries: Optional[Dict[str, Bakery]] = None
 
 
 root = Path(__file__).resolve().parent.parent
@@ -139,29 +139,40 @@ def get_config() -> Config:
     # so the following retrieves only the bakery config for the current deployment.
     # bakeries may want to customize their config on a per-deployment basis, for example if staging
     # storage is a different location from production storage (which it ideally should be).
-    bakery_config_paths = [
-        p
-        for p in os.listdir(f"{root}/bakeries")
-        if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
-    ]
-    bakery_kws = {}
-    for p in bakery_config_paths:
-        with open(f"{root}/bakeries/{p}") as f:
-            bakery_kws.update({p.split(".")[0]: yaml.safe_load(f)})
+    use_bakery_secrets = os.environ.get("PANGEO_FORGE_USE_BAKERY_SECRETS", "false").lower() in {
+        "true",
+        "1",
+        "t",
+        "yes",
+        "y",
+    }
 
-    for p in get_secret_bakery_args_paths():
-        bakery_name = p.split(".")[1]
-        this_bakery = bakery_kws[bakery_name]
-        with open(f"{get_secrets_dir()}/{p}") as f:
-            bakery_secret_args = yaml.safe_load(f)
-            for storage_type in list(bakery_secret_args):
-                # assumes secrets are only for storage,
-                # all storage types have "fsspec_args"
-                existing_args = this_bakery[storage_type]["fsspec_args"]
-                additional_args = bakery_secret_args[storage_type]["fsspec_args"]
-                existing_args.update(additional_args)
+    bakeries = None
 
-    bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
+    if use_bakery_secrets:
+        bakery_config_paths = [
+            p
+            for p in os.listdir(f"{root}/bakeries")
+            if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
+        ]
+        bakery_kws = {}
+        for p in bakery_config_paths:
+            with open(f"{root}/bakeries/{p}") as f:
+                bakery_kws[p.split(".")[0]] = yaml.safe_load(f)
+
+        for p in get_secret_bakery_args_paths():
+            bakery_name = p.split(".")[1]
+            this_bakery = bakery_kws[bakery_name]
+            with open(f"{get_secrets_dir()}/{p}") as f:
+                bakery_secret_args = yaml.safe_load(f)
+                for storage_type in list(bakery_secret_args):
+                    # assumes secrets are only for storage,
+                    # all storage types have "fsspec_args"
+                    existing_args = this_bakery[storage_type]["fsspec_args"]
+                    additional_args = bakery_secret_args[storage_type]["fsspec_args"]
+                    existing_args.update(additional_args)
+
+        bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
 
     app_config_path = get_app_config_path()
     with open(app_config_path) as c:
