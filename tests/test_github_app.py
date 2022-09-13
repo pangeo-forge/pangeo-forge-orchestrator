@@ -5,7 +5,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import jwt
 import pytest
@@ -45,6 +45,7 @@ class _MockGitHubBackend:
     _app_hook_deliveries: List[dict]
     _app_installations: List[dict]
     _check_runs: List[dict]
+    _pulls_files: Dict[str, Dict[int, dict]]
 
 
 @dataclass
@@ -65,12 +66,29 @@ class MockGitHubAPI:
     ) -> Union[dict, List[dict]]:
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
-        elif path.startswith("/repos/"):
+        # gidgethub allows us to call either the relative or absolute path, and we do both
+        elif path.startswith("/repos/") or path.startswith("https://api.github.com/repos/"):
             if "/commits/" in path and path.endswith("/check-runs"):
                 # mocks getting a check run from the github api
                 commit_sha = path.split("/commits/")[-1].split("/check-runs")[0]
                 check_runs = [c for c in self._backend._check_runs if c["head_sha"] == commit_sha]
                 return {"total_count": len(check_runs), "check_runs": check_runs}
+            elif path.endswith("branches/main"):
+                # mocks getting a branch. used in create_feedstock_repo background task
+                return {"commit": {"sha": "abcdefg"}}
+            elif "pulls" in path and path.endswith("files"):
+                # Here's an example path: "/repos/pangeo-forge/staged-recipes/pulls/1/files"
+                # The next line parses this into -> "pangeo-forge/staged-recipes"
+                repo_full_name = "/".join(path.split("/repos/")[-1].split("/")[0:2])
+                # The next line parses this into -> `1`
+                pr_number = int(path.split("/")[-2])
+                return self._backend._pulls_files[repo_full_name][pr_number]
+            elif "/contents/" in path:
+                # mocks getting the contents for a file
+                # TODO: make this more realistic. I believe the response is base64 encoded.
+                # TODO: the response should vary depending on the content path here:
+                relative_path_in_repo = path.split("/contents/")[-1]  # noqa: F841
+                return {"content": "=B4asdfaw3fk"}
             else:
                 # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
                 return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
@@ -81,8 +99,6 @@ class MockGitHubAPI:
             return [
                 {"response": d} for d in self._backend._app_hook_deliveries if d["id"] == id_
             ].pop(0)
-        elif "pulls" in path and path.endswith("files"):
-            return [{"filename": "recipes/new-dataset/recipe.py"}]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -117,14 +133,20 @@ class MockGitHubAPI:
             return new_check_run
         elif path.startswith("/app/installations/") and path.endswith("/access_tokens"):
             # https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app
-            # We can't get a JWT without our private key. If we didn't have these checks here, and the
-            # key was missing, we would get an error in the call to ``get_jwt``, but checking for the
-            # private_key here allows us to catch errors faster, and more clearly illustrates the
-            # relationship of these secrets in the tests.
-            private_key = os.environ["PEM_FILE"]
-            assert private_key is not None
-            assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
             return {"token": mock_access_token_from_jwt(jwt=get_jwt())}
+        elif path == "/orgs/pangeo-forge/repos":
+            # mocks creating a new repo. used in `create_feedstock_repo` background task.
+            # the return value is not used, so not providing one.
+            pass
+        elif path.endswith("/git/refs"):
+            # mock creating a new git ref on a repo.
+            return {
+                "url": "",  # TODO: return a realistic url
+                "ref": data["ref"].split("/")[-1],  # More realistic w/ or w/out `.split()`?
+            }
+        elif path.endswith("/pulls"):
+            # mock opening a pr
+            return {"number": 1}  # TODO: fixturize
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -139,6 +161,22 @@ class MockGitHubAPI:
             return self._backend._check_runs[id_]
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
+
+    async def put(self, path: str, oauth_token: str, accept: str, data: Optional[dict] = None):
+        # GitHub API uses the `put` method for:
+        #   (1) adding content files to a branch
+        #   (2) merging PRs
+        if path.endswith("/merge"):
+            return {"merged": True}
+        else:
+            # this is called for adding content files
+            # TODO: actually alter state of the mock github backend here
+            pass
+
+    async def delete(self, path, oauth_token: str, accept: str, data: Optional[dict] = None):
+        # used, e.g., for deleting branches (without `data` kwarg),
+        # or deleting files from a branch (with `data`, for commit message, etc.)
+        pass
 
 
 @pytest.fixture
@@ -207,11 +245,85 @@ def app_installations():
 
 
 @pytest.fixture
+def staged_recipes_pr_1_files():
+    return [
+        {
+            "filename": "recipes/new-dataset/recipe.py",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/recipe.py"
+            ),
+            "sha": "abcdefg",
+        },
+        {
+            "filename": "recipes/new-dataset/meta.yaml",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/meta.yaml"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pr_2_files(staged_recipes_pr_1_files):
+    # This PR is the automated cleanup PR following merge of PR 1. I think that means the
+    # `files` JSON is more-or-less the same? Except that the contents would be different,
+    # of course, but our fixtures don't capture that level of detail yet.
+    return staged_recipes_pr_1_files
+
+
+@pytest.fixture
+def staged_recipes_pr_3_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pr_4_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/dataset-feedstock/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pulls_files(
+    staged_recipes_pr_1_files,
+    staged_recipes_pr_2_files,
+    staged_recipes_pr_3_files,
+    staged_recipes_pr_4_files,
+):
+    return {
+        1: staged_recipes_pr_1_files,
+        2: staged_recipes_pr_2_files,
+        3: staged_recipes_pr_3_files,
+        4: staged_recipes_pr_4_files,
+    }
+
+
+@pytest.fixture
 def mock_github_backend(
     app_hook_config_url,
     accessible_repos,
     app_hook_deliveries,
     app_installations,
+    staged_recipes_pulls_files,
 ):
     """The backend data which simulates data that is retrievable via the GitHub API. Importantly,
     this has to be its own fixture, so that if multiple instances of the ``MockGitHubAPI`` are
@@ -227,6 +339,9 @@ def mock_github_backend(
         "_app_hook_deliveries": app_hook_deliveries,
         "_app_installations": app_installations,
         "_check_runs": list(),
+        "_pulls_files": {
+            "pangeo-forge/staged-recipes": staged_recipes_pulls_files,
+        },
     }
     return _MockGitHubBackend(**backend_kws)
 
@@ -631,3 +746,83 @@ async def test_receive_synchronize_request(
                     expected_check_runs_response["check_runs"][0][k]
                     == check_runs_response.json()["check_runs"][0][k]
                 )
+
+
+@pytest_asyncio.fixture
+async def pr_merged_request(webhook_secret, request):
+
+    headers = {"X-GitHub-Event": "pull_request"}
+    payload = {
+        "action": "closed",
+        "pull_request": {
+            "number": request.param["number"],
+            "merged": True,
+            "base": {
+                "repo": {
+                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
+                    "full_name": "pangeo-forge/staged-recipes",
+                    "owner": {
+                        "login": "pangeo-forge",
+                    },
+                },
+                "ref": "main",
+            },
+            "labels": [],
+            "title": request.param["title"],
+        },
+    }
+    request = {"headers": headers, "payload": payload}
+
+    # setup database for this test - none required
+
+    yield add_hash_signature(request, webhook_secret)
+
+    # database teardown
+    clear_database()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "pr_merged_request",
+    [
+        dict(number=1, title="Add XYZ awesome dataset"),
+        dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
+        dict(number=3, title="Update staged-recipes README"),
+        dict(number=4, title="Update feedstock README"),
+    ],
+    indirect=True,
+)
+async def test_receive_pr_merged_request(
+    mocker,
+    get_mock_github_session,
+    async_app_client,
+    pr_merged_request,
+):
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session,
+    )
+    # make sure that there are no feedstocks in the database to begin with
+    existing_feedstocks = await async_app_client.get("/feedstocks/")
+    assert existing_feedstocks.json() == []
+
+    response = await async_app_client.post(
+        "/github/hooks/",
+        json=pr_merged_request["payload"],
+        headers=pr_merged_request["headers"],
+    )
+    assert response.status_code == 202
+
+    pr_title = pr_merged_request["payload"]["pull_request"]["title"]
+
+    if pr_title == "Add XYZ awesome dataset":
+        # if this pr added a feedstock, make sure it was added to the database
+        feedstocks = await async_app_client.get("/feedstocks/")
+        assert feedstocks.json()[0]["spec"] == "pangeo-forge/new-dataset-feedstock"
+
+    if pr_title.startswith("Cleanup"):
+        assert response.json()["message"] == "This is an automated cleanup PR. Skipping."
+
+    if pr_title == "Update staged-recipes README" or pr_title == "Update feedstock README":
+        assert response.json()["message"] == "Not a recipes PR. Skipping."
