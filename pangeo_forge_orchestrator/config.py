@@ -94,8 +94,8 @@ class Bakery(BaseModel):
 
 class Config(BaseModel):
     fastapi: FastAPIConfig
-    github_app: Optional[GitHubAppConfig]
-    bakeries: Optional[Dict[str, Bakery]]
+    github_app: GitHubAppConfig
+    bakeries: Dict[str, Bakery]
 
 
 root = Path(__file__).resolve().parent.parent
@@ -119,6 +119,15 @@ def get_app_config_path() -> str:
     return f"{root}/secrets/config.{app_name}.yaml"
 
 
+def get_app_config_kws() -> dict:
+    app_config_path = get_app_config_path()
+    with open(app_config_path) as c:
+        kw = yaml.safe_load(c)
+        if "sops" in kw:
+            raise ValueError(f"Config file {app_config_path} is encrypted. Decrypt, then restart.")
+        return kw
+
+
 def get_secrets_dir():
     return f"{root}/secrets"
 
@@ -127,7 +136,15 @@ def get_secret_bakery_args_paths() -> List[str]:
     return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
 
 
-def get_config(use_bakery_secrets: bool = False) -> Config:
+def get_fastapi_config() -> FastAPIConfig:
+    """Get only the FastAPI config, for contexts where the GitHub App + Bakery config is
+    not needed, e.g. on app startup."""
+
+    kw = get_app_config_kws()
+    return FastAPIConfig(**kw["fastapi"])
+
+
+def get_config() -> Config:
     # bakeries public config files are organized like this
     #   ```
     #   ├── bakeries
@@ -140,35 +157,30 @@ def get_config(use_bakery_secrets: bool = False) -> Config:
     # bakeries may want to customize their config on a per-deployment basis, for example if staging
     # storage is a different location from production storage (which it ideally should be).
 
-    bakeries = None
-    if use_bakery_secrets:
-        bakery_config_paths = [
-            p
-            for p in os.listdir(f"{root}/bakeries")
-            if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
-        ]
-        bakery_kws = {}
-        for p in bakery_config_paths:
-            with open(f"{root}/bakeries/{p}") as f:
-                bakery_kws[p.split(".")[0]] = yaml.safe_load(f)
+    kw = get_app_config_kws()
 
-        for p in get_secret_bakery_args_paths():
-            bakery_name = p.split(".")[1]
-            this_bakery = bakery_kws[bakery_name]
-            with open(f"{get_secrets_dir()}/{p}") as f:
-                bakery_secret_args = yaml.safe_load(f)
-                for storage_type in list(bakery_secret_args):
-                    # assumes secrets are only for storage,
-                    # all storage types have "fsspec_args"
-                    existing_args = this_bakery[storage_type]["fsspec_args"]
-                    additional_args = bakery_secret_args[storage_type]["fsspec_args"]
-                    existing_args.update(additional_args)
+    bakery_config_paths = [
+        p
+        for p in os.listdir(f"{root}/bakeries")
+        if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
+    ]
+    bakery_kws = {}
+    for p in bakery_config_paths:
+        with open(f"{root}/bakeries/{p}") as f:
+            bakery_kws[p.split(".")[0]] = yaml.safe_load(f)
 
-        bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
+    for p in get_secret_bakery_args_paths():
+        bakery_name = p.split(".")[1]
+        this_bakery = bakery_kws[bakery_name]
+        with open(f"{get_secrets_dir()}/{p}") as f:
+            bakery_secret_args = yaml.safe_load(f)
+            for storage_type in list(bakery_secret_args):
+                # assumes secrets are only for storage,
+                # all storage types have "fsspec_args"
+                existing_args = this_bakery[storage_type]["fsspec_args"]
+                additional_args = bakery_secret_args[storage_type]["fsspec_args"]
+                existing_args.update(additional_args)
 
-    app_config_path = get_app_config_path()
-    with open(app_config_path) as c:
-        kw = yaml.safe_load(c)
-        if "sops" in kw:
-            raise ValueError(f"Config file {app_config_path} is encrypted. Decrypt, then restart.")
-        return Config(**kw, bakeries=bakeries)
+    bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
+
+    return Config(**kw, bakeries=bakeries)
