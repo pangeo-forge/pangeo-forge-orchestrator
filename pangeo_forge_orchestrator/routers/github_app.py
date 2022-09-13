@@ -448,7 +448,7 @@ async def receive_github_hook(  # noqa: C901
 
             # make sure this is a recipe PR (not config, readme, etc)
             if not all([fname.startswith("feedstock/") for fname in fnames_changed]):
-                return {"message": "not a recipes PR"}
+                return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
             # mypy doesn't like that `args` can have variable length depending on which
             # conditional block it's defined within

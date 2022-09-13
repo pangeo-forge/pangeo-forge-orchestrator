@@ -289,15 +289,31 @@ def staged_recipes_pr_3_files():
 
 
 @pytest.fixture
+def staged_recipes_pr_4_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/dataset-feedstock/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
 def staged_recipes_pulls_files(
     staged_recipes_pr_1_files,
     staged_recipes_pr_2_files,
     staged_recipes_pr_3_files,
+    staged_recipes_pr_4_files,
 ):
     return {
         1: staged_recipes_pr_1_files,
         2: staged_recipes_pr_2_files,
         3: staged_recipes_pr_3_files,
+        4: staged_recipes_pr_4_files,
     }
 
 
@@ -771,7 +787,8 @@ async def pr_merged_request(webhook_secret, request):
     [
         dict(number=1, title="Add XYZ awesome dataset"),
         dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
-        dict(number=3, title="Update README"),
+        dict(number=3, title="Update staged-recipes README"),
+        dict(number=4, title="Update feedstock README"),
     ],
     indirect=True,
 )
@@ -797,13 +814,15 @@ async def test_receive_pr_merged_request(
     )
     assert response.status_code == 202
 
-    if pr_merged_request["payload"]["pull_request"]["title"] == "Add XYZ awesome dataset":
+    pr_title = pr_merged_request["payload"]["pull_request"]["title"]
+
+    if pr_title == "Add XYZ awesome dataset":
         # if this pr added a feedstock, make sure it was added to the database
         feedstocks = await async_app_client.get("/feedstocks/")
         assert feedstocks.json()[0]["spec"] == "pangeo-forge/new-dataset-feedstock"
 
-    if pr_merged_request["payload"]["pull_request"]["title"].startswith("Cleanup"):
+    if pr_title.startswith("Cleanup"):
         assert response.json()["message"] == "This is an automated cleanup PR. Skipping."
 
-    if pr_merged_request["payload"]["pull_request"]["title"] == "Update README":
+    if pr_title == "Update staged-recipes README" or pr_title == "Update feedstock README":
         assert response.json()["message"] == "Not a recipes PR. Skipping."
