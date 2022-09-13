@@ -426,6 +426,9 @@ async def receive_github_hook(  # noqa: C901
         if "staged-recipes" in pr["base"]["repo"]["full_name"]:
             # this is staged-recipes, so (probably) create a new feedstock repository
 
+            if pr["title"].lower().startswith("cleanup"):
+                return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
+
             # make sure this is a recipe PR (not top-level config or something)
             if not all([fname.startswith("recipes/") for fname in fnames_changed]):
                 return {"message": "not a recipes PR"}

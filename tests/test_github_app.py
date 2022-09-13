@@ -5,7 +5,7 @@ import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import jwt
 import pytest
@@ -45,6 +45,7 @@ class _MockGitHubBackend:
     _app_hook_deliveries: List[dict]
     _app_installations: List[dict]
     _check_runs: List[dict]
+    _pulls_files: Dict[str, Dict[int, dict]]
 
 
 @dataclass
@@ -76,24 +77,12 @@ class MockGitHubAPI:
                 # mocks getting a branch. used in create_feedstock_repo background task
                 return {"commit": {"sha": "abcdefg"}}
             elif "pulls" in path and path.endswith("files"):
-                return [  # TODO: fixturize
-                    {
-                        "filename": "recipes/new-dataset/recipe.py",
-                        "contents_url": (
-                            "https://api.github.com/repos/contributor-username/staged-recipes/"
-                            "contents/recipes/new-dataset/recipe.py"
-                        ),
-                        "sha": "abcdefg",
-                    },
-                    {
-                        "filename": "recipes/new-dataset/meta.yaml",
-                        "contents_url": (
-                            "https://api.github.com/repos/contributor-username/staged-recipes/"
-                            "contents/recipes/new-dataset/meta.yaml"
-                        ),
-                        "sha": "abcdefg",
-                    },
-                ]
+                # Here's an example path: "/repos/pangeo-forge/staged-recipes/pulls/1/files"
+                # The next line parses this into -> "pangeo-forge/staged-recipes"
+                repo_full_name = "/".join(path.split("/repos/")[-1].split("/")[0:2])
+                # The next line parses this into -> `1`
+                pr_number = int(path.split("/")[-2])
+                return self._backend._pulls_files[repo_full_name][pr_number]
             elif "/contents/" in path:
                 # mocks getting the contents for a file
                 # TODO: make this more realistic. I believe the response is base64 encoded.
@@ -256,11 +245,53 @@ def app_installations():
 
 
 @pytest.fixture
+def staged_recipes_pr_1_files():
+    return [
+        {
+            "filename": "recipes/new-dataset/recipe.py",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/recipe.py"
+            ),
+            "sha": "abcdefg",
+        },
+        {
+            "filename": "recipes/new-dataset/meta.yaml",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/meta.yaml"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pr_2_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pulls_files(staged_recipes_pr_1_files, staged_recipes_pr_2_files):
+    return {1: staged_recipes_pr_1_files, 2: staged_recipes_pr_2_files}
+
+
+@pytest.fixture
 def mock_github_backend(
     app_hook_config_url,
     accessible_repos,
     app_hook_deliveries,
     app_installations,
+    staged_recipes_pulls_files,
 ):
     """The backend data which simulates data that is retrievable via the GitHub API. Importantly,
     this has to be its own fixture, so that if multiple instances of the ``MockGitHubAPI`` are
@@ -276,6 +307,9 @@ def mock_github_backend(
         "_app_hook_deliveries": app_hook_deliveries,
         "_app_installations": app_installations,
         "_check_runs": list(),
+        "_pulls_files": {
+            "pangeo-forge/staged-recipes": staged_recipes_pulls_files,
+        },
     }
     return _MockGitHubBackend(**backend_kws)
 
@@ -739,7 +773,10 @@ async def pr_merged_request(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "pr_merged_request",
-    ["Add XYZ awesome dataset", "Cleanup: pangeo-forge/XYZ-feedstock"],
+    [
+        dict(number=1, title="Add XYZ awesome dataset"),
+        dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
+    ],
     indirect=True,
 )
 async def test_receive_pr_merged_request(
