@@ -733,12 +733,8 @@ async def test_receive_synchronize_request(
 
 
 @pytest_asyncio.fixture
-async def pr_merged_request(
-    webhook_secret,
-    async_app_client,
-    admin_key,
-    request,
-):
+async def pr_merged_request(webhook_secret, request):
+
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
         "action": "closed",
@@ -761,24 +757,7 @@ async def pr_merged_request(
     }
     request = {"headers": headers, "payload": payload}
 
-    # setup database for this test
-    admin_headers = {"X-API-Key": admin_key}
-    bakery_create_response = await async_app_client.post(
-        "/bakeries/",
-        json={  # TODO: set dynamically
-            "region": "us-central1",
-            "name": "pangeo-ldeo-nsf-earthcube",
-            "description": "A great bakery to test with!",
-        },
-        headers=admin_headers,
-    )
-    assert bakery_create_response.status_code == 200
-    feedstock_create_response = await async_app_client.post(
-        "/feedstocks/",
-        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
-        headers=admin_headers,
-    )
-    assert feedstock_create_response.status_code == 200
+    # setup database for this test - none required
 
     yield add_hash_signature(request, webhook_secret)
 
@@ -807,12 +786,21 @@ async def test_receive_pr_merged_request(
         "get_github_session",
         get_mock_github_session,
     )
+    # make sure that there are no feedstocks in the database to begin with
+    existing_feedstocks = await async_app_client.get("/feedstocks/")
+    assert existing_feedstocks.json() == []
+
     response = await async_app_client.post(
         "/github/hooks/",
         json=pr_merged_request["payload"],
         headers=pr_merged_request["headers"],
     )
     assert response.status_code == 202
+
+    if pr_merged_request["payload"]["pull_request"]["title"] == "Add XYZ awesome dataset":
+        # if this pr added a feedstock, make sure it was added to the database
+        feedstocks = await async_app_client.get("/feedstocks/")
+        assert feedstocks.json()[0]["spec"] == "pangeo-forge/new-dataset-feedstock"
 
     if pr_merged_request["payload"]["pull_request"]["title"].startswith("Cleanup"):
         assert response.json()["message"] == "This is an automated cleanup PR. Skipping."
