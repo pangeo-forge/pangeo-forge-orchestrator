@@ -94,8 +94,8 @@ class Bakery(BaseModel):
 
 class Config(BaseModel):
     fastapi: FastAPIConfig
-    github_app: Optional[GitHubAppConfig] = None
-    bakeries: Optional[Dict[str, Bakery]] = None
+    github_app: Optional[GitHubAppConfig]
+    bakeries: Optional[Dict[str, Bakery]]
 
 
 root = Path(__file__).resolve().parent.parent
