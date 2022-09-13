@@ -382,7 +382,7 @@ async def receive_github_hook(  # noqa: C901
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
         if recipe_run.conclusion == "success":
-            bakery_config = get_config().bakeries[bakery.name]
+            bakery_config = get_config(use_bakery_secrets=True).bakeries[bakery.name]
             subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
             root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
             recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
@@ -549,7 +549,7 @@ async def run(
         MODELS["bakery"].table.id == recipe_run.bakery_id
     )
     bakery = db_session.exec(statement).one()
-    bakery_config = get_config().bakeries[bakery.name]
+    bakery_config = get_config(use_bakery_secrets=True).bakeries[bakery.name]
 
     subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
     # root paths are an interesting configuration edge-case because they combine some stable

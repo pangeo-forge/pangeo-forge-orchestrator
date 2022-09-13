@@ -94,7 +94,7 @@ class Bakery(BaseModel):
 
 class Config(BaseModel):
     fastapi: FastAPIConfig
-    github_app: GitHubAppConfig
+    github_app: Optional[GitHubAppConfig] = None
     bakeries: Optional[Dict[str, Bakery]] = None
 
 
@@ -127,7 +127,7 @@ def get_secret_bakery_args_paths() -> List[str]:
     return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
 
 
-def get_config() -> Config:
+def get_config(use_bakery_secrets: bool = False) -> Config:
     # bakeries public config files are organized like this
     #   ```
     #   ├── bakeries
@@ -139,16 +139,8 @@ def get_config() -> Config:
     # so the following retrieves only the bakery config for the current deployment.
     # bakeries may want to customize their config on a per-deployment basis, for example if staging
     # storage is a different location from production storage (which it ideally should be).
-    use_bakery_secrets = os.environ.get("PANGEO_FORGE_USE_BAKERY_SECRETS", "false").lower() in {
-        "true",
-        "1",
-        "t",
-        "yes",
-        "y",
-    }
 
     bakeries = None
-
     if use_bakery_secrets:
         bakery_config_paths = [
             p
