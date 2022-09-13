@@ -267,7 +267,15 @@ def staged_recipes_pr_1_files():
 
 
 @pytest.fixture
-def staged_recipes_pr_2_files():
+def staged_recipes_pr_2_files(staged_recipes_pr_1_files):
+    # This PR is the automated cleanup PR following merge of PR 1. I think that means the
+    # `files` JSON is more-or-less the same? Except that the contents would be different,
+    # of course, but our fixtures don't capture that level of detail yet.
+    return staged_recipes_pr_1_files
+
+
+@pytest.fixture
+def staged_recipes_pr_3_files():
     return [
         {
             "filename": "README.md",
@@ -281,8 +289,16 @@ def staged_recipes_pr_2_files():
 
 
 @pytest.fixture
-def staged_recipes_pulls_files(staged_recipes_pr_1_files, staged_recipes_pr_2_files):
-    return {1: staged_recipes_pr_1_files, 2: staged_recipes_pr_2_files}
+def staged_recipes_pulls_files(
+    staged_recipes_pr_1_files,
+    staged_recipes_pr_2_files,
+    staged_recipes_pr_3_files,
+):
+    return {
+        1: staged_recipes_pr_1_files,
+        2: staged_recipes_pr_2_files,
+        3: staged_recipes_pr_3_files,
+    }
 
 
 @pytest.fixture
@@ -776,6 +792,7 @@ async def pr_merged_request(
     [
         dict(number=1, title="Add XYZ awesome dataset"),
         dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
+        dict(number=3, title="Update README"),
     ],
     indirect=True,
 )
@@ -799,3 +816,6 @@ async def test_receive_pr_merged_request(
 
     if pr_merged_request["payload"]["pull_request"]["title"].startswith("Cleanup"):
         assert response.json()["message"] == "This is an automated cleanup PR. Skipping."
+
+    if pr_merged_request["payload"]["pull_request"]["title"] == "Update README":
+        assert response.json()["message"] == "Not a recipes PR. Skipping."

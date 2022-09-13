@@ -431,10 +431,7 @@ async def receive_github_hook(  # noqa: C901
 
             # make sure this is a recipe PR (not top-level config or something)
             if not all([fname.startswith("recipes/") for fname in fnames_changed]):
-                return {"message": "not a recipes PR"}
-
-            if pr["title"].lower().startswith("cleanup"):
-                return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
+                return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
             args = (  # type: ignore
                 pr["base"]["repo"]["owner"]["login"],
