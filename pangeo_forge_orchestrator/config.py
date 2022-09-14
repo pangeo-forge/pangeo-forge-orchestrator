@@ -119,12 +119,29 @@ def get_app_config_path() -> str:
     return f"{root}/secrets/config.{app_name}.yaml"
 
 
+def get_app_config_kws() -> dict:
+    app_config_path = get_app_config_path()
+    with open(app_config_path) as c:
+        kw = yaml.safe_load(c)
+        if "sops" in kw:
+            raise ValueError(f"Config file {app_config_path} is encrypted. Decrypt, then restart.")
+        return kw
+
+
 def get_secrets_dir():
     return f"{root}/secrets"
 
 
 def get_secret_bakery_args_paths() -> List[str]:
     return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
+
+
+def get_fastapi_config() -> FastAPIConfig:
+    """Get only the FastAPI config, for contexts where the GitHub App + Bakery config is
+    not needed, e.g. on app startup."""
+
+    kw = get_app_config_kws()
+    return FastAPIConfig(**kw["fastapi"])
 
 
 def get_config() -> Config:
@@ -139,6 +156,9 @@ def get_config() -> Config:
     # so the following retrieves only the bakery config for the current deployment.
     # bakeries may want to customize their config on a per-deployment basis, for example if staging
     # storage is a different location from production storage (which it ideally should be).
+
+    kw = get_app_config_kws()
+
     bakery_config_paths = [
         p
         for p in os.listdir(f"{root}/bakeries")
@@ -147,7 +167,7 @@ def get_config() -> Config:
     bakery_kws = {}
     for p in bakery_config_paths:
         with open(f"{root}/bakeries/{p}") as f:
-            bakery_kws.update({p.split(".")[0]: yaml.safe_load(f)})
+            bakery_kws[p.split(".")[0]] = yaml.safe_load(f)
 
     for p in get_secret_bakery_args_paths():
         bakery_name = p.split(".")[1]
@@ -163,9 +183,4 @@ def get_config() -> Config:
 
     bakeries = {k: Bakery(**v) for k, v in bakery_kws.items()}
 
-    app_config_path = get_app_config_path()
-    with open(app_config_path) as c:
-        kw = yaml.safe_load(c)
-        if "sops" in kw:
-            raise ValueError(f"Config file {app_config_path} is encrypted. Decrypt, then restart.")
-        return Config(**kw, bakeries=bakeries)
+    return Config(**kw, bakeries=bakeries)

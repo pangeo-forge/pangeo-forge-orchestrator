@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
 from starlette import status
 
-from .config import get_config
+from .config import get_fastapi_config
 from .database import get_session
 from .models import APIKey, APIKeyRead
 
@@ -13,7 +13,7 @@ X_API_KEY = APIKeyHeader(name="X-API-Key")
 
 
 def get_salt() -> str:
-    return get_config().fastapi.ENCRYPTION_SALT
+    return get_fastapi_config().ENCRYPTION_SALT
 
 
 def encrypt(value: str) -> str:
@@ -23,7 +23,7 @@ def encrypt(value: str) -> str:
 
 def create_admin_api_key():
     session = next(get_session())  # is this really the right way to get the session?
-    admin_api_key_encrypted = get_config().fastapi.ADMIN_API_KEY_SHA256
+    admin_api_key_encrypted = get_fastapi_config().ADMIN_API_KEY_SHA256
     api_key = session.get(APIKey, admin_api_key_encrypted)  # already exists
     if api_key:
         return api_key
