@@ -90,13 +90,8 @@ terraform -chdir='./terraform/'${TF_ENV} plan -out tfplan \
 terraform -chdir='./terraform/'${TF_ENV} apply tfplan
 
 echo "re-encrypting secrets..."
-# if AGE_PUBLIC_KEY is set, include it in encryption recipients.
-# this is never set in a real release, but is useful for working with this script locally.
-if [[ -z "${AGE_PUBLIC_KEY}" ]]; then
-    export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt)
-else
-    export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt),${AGE_PUBLIC_KEY}
-fi
+sops -d -i "./secrets/sops-kms-arn.txt"
+export SOPS_KMS_ARN=$(cat ./secrets/sops-kms-arn.txt)
 
 echo "re-encrypting terraform secrets..."
 sops -e -i "./${TF_CREDS}"
