@@ -35,6 +35,10 @@ else:
 export TF_ENV=$(python3.9 -c "${SET_TF_ENV}")
 echo "terraform env set to '${TF_ENV}'"
 
+echo "setting aws config for kms access..."
+aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+
 echo "decrypting app secrets..."
 # For the persistent deployments 'pangeo-forge' & 'pangeo-forge-staging', APP_NAMES will always
 # be a single-element array, in which the sole value is identical to TF_ENV.

@@ -28,6 +28,11 @@ RUN wget --quiet https://releases.hashicorp.com/terraform/${TF_VERSION}/terrafor
     && mv terraform /usr/local/bin/terraform \
     && rm terraform_${TF_VERSION}_linux_amd64.zip
 
+# Install aws cli, for decrypting secrets via AWS KMS
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install
+
 # Install gcloud https://cloud.google.com/sdk/docs/install#installation_instructions
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt \
     cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
