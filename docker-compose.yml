@@ -18,8 +18,6 @@ services:
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
       # TODO: variablize this so others can use with their own local config
       PANGEO_FORGE_DEPLOYMENT: 'pforge-local-cisaacstern'
-      # For decrypting secrets
-      SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
       # Get the project_id dynamically after dataflow key file is decrypted in entrypoint.
       # Python command for parsing JSON is set as env var because putting it directly in
       # entrypoint is too many layers of nested quotation marks.
@@ -38,8 +36,8 @@ services:
     entrypoint: >
       /bin/sh -c 'sleep 1
       && python3.9 -m alembic upgrade head
-      && aws configure set aws_access_key_id $$AWS_ACCESS_KEY_ID
-      && aws configure set aws_secret_access_key $$AWS_SECRET_ACCESS_KEY
+      && aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+      && aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
       && sops -d -i ./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
       && sops -d -i $${DATAFLOW_CREDS}
