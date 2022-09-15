@@ -15,10 +15,9 @@ psycopg2-binary==2.9.3
 
 # these will eventually move out of the app container, and instead be
 # installed within the docker sibling container used for recipe handling
-# pangeo-forge-runner==0.5 -> use this once released
-git+https://github.com/yuvipanda/pangeo-forge-runner@main
-gcsfs
-s3fs
+pangeo-forge-runner==0.5
+gcsfs==2022.8.2
+s3fs==2022.8.2
 
 # for `/repr/xarray/` route
 zarr
