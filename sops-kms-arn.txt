@@ -1,1 +1,0 @@
-arn:aws:kms:us-east-1:256317687910:key/d8b153c3-20a9-4364-a553-94405d4c1027,arn:aws:kms:us-west-1:256317687910:key/0f31de65-bcc9-4fef-b9f5-67ce086f532e

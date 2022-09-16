@@ -90,8 +90,6 @@ terraform -chdir='./terraform/'${TF_ENV} plan -out tfplan \
 terraform -chdir='./terraform/'${TF_ENV} apply tfplan
 
 echo "re-encrypting secrets..."
-export SOPS_KMS_ARN=$(cat ./sops-kms-arn.txt)
-
 echo "re-encrypting terraform secrets..."
 sops -e -i "./${TF_CREDS}"
 for app in ${app_array[@]}; do
