@@ -11,8 +11,8 @@ through making your first PR to `pangeo-forge-orchestrator`.
     - [2.1.1 GitHub App](#211-github-app)
     - [2.1.2 FastAPI](#212-fastapi)
   - [2.2 Encrypting & committing creds](#22-encrypting--committing-creds)
-    - [2.2.1 Create an age key](#221-create-an-age-key)
-    - [2.2.2 Encrypt those creds](#222-encrypt-those-creds)
+    - [2.2.1 pre-commit-hook-ensure-sops](#221-pre-commit-hook-ensure-sops)
+    - [2.2.2 Encryption](#222-encryption)
   - [2.3 Database](#23-database)
   - [2.4 The proxy: selection & setup](#24-the-proxy-selection--setup)
     - [2.4.1 smee vs. ngrok](#241-smee-vs-ngrok)
@@ -235,10 +235,12 @@ are for your local dev environment), this is a good opportunity to practice encr
 _will_ be required for the `review` deployment later on). Moreover, managing all credentials (including for
 `local` deployment) in a uniform manner simplifies the process.
 
-> ⚠️ If you have not yet made sure that [**pre-commit is installed**](https://pre-commit.com/#quick-start) in
-> your local development environment, now is the time to do so! If you do not install pre-commit,
-> [pre-commit-hook-ensure-sops](https://github.com/yuvipanda/pre-commit-hook-ensure-sops) cannot protect you
-> from accidentally committing unencrypted credentials.
+#### 2.2.1 pre-commit-hook-ensure-sops
+
+⚠️ If you have not yet made sure that [**pre-commit is installed**](https://pre-commit.com/#quick-start) in
+your local development environment, now is the time to do so! If you do not install pre-commit,
+[pre-commit-hook-ensure-sops](https://github.com/yuvipanda/pre-commit-hook-ensure-sops) cannot protect you
+from accidentally committing unencrypted credentials.
 
 Assuming you have pre-commit installed (really, ☝️ read the warning above if you haven't already 😄), you will
 be protected from committing your (currently unencrypted) credentials:
@@ -252,35 +254,14 @@ Ensure secrets are encrypted with sops...................................Failed
 secrets/config.local.yaml: sops metadata key not found in file, is not properly encrypted
 ```
 
-#### 2.2.1 Create an age key
+#### 2.2.2 Encryption
 
-Currently, we use the [`age` backend](https://github.com/mozilla/sops#encrypting-using-age) for SOPS.
-To get an `age` encryption key:
-
-1. [Install `age`](https://github.com/FiloSottile/age#installation)
-2. Generate your private/public key pair with `age-keygen -o key.txt`
-3. Your public key will be printed to stdout, and your private key will be saved to `key.txt`
-
-You can keep your private `key.txt` in the repo root; our `.gitignore` prevents it from being committed. Save
-your public key somewhere you'll remember it, and also export it to your local env as `AGE_PUBLIC_KEY`.
-For example:
-
-```console
-$ export AGE_PUBLIC_KEY=age1xvhtwvxklw0zljmj4flnqyqlnq0cudadnenzcv20snwa90nzqylqzqtlsg
-```
-
-#### 2.2.2 Encrypt those creds
+> **Note**: From this point forward, you will need be a member of the `pangeo-forge` AWS project
+> with KMS permissions, and be logged in via `aws configure`.
 
 1. Install [SOPS](https://github.com/mozilla/sops). The easiest way to do this on Mac is probably
    [`brew install sops`](https://formulae.brew.sh/formula/sops).
-2. Set the `SOPS_AGE_RECIPIENTS` env var as follows:
-   ```console
-   $ export SOPS_AGE_RECIPIENTS=$(cat age-recipients.txt),${AGE_PUBLIC_KEY}
-   ```
-   This will ensure that you will be able to decrypt this file (because `AGE_PUBLIC_KEY` is your public key),
-   and that Pangeo Forge admins (whose public key is stored in `age-recipients.txt`) will also be able to
-   decrypt it.
-3. From the repo root, run:
+2. From the repo root, run:
    ```console
    $ sops -e -i secrets/config.local.yaml
    ```
@@ -430,7 +411,7 @@ Running the next script will require your GitHub App credentials, which if you'v
 sequentially are still encrypted. To decrypt them, from the repo root, run:
 
 ```console
-$ SOPS_AGE_KEY=$(cat key.txt) sops -d -i secrets/config.local.yaml
+$ sops -d -i secrets/config.local.yaml
 ```
 
 Then, using the proxy url you generated in [section 2.4.1](#241-smee-vs-ngrok) as `PROXY_URL`, run:
@@ -456,7 +437,6 @@ To recap, if you've followed this document sequentially, you should now have:
 
 <p style="margin-left:1.5em">
 ☑️ A <code>secrets/config.local.yaml</code> file with creds for a GitHub App & for FastAPI<br>
-☑️ An age private/public key pair, and the ability to use it, via SOPS, to encrypt and decrypt your creds<br>
 ☑️ pre-commit installed, to prevent you from accidentally committing unencrypted secrets<br>
 ☑️ <code>DATABASE_URL</code> env variable set<br>
 ☑️ Proxy client running in a terminal window<br>
@@ -472,7 +452,7 @@ In addition to the pre-requistes listed in the [recap](#25-interlude-recap) abov
 1. Your creds are decrypted:
 
    ```console
-   $ SOPS_AGE_KEY=$(cat key.txt) sops -d -i secrets/config.local.yaml
+   $ sops -d -i secrets/config.local.yaml
    ```
 
 2. You have `pangeo-forge-orchestrator` installed:
@@ -812,8 +792,10 @@ https://pangeo-forge-api-pr-80.herokuapp.com will be broken
    $ python3 scripts/generate_api_key.py review
    ```
 4. Encrypt the creds:
-   `sops -e -i secrets/config.review.yaml` > Assuming you are in the same terminal session, your `SOPS_AGE_RECIPIENTS` env variable will still
-   be set. If it's not, revisit [section 2.2.2](#222-encrypt-those-creds).
+
+   ```
+   sops -e -i secrets/config.review.yaml
+   ```
 
 5. Commit the encrypted `secrets/config.review.yaml` and push it to your PR branch.
 
