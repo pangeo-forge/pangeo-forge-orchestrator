@@ -1,0 +1,5 @@
+Bake:
+  bakery_class: 'pangeo_forge_runner.bakery.dataflow.DataflowBakery'
+
+DataflowBakery:
+  temp_gcs_location: 'gs://beam-dataflow-test/temp'
