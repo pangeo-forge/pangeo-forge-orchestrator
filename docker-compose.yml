@@ -12,18 +12,12 @@ services:
       - '3000:8000'
     depends_on:
       - db
-    volumes:
-      # See SOPS_AGE_KEY_FILE in `environment:` below for details.
-      - ${PWD}/key.txt:/var/sops/key.txt
     environment:
       # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
       # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
       # TODO: variablize this so others can use with their own local config
       PANGEO_FORGE_DEPLOYMENT: 'pforge-local-cisaacstern'
-      # In Heroku, we use the SOPS_AGE_KEY variable instead, for description of both options, see:
-      # https://github.com/mozilla/sops#22encrypting-using-age
-      SOPS_AGE_KEY_FILE: '/var/sops/key.txt'
       # Get the project_id dynamically after dataflow key file is decrypted in entrypoint.
       # Python command for parsing JSON is set as env var because putting it directly in
       # entrypoint is too many layers of nested quotation marks.
@@ -42,6 +36,8 @@ services:
     entrypoint: >
       /bin/sh -c 'sleep 1
       && python3.9 -m alembic upgrade head
+      && aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+      && aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
       && sops -d -i ./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
       && sops -d -i $${DATAFLOW_CREDS}

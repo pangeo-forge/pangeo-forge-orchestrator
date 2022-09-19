@@ -28,15 +28,17 @@ RUN wget --quiet https://releases.hashicorp.com/terraform/${TF_VERSION}/terrafor
     && mv terraform /usr/local/bin/terraform \
     && rm terraform_${TF_VERSION}_linux_amd64.zip
 
+# Install aws cli, for decrypting secrets via AWS KMS
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install
+
 # Install gcloud https://cloud.google.com/sdk/docs/install#installation_instructions
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt \
     cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | tee /usr/share/keyrings/cloud.google.gpg \
     && apt-get update && apt-get -y install google-cloud-cli
 
-# TODO: remove git + gcc, and revert python3.9-dev -> python3.9 above
-# Only needed for now because installing unrealeased deps from github
-RUN apt-get update && apt-get -y install git gcc
 COPY requirements.txt ./
 RUN python3.9 -m pip install -r requirements.txt
 
@@ -48,6 +50,7 @@ WORKDIR /opt/app
 # so even though we have this in the repo (for development & testing convenience), we actually .dockerignore
 # it, and then clone it from github at build time (otherwise we don't actually get these contents on heroku)
 # After cloning, reset to a specific commit, so we don't end up with the wrong contents.
+RUN apt-get update && apt-get -y install git
 RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring \
     && cd dataflow-status-monitoring \
     && git reset --hard c72a594b2aea5db45d6295fadd801673bee9746f \
