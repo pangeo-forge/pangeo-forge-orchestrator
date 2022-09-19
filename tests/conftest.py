@@ -20,6 +20,7 @@ from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
+from .github_app.fixtures import *  # noqa: F401 F403
 from .interfaces import FastAPITestClientCRUD
 
 
