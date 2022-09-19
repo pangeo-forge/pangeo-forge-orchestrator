@@ -23,7 +23,7 @@ from pangeo_forge_orchestrator.routers.github_app import (
     list_accessible_repos,
 )
 
-from .conftest import clear_database
+from ..conftest import clear_database
 
 
 def mock_access_token_from_jwt(jwt: str):
