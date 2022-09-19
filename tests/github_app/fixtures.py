@@ -1,8 +1,23 @@
+import hashlib
+import hmac
+import json
+
 import pytest
 
 from pangeo_forge_orchestrator.http import HttpSession
 
 from .mock_gidgethub import MockGitHubAPI, _MockGitHubBackend
+
+
+def add_hash_signature(request: dict, webhook_secret: str):
+    payload_bytes = bytes(json.dumps(request["payload"]), "utf-8")
+    hash_signature = hmac.new(
+        bytes(webhook_secret, encoding="utf-8"),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    request["headers"].update({"X-Hub-Signature-256": f"sha256={hash_signature}"})
+    return request
 
 
 @pytest.fixture
