@@ -1,10 +1,12 @@
 import jwt
 import pytest
+from gidgethub.aiohttp import GitHubAPI
 
 from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.routers.github_app import (
     get_access_token,
     get_app_webhook_url,
+    get_github_session,
     get_jwt,
     get_repo_id,
     html_to_api_url,
@@ -21,6 +23,11 @@ def test_get_jwt(rsa_key_pair):
     decoded = jwt.decode(encoded_jwt, public_key, algorithms=["RS256"])
     assert list(decoded.keys()) == ["iat", "exp", "iss"]
     assert all([isinstance(v, int) for v in decoded.values()])
+
+
+def test_get_github_session():
+    gh = get_github_session(http_session)
+    assert isinstance(gh, GitHubAPI)
 
 
 @pytest.mark.asyncio
