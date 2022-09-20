@@ -98,6 +98,9 @@ async def synchronize_request_fixture(
             {"full_name": "pangeo-forge/staged-recipes"},
             {"full_name": "pangeo-forge/pangeo-forge.org"},
         ],
+        "_repositories": {
+            "pangeo-forge/staged-recipes": {"id": 987654321},
+        },
         "_app_hook_config_url": app_hook_config_url,
         "_check_runs": list(),
         "_pulls_files": {

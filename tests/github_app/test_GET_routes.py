@@ -116,6 +116,7 @@ async def test_get_feedstock_check_runs(
 ):
     gh_backend = _MockGitHubBackend(
         _app_installations=[{"id": 1234567}],
+        _repositories={"pangeo-forge/staged-recipes": {"id": 987654321}},
         _accessible_repos=[{"full_name": "pangeo-forge/staged-recipes"}],
         _check_runs=[check_run_create_kwargs],
     )
