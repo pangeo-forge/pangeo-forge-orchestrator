@@ -83,6 +83,16 @@ async def dataflow_request_fixture(
     # create gh backend
     backend_kws = {
         "_app_installations": [{"id": 1234567}],
+        "_pulls": [
+            {
+                "comments_url": (
+                    "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments"
+                ),
+                "head": {
+                    "sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
+                },
+            },
+        ],
     }
 
     yield add_hash_signature(request, webhook_secret), _MockGitHubBackend(**backend_kws)

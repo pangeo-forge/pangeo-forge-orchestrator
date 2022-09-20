@@ -97,16 +97,7 @@ class MockGitHubAPI:
             for installation in self._backend._app_installations:
                 yield installation
         elif path.endswith("/pulls"):
-            for pr in [  # TODO: fixturize! (this is for `test_POST_dataflow_event`)
-                {
-                    "comments_url": (
-                        "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments"
-                    ),
-                    "head": {
-                        "sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
-                    },
-                },
-            ]:
+            for pr in self._backend._pulls:
                 yield pr
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
