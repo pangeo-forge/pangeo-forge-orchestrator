@@ -4,11 +4,88 @@ import pytest_asyncio
 import pangeo_forge_orchestrator
 
 from ..conftest import clear_database
-from .fixtures import add_hash_signature
+from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
+
+
+@pytest.fixture
+def staged_recipes_pr_1_files():
+    return [
+        {
+            "filename": "recipes/new-dataset/recipe.py",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/recipe.py"
+            ),
+            "sha": "abcdefg",
+        },
+        {
+            "filename": "recipes/new-dataset/meta.yaml",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/meta.yaml"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pr_2_files(staged_recipes_pr_1_files):
+    # This PR is the automated cleanup PR following merge of PR 1. I think that means the
+    # `files` JSON is more-or-less the same? Except that the contents would be different,
+    # of course, but our fixtures don't capture that level of detail yet.
+    return staged_recipes_pr_1_files
+
+
+@pytest.fixture
+def staged_recipes_pr_3_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pr_4_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/dataset-feedstock/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def staged_recipes_pulls_files(
+    staged_recipes_pr_1_files,
+    staged_recipes_pr_2_files,
+    staged_recipes_pr_3_files,
+    staged_recipes_pr_4_files,
+):
+    return {
+        1: staged_recipes_pr_1_files,
+        2: staged_recipes_pr_2_files,
+        3: staged_recipes_pr_3_files,
+        4: staged_recipes_pr_4_files,
+    }
 
 
 @pytest_asyncio.fixture
-async def pr_merged_request(webhook_secret, request):
+async def pr_merged_request_fixture(
+    webhook_secret,
+    request,
+    staged_recipes_pulls_files,
+):
 
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
@@ -32,9 +109,15 @@ async def pr_merged_request(webhook_secret, request):
     }
     request = {"headers": headers, "payload": payload}
 
-    # setup database for this test - none required
+    # create gh backend
+    gh_backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+        "_pulls_files": {
+            "pangeo-forge/staged-recipes": staged_recipes_pulls_files,
+        },
+    }
 
-    yield add_hash_signature(request, webhook_secret)
+    yield add_hash_signature(request, webhook_secret), _MockGitHubBackend(**gh_backend_kws)
 
     # database teardown
     clear_database()
@@ -42,7 +125,7 @@ async def pr_merged_request(webhook_secret, request):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "pr_merged_request",
+    "pr_merged_request_fixture",
     [
         dict(number=1, title="Add XYZ awesome dataset"),
         dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
@@ -53,14 +136,14 @@ async def pr_merged_request(webhook_secret, request):
 )
 async def test_receive_pr_merged_request(
     mocker,
-    get_mock_github_session,
     async_app_client,
-    pr_merged_request,
+    pr_merged_request_fixture,
 ):
+    pr_merged_request, gh_backend = pr_merged_request_fixture
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
-        get_mock_github_session,
+        get_mock_github_session(gh_backend),
     )
     # make sure that there are no feedstocks in the database to begin with
     existing_feedstocks = await async_app_client.get("/feedstocks/")
