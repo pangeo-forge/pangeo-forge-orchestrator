@@ -2,13 +2,16 @@ import jwt
 import pytest
 from gidgethub.aiohttp import GitHubAPI
 
+from pangeo_forge_orchestrator.config import get_config
 from pangeo_forge_orchestrator.http import http_session
+from pangeo_forge_orchestrator.models import MODELS
 from pangeo_forge_orchestrator.routers.github_app import (
     get_access_token,
     get_app_webhook_url,
     get_github_session,
     get_jwt,
     get_repo_id,
+    get_storage_subpath_identifier,
     html_to_api_url,
     html_url_to_repo_full_name,
     list_accessible_repos,
@@ -28,6 +31,42 @@ def test_get_jwt(rsa_key_pair):
 def test_get_github_session():
     gh = get_github_session(http_session)
     assert isinstance(gh, GitHubAPI)
+
+
+@pytest.mark.parametrize("is_test", [True, False])
+@pytest.mark.parametrize("dataset_type", ["zarr"])
+@pytest.mark.parametrize("feedstock_spec", ["pangeo-forge/staged-recipes"])
+def test_get_storage_subpath_identifier(is_test, dataset_type, feedstock_spec):
+    recipe_run_kws = {
+        "recipe_id": "liveocean",
+        "bakery_id": 1,
+        "feedstock_id": 1,
+        "head_sha": "35d889f7c89e9f0d72353a0649ed1cd8da04826b",
+        "version": "",
+        "started_at": "2022-09-19T16:31:43",
+        "completed_at": None,
+        "conclusion": None,
+        "status": "in_progress",
+        "is_test": is_test,
+        "dataset_type": dataset_type,
+        "dataset_public_url": None,
+        "message": None,
+        "id": 1,
+    }
+    recipe_run = MODELS["recipe_run"].table(**recipe_run_kws)
+    subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
+
+    gh_app_name = get_config().github_app.app_name
+
+    prefix = f"{gh_app_name}/"
+    suffix = f"{recipe_run_kws['recipe_id']}.{dataset_type}"
+    if is_test:
+        prefix += "test/"
+        suffix = f"recipe-run-{recipe_run.id}/{suffix}"
+
+    assert subpath.startswith(prefix)
+    assert subpath.replace(prefix, "").startswith(feedstock_spec)
+    assert subpath.endswith(suffix)
 
 
 @pytest.mark.asyncio
