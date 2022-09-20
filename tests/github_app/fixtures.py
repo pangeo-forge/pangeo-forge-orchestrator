@@ -10,7 +10,14 @@ from .mock_gidgethub import MockGitHubAPI, _MockGitHubBackend
 
 
 def add_hash_signature(request: dict, webhook_secret: str):
-    payload_bytes = bytes(json.dumps(request["payload"]), "utf-8")
+    if request["headers"]["X-GitHub-Event"] != "dataflow":
+        payload_bytes = bytes(json.dumps(request["payload"]), "utf-8")
+    else:
+        # special case for dataflow payload, to replicate how it is actually sent.
+        # see comment in `pangeo_forge_orchestrator.routers.github_app::receive_github_hook`
+        # for further detail. ideally, this special casing wll be removed eventually.
+        payload_bytes = request["payload"].encode("utf-8")
+
     hash_signature = hmac.new(
         bytes(webhook_secret, encoding="utf-8"),
         payload_bytes,
