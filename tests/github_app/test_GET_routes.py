@@ -1,28 +1,61 @@
-import os
 from datetime import datetime
 
 import pytest
 import pytest_asyncio
 
 import pangeo_forge_orchestrator
-from pangeo_forge_orchestrator.http import http_session
 
 from ..conftest import clear_database
+from .fixtures import _MockGitHubBackend, get_mock_github_session
+
+
+@pytest.fixture
+def app_hook_deliveries():
+    """Webhook deliveries to the GitHub App. Examples copied from real delivieres to the app."""
+
+    return [
+        {
+            "id": 24081517883,
+            "guid": "04d4b7f0-0f85-11ed-8539-b846a7d005af",
+            "delivered_at": "2022-07-29T21:25:50Z",
+            "redelivery": "false",
+            "duration": 0.03,
+            "status": "Invalid HTTP Response: 501",
+            "status_code": 501,
+            "event": "check_suite",
+            "action": "requested",
+            "installation_id": 27724604,
+            "repository_id": 518221894,
+            "url": "",
+        },
+        {
+            "id": 24081517383,
+            "guid": "04460c80-0f85-11ed-8fc2-f8b6d8b7d25d",
+            "delivered_at": "2022-07-29T21:25:50Z",
+            "redelivery": "false",
+            "duration": 0.04,
+            "status": "OK",
+            "status_code": 202,
+            "event": "pull_request",
+            "action": "synchronize",
+            "installation_id": 27724604,
+            "repository_id": 518221894,
+            "url": "",
+        },
+    ]
 
 
 @pytest.mark.asyncio
 async def test_get_deliveries(
     mocker,
-    private_key,
-    get_mock_github_session,
     app_hook_deliveries,
     async_app_client,
 ):
-    os.environ["PEM_FILE"] = private_key
+    gh_backend = _MockGitHubBackend(_app_hook_deliveries=app_hook_deliveries)
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
-        get_mock_github_session,
+        get_mock_github_session(gh_backend),
     )
     response = await async_app_client.get("/github/hooks/deliveries")
     assert response.status_code == 200
@@ -32,16 +65,14 @@ async def test_get_deliveries(
 @pytest.mark.asyncio
 async def test_get_delivery(
     mocker,
-    private_key,
-    get_mock_github_session,
     app_hook_deliveries,
     async_app_client,
 ):
-    os.environ["PEM_FILE"] = private_key
+    gh_backend = _MockGitHubBackend(_app_hook_deliveries=app_hook_deliveries)
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
-        get_mock_github_session,
+        get_mock_github_session(gh_backend),
     )
     for delivery in app_hook_deliveries:
         id_ = delivery["id"]
@@ -80,28 +111,22 @@ async def check_run_create_kwargs(admin_key, async_app_client):
 @pytest.mark.asyncio
 async def test_get_feedstock_check_runs(
     mocker,
-    private_key,
-    get_mock_github_session,
     check_run_create_kwargs,
     async_app_client,
 ):
-    os.environ["PEM_FILE"] = private_key
+    gh_backend = _MockGitHubBackend(
+        _app_installations=[{"id": 1234567}],
+        _accessible_repos=[{"full_name": "pangeo-forge/staged-recipes"}],
+        _check_runs=[check_run_create_kwargs],
+    )
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
-        get_mock_github_session,
+        get_mock_github_session(gh_backend),
     )
-
-    # populate mock github backend with check runs for the feedstock (only 1 for now)
-    mock_gh = get_mock_github_session(http_session)
-    check_run_response = await mock_gh.post(
-        "/repos/pangeo-forge/staged-recipes/check-runs",
-        data=check_run_create_kwargs,
+    response = await async_app_client.get(
+        f"/feedstocks/1/commits/{check_run_create_kwargs['head_sha']}/check-runs"
     )
-    commit_sha = check_run_response["head_sha"]
-
-    # now that the data is in the mock github backend, retrieve it
-    response = await async_app_client.get(f"/feedstocks/1/commits/{commit_sha}/check-runs")
     json_ = response.json()
     assert json_["total_count"] == 1  # this value represents the number of check runs created
     for k in check_run_create_kwargs:

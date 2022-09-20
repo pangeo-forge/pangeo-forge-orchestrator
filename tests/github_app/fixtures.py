@@ -48,42 +48,6 @@ def accessible_repos():
 
 
 @pytest.fixture
-def app_hook_deliveries():
-    """Webhook deliveries to the GitHub App. Examples copied from real delivieres to the app."""
-
-    return [
-        {
-            "id": 24081517883,
-            "guid": "04d4b7f0-0f85-11ed-8539-b846a7d005af",
-            "delivered_at": "2022-07-29T21:25:50Z",
-            "redelivery": "false",
-            "duration": 0.03,
-            "status": "Invalid HTTP Response: 501",
-            "status_code": 501,
-            "event": "check_suite",
-            "action": "requested",
-            "installation_id": 27724604,
-            "repository_id": 518221894,
-            "url": "",
-        },
-        {
-            "id": 24081517383,
-            "guid": "04460c80-0f85-11ed-8fc2-f8b6d8b7d25d",
-            "delivered_at": "2022-07-29T21:25:50Z",
-            "redelivery": "false",
-            "duration": 0.04,
-            "status": "OK",
-            "status_code": 202,
-            "event": "pull_request",
-            "action": "synchronize",
-            "installation_id": 27724604,
-            "repository_id": 518221894,
-            "url": "",
-        },
-    ]
-
-
-@pytest.fixture
 def app_installations():
     """Installations for the mock GitHub App. The real payload contains a lot more information, but
     just including the subset that we use here.
