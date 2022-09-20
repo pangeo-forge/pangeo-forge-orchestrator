@@ -14,9 +14,19 @@ def test_webhook_url_to_job_name_encode_decode():
     pass
 
 
-@pytest_asyncio.fixture
-async def dataflow_request(webhook_secret, request):
+@pytest.fixture(params=[True])  # , False])
+def dataflow_job_is_test(request):
+    return request.param
 
+
+@pytest_asyncio.fixture
+async def dataflow_request(
+    webhook_secret,
+    admin_key,
+    async_app_client,
+    dataflow_job_is_test,
+    request,
+):
     headers = {"X-GitHub-Event": "dataflow"}
     payload = {
         "action": "completed",
@@ -31,8 +41,44 @@ async def dataflow_request(webhook_secret, request):
         "payload": urlencode(payload, doseq=True),
     }
 
-    # setup database for this test - none required
-
+    # setup database for this test
+    admin_headers = {"X-API-Key": admin_key}
+    bakery_create_response = await async_app_client.post(
+        "/bakeries/",
+        json={  # TODO: set dynamically
+            "region": "us-central1",
+            "name": "pangeo-ldeo-nsf-earthcube",
+            "description": "A great bakery to test with!",
+        },
+        headers=admin_headers,
+    )
+    assert bakery_create_response.status_code == 200
+    feedstock_create_response = await async_app_client.post(
+        "/feedstocks/",
+        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+        headers=admin_headers,
+    )
+    assert feedstock_create_response.status_code == 200
+    recipe_run_create_response = await async_app_client.post(
+        "/recipe_runs/",
+        json={
+            "recipe_id": "eooffshore_ics_cmems_WIND_GLO_WIND_L3_NRT_OBSERVATIONS_012_002_MetOp_ASCAT",
+            "bakery_id": 1,
+            "feedstock_id": 1,
+            "head_sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
+            "version": "",
+            "started_at": "2022-09-19T16:31:43",
+            "completed_at": None,
+            "conclusion": None,
+            "status": "in_progress",
+            "is_test": dataflow_job_is_test,
+            "dataset_type": "zarr",
+            "dataset_public_url": None,
+            "message": None,
+        },
+        headers=admin_headers,
+    )
+    assert recipe_run_create_response.status_code == 200
     yield add_hash_signature(request, webhook_secret)
 
     # database teardown
@@ -66,6 +112,15 @@ async def test_receive_dataflow_request(
     qs = parse_qs(dataflow_request["payload"])
     decoded_payload = {k: v.pop(0) for k, v in qs.items()}
 
+    # first, assert initial state is correct
+    recipe_run_response = await async_app_client.get(
+        f"/recipe_runs/{decoded_payload['recipe_run_id']}",
+    )
+    assert recipe_run_response.status_code == 200
+    assert recipe_run_response.json()["status"] == "in_progress"
+    assert recipe_run_response.json()["conclusion"] is None
+
+    # okay, now actually simulate the event
     response = await async_app_client.post(
         "/github/hooks/",
         # note, for all other tests we pass a `json` dict, but here we use `data`, to reflect the
@@ -75,10 +130,17 @@ async def test_receive_dataflow_request(
         data=dataflow_request["payload"],
         headers=dataflow_request["headers"],
     )
+
     if decoded_payload["conclusion"] == "unsupported-conclusion":
         assert response.status_code == 400
         assert json.loads(response.text)["detail"] == (
             "No handling implemented for payload['conclusion'] = 'unsupported-conclusion'."
         )
+
     else:
-        pass
+        recipe_run_response = await async_app_client.get(
+            f"/recipe_runs/{decoded_payload['recipe_run_id']}",
+        )
+        assert recipe_run_response.status_code == 200
+        assert recipe_run_response.json()["status"] == "completed"
+        assert recipe_run_response.json()["conclusion"] == decoded_payload["conclusion"]

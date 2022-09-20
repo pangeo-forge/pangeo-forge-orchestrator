@@ -87,6 +87,7 @@ class MockGitHubAPI:
         path: str,
         accept: Optional[str] = None,
         jwt: Optional[str] = None,
+        oauth_token: Optional[str] = None,
     ):
         if path == "/app/hook/deliveries":
             for delivery in self._backend._app_hook_deliveries:
@@ -94,6 +95,18 @@ class MockGitHubAPI:
         elif path == "/app/installations":
             for installation in self._backend._app_installations:
                 yield installation
+        elif path.endswith("/pulls"):
+            for pr in [  # TODO: fixturize! (this is for `test_POST_dataflow_event`)
+                {
+                    "comments_url": (
+                        "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments"
+                    ),
+                    "head": {
+                        "sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
+                    },
+                },
+            ]:
+                yield pr
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
@@ -127,6 +140,8 @@ class MockGitHubAPI:
         elif path.endswith("/pulls"):
             # mock opening a pr
             return {"number": 1}  # TODO: fixturize
+        elif path.endswith("/comments"):
+            return {}
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
