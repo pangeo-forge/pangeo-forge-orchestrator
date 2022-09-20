@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
-import yaml
+import yaml  # type: ignore
 from asgi_lifespan import LifespanManager
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization

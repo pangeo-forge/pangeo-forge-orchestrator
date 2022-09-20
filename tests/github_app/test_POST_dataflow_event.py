@@ -7,7 +7,7 @@ import pytest_asyncio
 import pangeo_forge_orchestrator
 
 from ..conftest import clear_database
-from .fixtures import add_hash_signature
+from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
 
 
 def test_webhook_url_to_job_name_encode_decode():
@@ -20,7 +20,7 @@ def dataflow_job_is_test(request):
 
 
 @pytest_asyncio.fixture
-async def dataflow_request(
+async def dataflow_request_fixture(
     webhook_secret,
     admin_key,
     async_app_client,
@@ -79,7 +79,13 @@ async def dataflow_request(
         headers=admin_headers,
     )
     assert recipe_run_create_response.status_code == 200
-    yield add_hash_signature(request, webhook_secret)
+
+    # create gh backend
+    backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+    }
+
+    yield add_hash_signature(request, webhook_secret), _MockGitHubBackend(**backend_kws)
 
     # database teardown
     clear_database()
@@ -87,7 +93,7 @@ async def dataflow_request(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "dataflow_request",
+    "dataflow_request_fixture",
     [
         dict(recipe_run_id=1, conclusion="unsupported-conclusion"),
         dict(recipe_run_id=1, conclusion="failure"),
@@ -99,14 +105,14 @@ async def dataflow_request(
 )
 async def test_receive_dataflow_request(
     mocker,
-    get_mock_github_session,
     async_app_client,
-    dataflow_request,
+    dataflow_request_fixture,
 ):
+    dataflow_request, gh_backend = dataflow_request_fixture
     mocker.patch.object(
         pangeo_forge_orchestrator.routers.github_app,
         "get_github_session",
-        get_mock_github_session,
+        get_mock_github_session(gh_backend),
     )
     # special case for dataflow payload, to replicate how it is actually sent.
     # see comment in `pangeo_forge_orchestrator.routers.github_app::receive_github_hook`

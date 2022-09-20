@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
 import pytest
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError  # type: ignore
 
 
 @contextmanager

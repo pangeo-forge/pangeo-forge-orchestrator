@@ -194,7 +194,6 @@ def mock_github_backend(
     return _MockGitHubBackend(**backend_kws)
 
 
-@pytest.fixture
 def get_mock_github_session(mock_github_backend):
     def _get_mock_github_session(http_session: HttpSession):
         return MockGitHubAPI(http_session, "pangeo-forge", _backend=mock_github_backend)

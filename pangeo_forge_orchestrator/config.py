@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import yaml
+import yaml  # type: ignore
 from pydantic import BaseModel, Extra, SecretStr
 
 

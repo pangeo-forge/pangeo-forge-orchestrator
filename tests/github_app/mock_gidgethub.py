@@ -20,12 +20,13 @@ def mock_access_token_from_jwt(jwt: str):
 
 @dataclass
 class _MockGitHubBackend:
-    _app_hook_config_url: str
-    _accessible_repos: List[dict]
-    _app_hook_deliveries: List[dict]
-    _app_installations: List[dict]
-    _check_runs: List[dict]
-    _pulls_files: Dict[str, Dict[int, dict]]
+    _app_hook_config_url: Optional[str] = None
+    _accessible_repos: Optional[List[dict]] = None
+    _app_hook_deliveries: Optional[List[dict]] = None
+    _app_installations: Optional[List[dict]] = None
+    _check_runs: Optional[List[dict]] = None
+    _pulls: Optional[List[dict]] = None
+    _pulls_files: Optional[Dict[str, Dict[int, dict]]] = None
 
 
 @dataclass
