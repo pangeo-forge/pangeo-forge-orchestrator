@@ -22,6 +22,7 @@ def mock_access_token_from_jwt(jwt: str):
 class _MockGitHubBackend:
     _app_hook_config_url: Optional[str] = None
     _accessible_repos: Optional[List[dict]] = None
+    _repositories: Optional[Dict[str, dict]] = None
     _app_hook_deliveries: Optional[List[dict]] = None
     _app_installations: Optional[List[dict]] = None
     _check_runs: Optional[List[dict]] = None
@@ -72,7 +73,8 @@ class MockGitHubAPI:
                 return {"content": "=B4asdfaw3fk"}
             else:
                 # mocks getting a github repo id. see ``routers.github_app::get_repo_id``
-                return {"id": 123456789}  # TODO: assign dynamically from _MockGitHubBackend
+                repo_full_name = path.replace("/repos/", "")
+                return self._backend._repositories[repo_full_name]
         elif path == "/installation/repositories":
             return {"repositories": self._backend._accessible_repos}
         elif path.startswith("/app/hook/deliveries/"):

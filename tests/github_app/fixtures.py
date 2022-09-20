@@ -34,6 +34,16 @@ def get_mock_github_session(mock_github_backend: _MockGitHubBackend):
     return _get_mock_github_session
 
 
+@pytest.fixture(params=["https://api.pangeo-forge.org", "https://api-staging.pangeo-forge.org"])
+def api_url(request):
+    return request.param
+
+
+@pytest.fixture
+def app_hook_config_url(api_url):
+    return f"{api_url}/github/hooks/"
+
+
 @pytest.fixture
 def staged_recipes_pr_1_files():
     return [

@@ -1,5 +1,3 @@
-import os
-
 import jwt
 import pytest
 
@@ -14,6 +12,8 @@ from pangeo_forge_orchestrator.routers.github_app import (
     list_accessible_repos,
 )
 
+from .fixtures import _MockGitHubBackend, get_mock_github_session
+
 
 def test_get_jwt(rsa_key_pair):
     _, public_key = rsa_key_pair
@@ -24,35 +24,52 @@ def test_get_jwt(rsa_key_pair):
 
 
 @pytest.mark.asyncio
-async def test_get_access_token(private_key, get_mock_github_session):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
+async def test_get_access_token():
+    gh_backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+    }
+    gh_backend = _MockGitHubBackend(**gh_backend_kws)
+    mock_gh = get_mock_github_session(gh_backend)(http_session)
     token = await get_access_token(mock_gh)
     assert token.startswith("ghs_")
     assert len(token) == 40  # "ghs_" (4 chars) + 36 character token
 
 
 @pytest.mark.asyncio
-async def test_get_app_webhook_url(private_key, get_mock_github_session):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
+async def test_get_app_webhook_url(app_hook_config_url):
+    gh_backend_kws = {
+        "_app_hook_config_url": app_hook_config_url,
+    }
+    gh_backend = _MockGitHubBackend(**gh_backend_kws)
+    mock_gh = get_mock_github_session(gh_backend)(http_session)
     url = await get_app_webhook_url(mock_gh)
-    assert url == "https://api.pangeo-forge.org/github/hooks/"
+    assert url == app_hook_config_url
 
 
 @pytest.mark.parametrize("repo_full_name", ["pangeo-forge/staged-recipes"])
 @pytest.mark.asyncio
-async def test_get_repo_id(private_key, get_mock_github_session, repo_full_name):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
+async def test_get_repo_id(repo_full_name):
+    gh_backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+        "_repositories": {repo_full_name: {"id": 987654321}},
+    }
+    gh_backend = _MockGitHubBackend(**gh_backend_kws)
+    mock_gh = get_mock_github_session(gh_backend)(http_session)
     repo_id = await get_repo_id(repo_full_name, mock_gh)
     assert isinstance(repo_id, int)
 
 
 @pytest.mark.asyncio
-async def test_list_accessible_repos(private_key, get_mock_github_session, accessible_repos):
-    os.environ["PEM_FILE"] = private_key
-    mock_gh = get_mock_github_session(http_session)
+async def test_list_accessible_repos():
+    accessible_repos = [
+        {"full_name": "pangeo-forge/staged-recipes"},
+    ]
+    gh_backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+        "_accessible_repos": accessible_repos,
+    }
+    gh_backend = _MockGitHubBackend(**gh_backend_kws)
+    mock_gh = get_mock_github_session(gh_backend)(http_session)
     repos = await list_accessible_repos(mock_gh)
     assert repos == [r["full_name"] for r in accessible_repos]
 

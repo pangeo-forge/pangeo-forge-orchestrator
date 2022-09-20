@@ -39,16 +39,6 @@ def mock_subprocess_check_output(cmd: List[str]):
         )
 
 
-@pytest.fixture(params=["https://api.pangeo-forge.org", "https://api-staging.pangeo-forge.org"])
-def api_url(request):
-    return request.param
-
-
-@pytest.fixture
-def app_hook_config_url(api_url):
-    return f"{api_url}/github/hooks/"
-
-
 @pytest_asyncio.fixture
 async def synchronize_request_fixture(
     webhook_secret,
