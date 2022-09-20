@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests  # type: ignore
-import yaml
+import yaml  # type: ignore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CACHEDIR = REPO_ROOT / ".github_app_manifest_flow"

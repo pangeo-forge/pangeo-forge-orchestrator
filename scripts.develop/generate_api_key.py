@@ -4,7 +4,7 @@ import sys
 import uuid
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
