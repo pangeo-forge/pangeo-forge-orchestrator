@@ -128,6 +128,10 @@ def get_app_config_kws() -> dict:
         return kw
 
 
+def get_bakeries_dir():
+    return f"{root}/bakeries"
+
+
 def get_secrets_dir():
     return f"{root}/secrets"
 
@@ -158,15 +162,15 @@ def get_config() -> Config:
     # storage is a different location from production storage (which it ideally should be).
 
     kw = get_app_config_kws()
-
+    bakeries_dir = get_bakeries_dir()
     bakery_config_paths = [
         p
-        for p in os.listdir(f"{root}/bakeries")
+        for p in os.listdir(bakeries_dir)
         if p.split(".")[1] == os.environ.get("PANGEO_FORGE_DEPLOYMENT")
     ]
     bakery_kws = {}
     for p in bakery_config_paths:
-        with open(f"{root}/bakeries/{p}") as f:
+        with open(f"{bakeries_dir}/{p}") as f:
             bakery_kws[p.split(".")[0]] = yaml.safe_load(f)
 
     for p in get_secret_bakery_args_paths():
