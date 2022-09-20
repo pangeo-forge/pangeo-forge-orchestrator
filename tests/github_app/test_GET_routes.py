@@ -46,7 +46,7 @@ def app_hook_deliveries():
 
 
 @pytest.mark.asyncio
-async def test_get_deliveries(
+async def test_get_all_deliveries(
     mocker,
     app_hook_deliveries,
     async_app_client,
@@ -58,6 +58,49 @@ async def test_get_deliveries(
         get_mock_github_session(gh_backend),
     )
     response = await async_app_client.get("/github/hooks/deliveries")
+    assert response.status_code == 200
+    assert response.json() == app_hook_deliveries
+
+
+@pytest_asyncio.fixture
+async def feedstock_deliveries_fixture(admin_key, async_app_client, app_hook_deliveries):
+    admin_headers = {"X-API-Key": admin_key}
+    feedstock_create_response = await async_app_client.post(
+        "/feedstocks/",
+        json={"spec": "pangeo-forge/staged-recipes"},
+        headers=admin_headers,
+    )
+    assert feedstock_create_response.status_code == 200
+
+    gh_backend_kws = {
+        "_app_installations": [{"id": 1234567}],
+        "_accessible_repos": [
+            {"full_name": "pangeo-forge/staged-recipes"},
+        ],
+        "_app_hook_deliveries": app_hook_deliveries,
+        "_repositories": {
+            "pangeo-forge/staged-recipes": {"id": app_hook_deliveries[0]["repository_id"]},
+        },
+    }
+    yield app_hook_deliveries, _MockGitHubBackend(**gh_backend_kws)
+
+    # database teardown
+    clear_database()
+
+
+@pytest.mark.asyncio
+async def test_get_feedstock_deliveries(
+    mocker,
+    feedstock_deliveries_fixture,
+    async_app_client,
+):
+    app_hook_deliveries, gh_backend = feedstock_deliveries_fixture
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_github_session",
+        get_mock_github_session(gh_backend),
+    )
+    response = await async_app_client.get("/feedstocks/1/deliveries")
     assert response.status_code == 200
     assert response.json() == app_hook_deliveries
 
