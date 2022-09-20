@@ -26,7 +26,7 @@ class _MockGitHubBackend:
     _app_hook_deliveries: Optional[List[dict]] = None
     _app_installations: Optional[List[dict]] = None
     _check_runs: Optional[List[dict]] = None
-    _pulls: Optional[List[dict]] = None
+    _pulls: Optional[Dict[str, Dict[int, dict]]] = None
     _pulls_files: Optional[Dict[str, Dict[int, dict]]] = None
 
 
@@ -58,13 +58,16 @@ class MockGitHubAPI:
             elif path.endswith("branches/main"):
                 # mocks getting a branch. used in create_feedstock_repo background task
                 return {"commit": {"sha": "abcdefg"}}
-            elif "pulls" in path and path.endswith("files"):
+            elif "pulls" in path:
                 # Here's an example path: "/repos/pangeo-forge/staged-recipes/pulls/1/files"
                 # The next line parses this into -> "pangeo-forge/staged-recipes"
                 repo_full_name = "/".join(path.split("/repos/")[-1].split("/")[0:2])
-                # The next line parses this into -> `1`
-                pr_number = int(path.split("/")[-2])
-                return self._backend._pulls_files[repo_full_name][pr_number]
+                if path.endswith("files"):
+                    pr_number = int(path.split("/")[-2])
+                    return self._backend._pulls_files[repo_full_name][pr_number]
+                else:
+                    pr_number = int(path.split("/")[-1])
+                    return self._backend._pulls[repo_full_name][pr_number]
             elif "/contents/" in path:
                 # mocks getting the contents for a file
                 # TODO: make this more realistic. I believe the response is base64 encoded.
@@ -135,6 +138,8 @@ class MockGitHubAPI:
             # mock opening a pr
             return {"number": 1}  # TODO: fixturize
         elif path.endswith("/comments"):
+            return {}
+        elif path.endswith("/reactions"):
             return {}
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
