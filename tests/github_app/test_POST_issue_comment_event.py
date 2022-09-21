@@ -131,6 +131,18 @@ async def issue_comment_request_fixture(
             comment_id=12345678,
             pr_number=1,
         ),
+        dict(
+            body="/run liveocean plus-some-unsupported-arg",
+            repo_full_name="pangeo-forge/staged-recipes",
+            comment_id=12345678,
+            pr_number=1,
+        ),
+        dict(
+            body="/run-recipe-test liveocean",
+            repo_full_name="pangeo-forge/staged-recipes",
+            comment_id=12345678,
+            pr_number=1,
+        ),
     ],
     indirect=True,
 )
@@ -147,12 +159,26 @@ async def test_receive_issue_comment_request(
     )
     mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
 
+    recipe_run = await async_app_client.get("/recipe_runs/1")
+    assert recipe_run.json()["status"] == "queued"
+
     response = await async_app_client.post(
         "/github/hooks/",
         json=issue_comment_request["payload"],
         headers=issue_comment_request["headers"],
     )
-    if not issue_comment_request["payload"]["comment"]["body"].startswith("/run"):
+
+    comment_body = issue_comment_request["payload"]["comment"]["body"]
+    if not comment_body.startswith("/"):
         assert response.json()["message"] == "Comment is not a slash command."
     else:
-        ...
+        if len(comment_body.split()) > 2:
+            # this slash command has too many args,
+            # so it's an HTTP 400 Bad Request
+            assert response.status_code == 400
+        elif comment_body.split()[0] != "/run":
+            # this is not a supported slash command
+            assert response.status_code == 400
+        else:
+            recipe_run = await async_app_client.get("/recipe_runs/1")
+            assert recipe_run.json()["status"] == "in_progress"
