@@ -25,12 +25,12 @@ async def synchronize_request_fixture(
     payload = {
         "action": "synchronize",
         "pull_request": {
-            "number": 1,
+            "number": request.param["number"],
             "base": {
                 "repo": {
-                    "html_url": f"https://github.com/{request.param}",
-                    "url": f"https://api.github.com/repos/{request.param}",
-                    "full_name": request.param,
+                    "html_url": f"https://github.com/{request.param['base_repo_full_name']}",
+                    "url": f"https://api.github.com/repos/{request.param['base_repo_full_name']}",
+                    "full_name": request.param["base_repo_full_name"],
                 },
             },
             "head": {
@@ -41,7 +41,7 @@ async def synchronize_request_fixture(
                 "sha": "abc",
             },
             "labels": [],
-            "title": "Add XYZ awesome dataset",
+            "title": request.param["title"],
         },
     }
     request = {"headers": headers, "payload": payload}
@@ -135,7 +135,23 @@ async def synchronize_request_fixture(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "synchronize_request_fixture",
-    ["pangeo-forge/staged-recipes", "pangeo-forge/pangeo-forge.org"],
+    [
+        dict(
+            number=1,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Add XYZ awesome dataset",
+        ),
+        dict(
+            number=2,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Cleanup pangeo-forge/XYZ-feedstock",
+        ),
+        dict(
+            number=1,
+            base_repo_full_name="pangeo-forge/pangeo-forge.org",
+            title="Fix frontend website styles",
+        ),
+    ],
     indirect=True,
 )
 async def test_receive_synchronize_request(
@@ -161,30 +177,37 @@ async def test_receive_synchronize_request(
         json=synchronize_request["payload"],
         headers=synchronize_request["headers"],
     )
+    assert response.status_code == 202
 
-    if synchronize_request["payload"]["pull_request"]["base"]["repo"]["full_name"].endswith(
-        "pangeo-forge.org"
-    ):
+    base_repo_full_name = synchronize_request["payload"]["pull_request"]["base"]["repo"][
+        "full_name"
+    ]
+    if base_repo_full_name.endswith("pangeo-forge.org"):
         assert "Skipping synchronize for repo" in response.json()["message"]
     else:
-        assert response.status_code == 202
-        # first assert that the recipe runs were created as expected
-        recipe_runs_response = await async_app_client.get("/recipe_runs/")
-        assert recipe_runs_response.status_code == 200
-        for k in expected_recipe_runs_response[0]:
-            if k not in ["started_at", "completed_at"]:
-                assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
+        if synchronize_request["payload"]["pull_request"]["title"].lower().startswith("cleanup"):
+            assert response.json() == {
+                "status": "skip",
+                "message": "This is an automated cleanup PR. Skipping.",
+            }
+        else:
+            # first assert that the recipe runs were created as expected
+            recipe_runs_response = await async_app_client.get("/recipe_runs/")
+            assert recipe_runs_response.status_code == 200
+            for k in expected_recipe_runs_response[0]:
+                if k not in ["started_at", "completed_at"]:
+                    assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
 
-        # then assert that the check runs were created as expected
-        commit_sha = recipe_runs_response.json()[0]["head_sha"]
-        check_runs_response = await async_app_client.get(
-            f"/feedstocks/1/commits/{commit_sha}/check-runs"
-        )
+            # then assert that the check runs were created as expected
+            commit_sha = recipe_runs_response.json()[0]["head_sha"]
+            check_runs_response = await async_app_client.get(
+                f"/feedstocks/1/commits/{commit_sha}/check-runs"
+            )
 
-        assert expected_check_runs_response["total_count"] == 1
-        for k in expected_check_runs_response["check_runs"][0]:
-            if k not in ["started_at", "completed_at"]:
-                assert (
-                    expected_check_runs_response["check_runs"][0][k]
-                    == check_runs_response.json()["check_runs"][0][k]
-                )
+            assert expected_check_runs_response["total_count"] == 1
+            for k in expected_check_runs_response["check_runs"][0]:
+                if k not in ["started_at", "completed_at"]:
+                    assert (
+                        expected_check_runs_response["check_runs"][0][k]
+                        == check_runs_response.json()["check_runs"][0][k]
+                    )
