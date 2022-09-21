@@ -22,8 +22,8 @@ async def pr_merged_request_fixture(
             "merged": True,
             "base": {
                 "repo": {
-                    "url": "https://api.github.com/repos/pangeo-forge/staged-recipes",
-                    "full_name": "pangeo-forge/staged-recipes",
+                    "url": f"https://api.github.com/repos/{request.param['base_repo_full_name']}",
+                    "full_name": request.param["base_repo_full_name"],
                     "owner": {
                         "login": "pangeo-forge",
                     },
@@ -34,17 +34,18 @@ async def pr_merged_request_fixture(
             "title": request.param["title"],
         },
     }
-    request = {"headers": headers, "payload": payload}
+    event_request = {"headers": headers, "payload": payload}
 
     # create gh backend
+    if request.param["base_repo_full_name"] == "pangeo-forge/staged-recipes":
+        _pulls_files = {"pangeo-forge/staged-recipes": staged_recipes_pulls_files}
+
     gh_backend_kws = {
         "_app_installations": [{"id": 1234567}],
-        "_pulls_files": {
-            "pangeo-forge/staged-recipes": staged_recipes_pulls_files,
-        },
+        "_pulls_files": _pulls_files,
     }
 
-    yield add_hash_signature(request, webhook_secret), _MockGitHubBackend(**gh_backend_kws)
+    yield add_hash_signature(event_request, webhook_secret), _MockGitHubBackend(**gh_backend_kws)
 
     # database teardown
     clear_database()
@@ -54,10 +55,30 @@ async def pr_merged_request_fixture(
 @pytest.mark.parametrize(
     "pr_merged_request_fixture",
     [
-        dict(number=1, title="Add XYZ awesome dataset"),
-        dict(number=2, title="Cleanup: pangeo-forge/XYZ-feedstock"),
-        dict(number=3, title="Update staged-recipes README"),
-        dict(number=4, title="Update feedstock README"),
+        dict(
+            number=1,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Add XYZ awesome dataset",
+        ),
+        dict(
+            number=2,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Cleanup: pangeo-forge/XYZ-feedstock",
+        ),
+        dict(
+            number=3,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Update staged-recipes README",
+        ),
+        dict(
+            number=4,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Update feedstock README",
+        ),
+        # dict(
+        #    number=1,
+        #    title=""
+        # ),
     ],
     indirect=True,
 )
