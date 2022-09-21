@@ -164,6 +164,7 @@ def mock_bakeries_config_paths(mock_bakeries_dir):
             fsspec_class="bar",
             fsspec_args={},
             root_path="baz",
+            public_url="https://public-endpoint.org/bucket-name/",
         ),
         InputCacheStorage=dict(
             fsspec_class="bar",

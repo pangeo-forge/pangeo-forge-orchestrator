@@ -107,9 +107,7 @@ async def dataflow_request_fixture(
     [
         dict(recipe_run_id=1, conclusion="unsupported-conclusion"),
         dict(recipe_run_id=1, conclusion="failure"),
-        # FIXME: This parametrization requires bakery config YAML, which is currently not mocked,
-        # because it's not well factored in `pangeo_forge_orchestrator/config.py`.
-        # dict(recipe_run_id=1, conclusion="success"),
+        dict(recipe_run_id=1, conclusion="success"),
     ],
     indirect=True,
 )
