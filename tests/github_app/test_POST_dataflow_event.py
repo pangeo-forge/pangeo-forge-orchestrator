@@ -33,7 +33,7 @@ async def dataflow_request_fixture(
         "recipe_run_id": request.param["recipe_run_id"],
         "conclusion": request.param["conclusion"],
     }
-    request = {
+    event_request = {
         "headers": headers,
         # special case for dataflow payload, to replicate how it is actually sent.
         # see comment in `pangeo_forge_orchestrator.routers.github_app::receive_github_hook`
@@ -55,7 +55,7 @@ async def dataflow_request_fixture(
     assert bakery_create_response.status_code == 200
     feedstock_create_response = await async_app_client.post(
         "/feedstocks/",
-        json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically
+        json={"spec": request.param["feedstock_spec"]},
         headers=admin_headers,
     )
     assert feedstock_create_response.status_code == 200
@@ -86,7 +86,8 @@ async def dataflow_request_fixture(
         "_pulls": [
             {
                 "comments_url": (
-                    "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments"
+                    "https://api.github.com/repos/"
+                    f"{request.param['feedstock_spec']}/issues/1347/comments"
                 ),
                 "head": {
                     "sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
@@ -95,7 +96,7 @@ async def dataflow_request_fixture(
         ],
     }
 
-    yield add_hash_signature(request, webhook_secret), _MockGitHubBackend(**backend_kws)
+    yield add_hash_signature(event_request, webhook_secret), _MockGitHubBackend(**backend_kws)
 
     # database teardown
     clear_database()
@@ -105,9 +106,21 @@ async def dataflow_request_fixture(
 @pytest.mark.parametrize(
     "dataflow_request_fixture",
     [
-        dict(recipe_run_id=1, conclusion="unsupported-conclusion"),
-        dict(recipe_run_id=1, conclusion="failure"),
-        dict(recipe_run_id=1, conclusion="success"),
+        dict(
+            feedstock_spec="pangeo-forge/staged-recipes",
+            recipe_run_id=1,
+            conclusion="unsupported-conclusion",
+        ),
+        dict(
+            feedstock_spec="pangeo-forge/staged-recipes",
+            recipe_run_id=1,
+            conclusion="failure",
+        ),
+        dict(
+            feedstock_spec="pangeo-forge/staged-recipes",
+            recipe_run_id=1,
+            conclusion="success",
+        ),
     ],
     indirect=True,
 )
