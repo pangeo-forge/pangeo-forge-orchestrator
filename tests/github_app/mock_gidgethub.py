@@ -1,4 +1,5 @@
 import hashlib
+import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
@@ -140,6 +141,10 @@ class MockGitHubAPI:
         elif path.endswith("/comments"):
             return {}
         elif path.endswith("/reactions"):
+            return {}
+        elif path.endswith("/deployments"):
+            return {"id": random.randint(10_000, 11_0000)}
+        elif "/deployments" in path and path.endswith("statuses"):
             return {}
         else:
             raise NotImplementedError(f"Path '{path}' not supported.")
