@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 import pytest_asyncio
 
@@ -5,6 +7,26 @@ import pangeo_forge_orchestrator
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
+from .mock_pangeo_forge_runner import mock_subprocess_check_output
+
+
+@pytest.fixture
+def gpcp_feedstock_pr_1_files():
+    return [
+        {
+            "filename": "feedstock/recipe.py",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/gpcp-feedstock/"
+                "contents/feedstock/recipe.py"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def gpcp_feedstock_pulls_files(gpcp_feedstock_pr_1_files):
+    return {1: gpcp_feedstock_pr_1_files}
 
 
 @pytest_asyncio.fixture
@@ -12,6 +34,9 @@ async def pr_merged_request_fixture(
     webhook_secret,
     request,
     staged_recipes_pulls_files,
+    gpcp_feedstock_pulls_files,
+    admin_key,
+    async_app_client,
 ):
 
     headers = {"X-GitHub-Event": "pull_request"}
@@ -34,11 +59,40 @@ async def pr_merged_request_fixture(
             "title": request.param["title"],
         },
     }
+    if request.param["base_repo_full_name"].endswith("-feedstock"):
+        # these payload fields are not used for staged-recipes merges
+        payload["pull_request"]["base"]["repo"].update(
+            {"html_url": f"https://github.com/{request.param['base_repo_full_name']}"}
+        )
+        payload["pull_request"].update({"merge_commit_sha": "654321qwerty0987"})
+
+        # staged-recipes merges don't need this database state
+        admin_headers = {"X-API-Key": admin_key}
+        bakery_create_response = await async_app_client.post(
+            "/bakeries/",
+            json={  # TODO: set dynamically
+                "region": "us-central1",
+                "name": "pangeo-ldeo-nsf-earthcube",
+                "description": "A great bakery to test with!",
+            },
+            headers=admin_headers,
+        )
+        assert bakery_create_response.status_code == 200
+        feedstock_create_response = await async_app_client.post(
+            "/feedstocks/",
+            json={"spec": request.param["base_repo_full_name"]},
+            headers=admin_headers,
+        )
+        assert feedstock_create_response.status_code == 200
+
     event_request = {"headers": headers, "payload": payload}
 
     # create gh backend
     if request.param["base_repo_full_name"] == "pangeo-forge/staged-recipes":
         _pulls_files = {"pangeo-forge/staged-recipes": staged_recipes_pulls_files}
+
+    elif request.param["base_repo_full_name"].endswith("-feedstock"):
+        _pulls_files = {"pangeo-forge/gpcp-feedstock": gpcp_feedstock_pulls_files}
 
     gh_backend_kws = {
         "_app_installations": [{"id": 1234567}],
@@ -75,10 +129,11 @@ async def pr_merged_request_fixture(
             base_repo_full_name="pangeo-forge/staged-recipes",
             title="Update feedstock README",
         ),
-        # dict(
-        #    number=1,
-        #    title=""
-        # ),
+        dict(
+            number=1,
+            base_repo_full_name="pangeo-forge/gpcp-feedstock",
+            title="Fix date range in feedstock/recipe.py",
+        ),
     ],
     indirect=True,
 )
@@ -93,9 +148,14 @@ async def test_receive_pr_merged_request(
         "get_github_session",
         get_mock_github_session(gh_backend),
     )
-    # make sure that there are no feedstocks in the database to begin with
-    existing_feedstocks = await async_app_client.get("/feedstocks/")
-    assert existing_feedstocks.json() == []
+    base_repo_full_name = pr_merged_request["payload"]["pull_request"]["base"]["repo"]["full_name"]
+
+    if base_repo_full_name == "pangeo-forge/staged-recipes":
+        # make sure that there are no feedstocks in the database to begin with
+        existing_feedstocks = await async_app_client.get("/feedstocks/")
+        assert existing_feedstocks.json() == []
+    elif base_repo_full_name.endswith("-feedstock"):
+        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
 
     response = await async_app_client.post(
         "/github/hooks/",
