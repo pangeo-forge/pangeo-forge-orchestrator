@@ -29,12 +29,32 @@ def gpcp_feedstock_pulls_files(gpcp_feedstock_pr_1_files):
     return {1: gpcp_feedstock_pr_1_files}
 
 
+@pytest.fixture
+def frontend_pr_1_files():
+    return [
+        {
+            "filename": "src/theme/index.js",
+            "contents_url": (
+                "https://api.github.com/repos/pangeo-forge/pangeo-forge.org/"
+                "contents/src/theme/index.js"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def frontend_pulls_files(frontend_pr_1_files):
+    return {1: frontend_pr_1_files}
+
+
 @pytest_asyncio.fixture
 async def pr_merged_request_fixture(
     webhook_secret,
     request,
     staged_recipes_pulls_files,
     gpcp_feedstock_pulls_files,
+    frontend_pulls_files,
     admin_key,
     async_app_client,
 ):
@@ -94,6 +114,9 @@ async def pr_merged_request_fixture(
     elif request.param["base_repo_full_name"].endswith("-feedstock"):
         _pulls_files = {"pangeo-forge/gpcp-feedstock": gpcp_feedstock_pulls_files}
 
+    elif request.param["base_repo_full_name"] == "pangeo-forge/pangeo-forge.org":
+        _pulls_files = {"pangeo-forge/pangeo-forge.org": frontend_pulls_files}
+
     gh_backend_kws = {
         "_app_installations": [{"id": 1234567}],
         "_pulls_files": _pulls_files,
@@ -134,6 +157,11 @@ async def pr_merged_request_fixture(
             base_repo_full_name="pangeo-forge/gpcp-feedstock",
             title="Fix date range in feedstock/recipe.py",
         ),
+        dict(
+            number=1,
+            base_repo_full_name="pangeo-forge/pangeo-forge.org",
+            title="Update styles on frontend website",
+        ),
     ],
     indirect=True,
 )
@@ -164,8 +192,15 @@ async def test_receive_pr_merged_request(
     )
     assert response.status_code == 202
 
-    pr_title = pr_merged_request["payload"]["pull_request"]["title"]
+    if not base_repo_full_name.endswith("staged-recipes") and not base_repo_full_name.endswith(
+        "-feedstock"
+    ):
+        assert response.json() == {
+            "status": "skip",
+            "message": "This not a -feedstock repo. Skipping.",
+        }
 
+    pr_title = pr_merged_request["payload"]["pull_request"]["title"]
     if pr_title == "Add XYZ awesome dataset":
         # if this pr added a feedstock, make sure it was added to the database
         feedstocks = await async_app_client.get("/feedstocks/")
