@@ -25,8 +25,22 @@ def gpcp_feedstock_pr_1_files():
 
 
 @pytest.fixture
-def gpcp_feedstock_pulls_files(gpcp_feedstock_pr_1_files):
-    return {1: gpcp_feedstock_pr_1_files}
+def gpcp_feedstock_pr_2_files():
+    return [
+        {
+            "filename": "README.md",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/gpcp-feedstock/"
+                "contents/README.md"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
+def gpcp_feedstock_pulls_files(gpcp_feedstock_pr_1_files, gpcp_feedstock_pr_2_files):
+    return {1: gpcp_feedstock_pr_1_files, 2: gpcp_feedstock_pr_2_files}
 
 
 @pytest.fixture
@@ -158,6 +172,11 @@ async def pr_merged_request_fixture(
             title="Fix date range in feedstock/recipe.py",
         ),
         dict(
+            number=2,
+            base_repo_full_name="pangeo-forge/gpcp-feedstock",
+            title="Update gpcp-feedstock README",
+        ),
+        dict(
             number=1,
             base_repo_full_name="pangeo-forge/pangeo-forge.org",
             title="Update styles on frontend website",
@@ -209,5 +228,5 @@ async def test_receive_pr_merged_request(
     if pr_title.startswith("Cleanup"):
         assert response.json()["message"] == "This is an automated cleanup PR. Skipping."
 
-    if pr_title == "Update staged-recipes README" or pr_title == "Update feedstock README":
+    if pr_title == "Update staged-recipes README" or pr_title == "Update gpcp-feedstock README":
         assert response.json()["message"] == "Not a recipes PR. Skipping."
