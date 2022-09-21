@@ -1,4 +1,5 @@
 import json
+import random
 from urllib.parse import parse_qs, urlencode
 
 import pytest
@@ -10,21 +11,11 @@ from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
 
 
-def test_webhook_url_to_job_name_encode_decode():
-    pass
-
-
-@pytest.fixture(params=[True])  # , False])
-def dataflow_job_is_test(request):
-    return request.param
-
-
 @pytest_asyncio.fixture
 async def dataflow_request_fixture(
     webhook_secret,
     admin_key,
     async_app_client,
-    dataflow_job_is_test,
     request,
 ):
     headers = {"X-GitHub-Event": "dataflow"}
@@ -71,10 +62,10 @@ async def dataflow_request_fixture(
             "completed_at": None,
             "conclusion": None,
             "status": "in_progress",
-            "is_test": dataflow_job_is_test,
+            "is_test": request.param["is_test"],
             "dataset_type": "zarr",
             "dataset_public_url": None,
-            "message": None,
+            "message": request.param["recipe_run_message"],
         },
         headers=admin_headers,
     )
@@ -109,16 +100,50 @@ async def dataflow_request_fixture(
         dict(
             feedstock_spec="pangeo-forge/staged-recipes",
             recipe_run_id=1,
+            is_test=True,
+            recipe_run_message=None,
             conclusion="unsupported-conclusion",
         ),
         dict(
             feedstock_spec="pangeo-forge/staged-recipes",
             recipe_run_id=1,
+            is_test=True,
+            recipe_run_message=None,
             conclusion="failure",
         ),
         dict(
             feedstock_spec="pangeo-forge/staged-recipes",
             recipe_run_id=1,
+            is_test=True,
+            recipe_run_message=None,
+            conclusion="success",
+        ),
+        dict(
+            feedstock_spec="pangeo-forge/gpcp-feedstock",
+            recipe_run_id=1,
+            is_test=False,
+            recipe_run_message=json.dumps(
+                {
+                    "deployment_id": random.randint(10_000, 11_000),
+                    "environment_url": (
+                        "https://pangeo-forge.org/dashboard/recipe-run/1?feedstock_id=1"
+                    ),
+                }
+            ),
+            conclusion="failure",
+        ),
+        dict(
+            feedstock_spec="pangeo-forge/gpcp-feedstock",
+            recipe_run_id=1,
+            is_test=False,
+            recipe_run_message=json.dumps(
+                {
+                    "deployment_id": random.randint(10_000, 11_000),
+                    "environment_url": (
+                        "https://pangeo-forge.org/dashboard/recipe-run/1?feedstock_id=1"
+                    ),
+                }
+            ),
             conclusion="success",
         ),
     ],
