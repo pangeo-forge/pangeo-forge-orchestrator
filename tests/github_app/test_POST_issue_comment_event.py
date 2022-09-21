@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 import pytest_asyncio
 
@@ -5,6 +7,7 @@ import pangeo_forge_orchestrator
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
+from .mock_pangeo_forge_runner import mock_subprocess_check_output
 
 
 @pytest_asyncio.fixture
@@ -142,6 +145,8 @@ async def test_receive_issue_comment_request(
         "get_github_session",
         get_mock_github_session(gh_backend),
     )
+    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+
     response = await async_app_client.post(
         "/github/hooks/",
         json=issue_comment_request["payload"],
