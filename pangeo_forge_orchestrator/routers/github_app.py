@@ -186,6 +186,7 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
 @github_app_router.get(
     "/feedstocks/{id}/deliveries",
     summary="Get a list of webhook deliveries originating from a particular feedstock.",
+    tags=["github_app", "feedstock", "public"],
 )
 async def get_feedstock_hook_deliveries(
     id: int,
@@ -205,6 +206,7 @@ async def get_feedstock_hook_deliveries(
 @github_app_router.get(
     "/feedstocks/{id}/commits/{commit_sha}/check-runs",
     summary="Get a list of check runs for a given commit sha on a feedstock.",
+    tags=["github_app", "feedstock", "public"],
 )
 async def get_feedstock_check_runs(
     id: int,
@@ -228,6 +230,7 @@ async def get_feedstock_check_runs(
     "/github/hooks/",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Endpoint to which Pangeo Forge GitHub App posts payloads.",
+    tags=["github_app", "admin"],
 )
 async def receive_github_hook(  # noqa: C901
     request: Request,
@@ -477,6 +480,7 @@ async def receive_github_hook(  # noqa: C901
 @github_app_router.get(
     "/github/hooks/deliveries",
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
+    tags=["github_app", "public"],
 )
 async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_session)):
     gh = get_github_session(http_session)
@@ -491,6 +495,7 @@ async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_sess
 @github_app_router.get(
     "/github/hooks/deliveries/{id}",
     summary="Get details about a particular webhook delivery.",
+    tags=["github_app", "public"],
 )
 async def get_delivery(
     id: int,
