@@ -5,36 +5,17 @@ from typing import List
 
 def mock_subprocess_check_output_raises_called_process_error(cmd: List[str]):
     loglines = [
-        {
-            "message": 'Target Storage is FSSpecTarget(AbstractFileSystem(, root_path="")\n',
-            "status": "setup",
-        },
-        {
-            "message": 'Input Cache Storage is CacheFSSpecTarget(AbstractFileSystem(, root_path="")\n',
-            "status": "setup",
-        },
-        {
-            "message": 'Metadata Cache Storage is MetadataTarget(AbstractFileSystem(, root_path="")\n',
-            "status": "setup",
-        },
+        # fmt: off
+        {"message": "Target Storage is FSSpecTarget(AbstractFileSystem(, root_path=\"\")\n", "status": "setup"},
+        {"message": "Input Cache Storage is CacheFSSpecTarget(AbstractFileSystem(, root_path=\"\")\n", "status": "setup"},
+        {"message": "Metadata Cache Storage is MetadataTarget(AbstractFileSystem(, root_path=\"\")\n", "status": "setup"},
         {"message": "Picked Git content provider.\n", "status": "fetching"},
-        {
-            "message": "Cloning into '/var/folders/tt/4f941hdn0zq549zdwhcgg98c0000gn/T/tmp6mcx0gyk'...\n",
-            "status": "fetching",
-        },
-        {
-            "message": "HEAD is now at 0375426 Removed references to setup_logging\n",
-            "status": "fetching",
-        },
+        {"message": "Cloning into '/var/folders/tt/4f941hdn0zq549zdwhcgg98c0000gn/T/tmp6mcx0gyk'...\n", "status": "fetching"},
+        {"message": "HEAD is now at 0375426 Removed references to setup_logging\n", "status": "fetching"},
         {"message": "Parsing recipes...", "status": "running"},
-        {
-            "message": "Baking only recipe_id='eooffshore_ics_cmems_WIND_GLO_WIND_L3_NRT_OBSERVATIONS_012_002_MetOp_ASCAT'"
-        },
-        {
-            "message": "Error during running: object of type function not serializable",
-            "exc_info": 'Traceback (most recent call last):\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/bin/pangeo-forge-runner", line 8, in <module>\n    sys.exit(main())\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/cli.py", line 28, in main\n    app.start()\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/cli.py", line 23, in start\n    super().start()\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/traitlets/config/application.py", line 462, in start\n    return self.subapp.start()\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/commands/bake.py", line 130, in start\n    job_name = f"{name}-{recipe.sha256().hex()}-{int(datetime.now().timestamp())}"\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/recipes/base.py", line 51, in sha256\n    return dataclass_sha256(self, ignore_keys=self._hash_exclude_)\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py", line 70, in dataclass_sha256\n    return dict_to_sha256(d)\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py", line 31, in dict_to_sha256\n    b = dumps(\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/__init__.py", line 234, in dumps\n    return cls(\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/encoder.py", line 199, in encode\n    chunks = self.iterencode(o, _one_shot=True)\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/encoder.py", line 257, in iterencode\n    return _iterencode(o, 0)\n  File "/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py", line 20, in either_encode_or_hash\n    raise TypeError(f"object of type {type(obj).__name__} not serializable")\nTypeError: object of type function not serializable',
-            "status": "failed",
-        },
+        {"message": "Baking only recipe_id='eooffshore_ics_cmems_WIND_GLO_WIND_L3_NRT_OBSERVATIONS_012_002_MetOp_ASCAT'"},
+        {"message": "Error during running: object of type function not serializable", "exc_info": "Traceback (most recent call last):\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/bin/pangeo-forge-runner\", line 8, in <module>\n    sys.exit(main())\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/cli.py\", line 28, in main\n    app.start()\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/cli.py\", line 23, in start\n    super().start()\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/traitlets/config/application.py\", line 462, in start\n    return self.subapp.start()\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_runner/commands/bake.py\", line 130, in start\n    job_name = f\"{name}-{recipe.sha256().hex()}-{int(datetime.now().timestamp())}\"\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/recipes/base.py\", line 51, in sha256\n    return dataclass_sha256(self, ignore_keys=self._hash_exclude_)\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py\", line 70, in dataclass_sha256\n    return dict_to_sha256(d)\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py\", line 31, in dict_to_sha256\n    b = dumps(\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/__init__.py\", line 234, in dumps\n    return cls(\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/encoder.py\", line 199, in encode\n    chunks = self.iterencode(o, _one_shot=True)\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/json/encoder.py\", line 257, in iterencode\n    return _iterencode(o, 0)\n  File \"/Users/charlesstern/miniconda3/envs/pfo-new/lib/python3.9/site-packages/pangeo_forge_recipes/serialization.py\", line 20, in either_encode_or_hash\n    raise TypeError(f\"object of type {type(obj).__name__} not serializable\")\nTypeError: object of type function not serializable", "status": "failed"},
+        # fmt: on
     ]
     output = "\n".join([json.dumps(line) for line in loglines])
     raise CalledProcessError(1, cmd, output)
