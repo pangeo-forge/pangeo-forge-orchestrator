@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
-import yaml
+import yaml  # type: ignore
 from asgi_lifespan import LifespanManager
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization
@@ -20,6 +20,7 @@ from pangeo_forge_orchestrator.api import app
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
+from .github_app.fixtures import *  # noqa: F401 F403
 from .interfaces import FastAPITestClientCRUD
 
 
@@ -28,6 +29,7 @@ def setup_and_teardown(
     session_mocker,
     mock_app_config_path,
     mock_secrets_dir,
+    mock_bakeries_dir,
 ):
     # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
@@ -51,6 +53,9 @@ def setup_and_teardown(
     def get_mock_secrets_dir():
         return mock_secrets_dir
 
+    def get_mock_bakeries_dir():
+        return mock_bakeries_dir
+
     session_mocker.patch.object(
         pangeo_forge_orchestrator.config,
         "get_app_config_path",
@@ -61,7 +66,15 @@ def setup_and_teardown(
         "get_secrets_dir",
         get_mock_secrets_dir,
     )
-
+    session_mocker.patch.object(
+        pangeo_forge_orchestrator.config,
+        "get_bakeries_dir",
+        get_mock_bakeries_dir,
+    )
+    session_mocker.patch.dict(
+        os.environ,
+        {"PANGEO_FORGE_DEPLOYMENT": "pytest-deployment"},
+    )
     yield
     # teardown here (none for now)
 
@@ -132,6 +145,42 @@ def mock_app_config_path(mock_config_kwargs, mock_secrets_dir):
         yaml.dump(mock_config_kwargs, f)
 
     return path
+
+
+@pytest.fixture(scope="session")
+def mock_bakeries_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("bakeries")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_bakeries_config_paths(mock_bakeries_dir):
+    """ """
+    path = mock_bakeries_dir / "pangeo-ldeo-nsf-earthcube.pytest-deployment.yaml"
+    kws = dict(
+        Bake=dict(
+            bakery_class="foo",
+        ),
+        TargetStorage=dict(
+            fsspec_class="bar",
+            fsspec_args={},
+            root_path="baz",
+            public_url="https://public-endpoint.org/bucket-name/",
+        ),
+        InputCacheStorage=dict(
+            fsspec_class="bar",
+            fsspec_args={},
+            root_path="baz",
+        ),
+        MetadataCacheStorage=dict(
+            fsspec_class="bar",
+            fsspec_args={},
+            root_path="baz",
+        ),
+    )
+    with open(path, "w") as f:
+        yaml.dump(kws, f)
+
+    return [str(path)]  # TODO: test with > 1 bakery
 
 
 @pytest.fixture(scope="session")
