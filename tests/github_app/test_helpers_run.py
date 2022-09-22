@@ -107,22 +107,22 @@ async def run_fixture(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("raises_called_process_error", [True, False])
-async def test_run(
+async def test_run(mocker, run_fixture):
+    run_kws = run_fixture
+    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+    await run(**run_kws)
+
+
+@pytest.mark.xfail(reason="https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132")
+@pytest.mark.asyncio
+async def test_run_raises_called_process_error(
     mocker,
     run_fixture,
-    raises_called_process_error,
 ):
     run_kws = run_fixture
-
-    if raises_called_process_error:
-        mocker.patch.object(
-            subprocess,
-            "check_output",
-            mock_subprocess_check_output_raises_called_process_error,
-        )
-        with pytest.raises(KeyError, match=r"status"):
-            await run(**run_kws)
-    else:
-        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
-        await run(**run_kws)
+    mocker.patch.object(
+        subprocess,
+        "check_output",
+        mock_subprocess_check_output_raises_called_process_error,
+    )
+    await run(**run_kws)
