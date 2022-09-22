@@ -2,7 +2,10 @@
 
 [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml)
 [![codecov](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator/branch/main/graph/badge.svg?token=ay8eJ6JUiX)](https://codecov.io/gh/pangeo-forge/pangeo-forge-orchestrator)
-[![pre-commit](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/pre-commit.yaml)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![gitleaks badge](https://img.shields.io/badge/protected%20by-gitleaks-blue)](https://github.com/zricethezav/gitleaks-action)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![NSF Award 2026932](https://img.shields.io/badge/NSF-2026932-9cf)](https://www.nsf.gov/awardsearch/showAward?AWD_ID=2026932&HistoricalAwards=false)
 
 | Check           | Status                                                                      |
 | --------------- | --------------------------------------------------------------------------- |
