@@ -103,15 +103,31 @@ def staged_recipes_pr_4_files():
 
 
 @pytest.fixture
+def staged_recipes_pr_5_files():
+    return [
+        {
+            "filename": "recipes/new-dataset/recipe.py",
+            "contents_url": (
+                "https://api.github.com/repos/contributor-username/staged-recipes/"
+                "contents/recipes/new-dataset/recipe.py"
+            ),
+            "sha": "abcdefg",
+        },
+    ]
+
+
+@pytest.fixture
 def staged_recipes_pulls_files(
     staged_recipes_pr_1_files,
     staged_recipes_pr_2_files,
     staged_recipes_pr_3_files,
     staged_recipes_pr_4_files,
+    staged_recipes_pr_5_files,
 ):
     return {
         1: staged_recipes_pr_1_files,
         2: staged_recipes_pr_2_files,
         3: staged_recipes_pr_3_files,
         4: staged_recipes_pr_4_files,
+        5: staged_recipes_pr_5_files,
     }

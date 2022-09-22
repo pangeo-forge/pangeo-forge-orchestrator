@@ -9,7 +9,10 @@ from pangeo_forge_orchestrator.routers.github_app import DEFAULT_BACKEND_NETLOC
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
-from .mock_pangeo_forge_runner import mock_subprocess_check_output
+from .mock_pangeo_forge_runner import (
+    mock_subprocess_check_output,
+    mock_subprocess_check_output_raises_called_process_error,
+)
 
 
 @pytest_asyncio.fixture
@@ -147,6 +150,11 @@ async def synchronize_request_fixture(
             title="Cleanup pangeo-forge/XYZ-feedstock",
         ),
         dict(
+            number=5,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Add ABC dataset (missing meta.yaml)",
+        ),
+        dict(
             number=1,
             base_repo_full_name="pangeo-forge/pangeo-forge.org",
             title="Fix frontend website styles",
@@ -170,44 +178,58 @@ async def test_receive_synchronize_request(
         "get_github_session",
         get_mock_github_session(gh_backend),
     )
+    title = synchronize_request["payload"]["pull_request"]["title"]
 
-    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
-    response = await async_app_client.post(
-        "/github/hooks/",
-        json=synchronize_request["payload"],
-        headers=synchronize_request["headers"],
-    )
-    assert response.status_code == 202
-
-    base_repo_full_name = synchronize_request["payload"]["pull_request"]["base"]["repo"][
-        "full_name"
-    ]
-    if base_repo_full_name.endswith("pangeo-forge.org"):
-        assert "Skipping synchronize for repo" in response.json()["message"]
-    else:
-        if synchronize_request["payload"]["pull_request"]["title"].lower().startswith("cleanup"):
-            assert response.json() == {
-                "status": "skip",
-                "message": "This is an automated cleanup PR. Skipping.",
-            }
-        else:
-            # first assert that the recipe runs were created as expected
-            recipe_runs_response = await async_app_client.get("/recipe_runs/")
-            assert recipe_runs_response.status_code == 200
-            for k in expected_recipe_runs_response[0]:
-                if k not in ["started_at", "completed_at"]:
-                    assert expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
-
-            # then assert that the check runs were created as expected
-            commit_sha = recipe_runs_response.json()[0]["head_sha"]
-            check_runs_response = await async_app_client.get(
-                f"/feedstocks/1/commits/{commit_sha}/check-runs"
+    if title == "Add ABC dataset (missing meta.yaml)":
+        mocker.patch.object(
+            subprocess, "check_output", mock_subprocess_check_output_raises_called_process_error
+        )
+        with pytest.raises(ValueError, match=r"FileNotFoundError: meta.yaml"):
+            response = await async_app_client.post(
+                "/github/hooks/",
+                json=synchronize_request["payload"],
+                headers=synchronize_request["headers"],
             )
+    else:
+        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+        response = await async_app_client.post(
+            "/github/hooks/",
+            json=synchronize_request["payload"],
+            headers=synchronize_request["headers"],
+        )
+        assert response.status_code == 202
 
-            assert expected_check_runs_response["total_count"] == 1
-            for k in expected_check_runs_response["check_runs"][0]:
-                if k not in ["started_at", "completed_at"]:
-                    assert (
-                        expected_check_runs_response["check_runs"][0][k]
-                        == check_runs_response.json()["check_runs"][0][k]
-                    )
+        base_repo_full_name = synchronize_request["payload"]["pull_request"]["base"]["repo"][
+            "full_name"
+        ]
+        if base_repo_full_name.endswith("pangeo-forge.org"):
+            assert "Skipping synchronize for repo" in response.json()["message"]
+        else:
+            if title.lower().startswith("cleanup"):
+                assert response.json() == {
+                    "status": "skip",
+                    "message": "This is an automated cleanup PR. Skipping.",
+                }
+            else:
+                # first assert that the recipe runs were created as expected
+                recipe_runs_response = await async_app_client.get("/recipe_runs/")
+                assert recipe_runs_response.status_code == 200
+                for k in expected_recipe_runs_response[0]:
+                    if k not in ["started_at", "completed_at"]:
+                        assert (
+                            expected_recipe_runs_response[0][k] == recipe_runs_response.json()[0][k]
+                        )
+
+                # then assert that the check runs were created as expected
+                commit_sha = recipe_runs_response.json()[0]["head_sha"]
+                check_runs_response = await async_app_client.get(
+                    f"/feedstocks/1/commits/{commit_sha}/check-runs"
+                )
+
+                assert expected_check_runs_response["total_count"] == 1
+                for k in expected_check_runs_response["check_runs"][0]:
+                    if k not in ["started_at", "completed_at"]:
+                        assert (
+                            expected_check_runs_response["check_runs"][0][k]
+                            == check_runs_response.json()["check_runs"][0][k]
+                        )
