@@ -19,6 +19,10 @@ If you run into any problems with it, you may open an issue there.
 app_metadata = dict(
     title="Pangeo Forge Cloud API",
     description=_description,
+    contact={
+        "name": "Pangeo Forge API Team",
+        "url": "https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues",
+    },
     license_info={
         "name": "Apache 2.0",
         "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
