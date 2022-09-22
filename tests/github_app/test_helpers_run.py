@@ -15,10 +15,21 @@ from pangeo_forge_orchestrator.routers.github_app import run
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, get_mock_github_session
-from .mock_pangeo_forge_runner import mock_subprocess_check_output
+from .mock_pangeo_forge_runner import (
+    mock_subprocess_check_output,
+    mock_subprocess_check_output_raises_called_process_error,
+)
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(
+    params=[
+        dict(
+            feedstock_spec="pangeo-forge/staged-recipes",
+            is_test=True,
+            feedstock_subdir="gpcp",
+        ),
+    ],
+)
 async def run_fixture(
     admin_key,
     async_app_client,
@@ -76,44 +87,42 @@ async def run_fixture(
         db_session.refresh(db_model)
 
     gh_backend_kws = {}
+    gh_backend = _MockGitHubBackend(**gh_backend_kws)
+    mock_gh = get_mock_github_session(gh_backend)(http_session)
 
-    yield (
-        db_model,
-        request.param["feedstock_spec"],
-        request.param["feedstock_subdir"],
-        _MockGitHubBackend(**gh_backend_kws),
-    )
+    with Session(engine) as db_session:
+        run_kws = dict(
+            html_url=f"{request.param['feedstock_spec']}",
+            ref=db_model.head_sha,
+            recipe_run=db_model,
+            feedstock_spec=request.param["feedstock_spec"],
+            feedstock_subdir=request.param["feedstock_subdir"],
+            gh=mock_gh,
+            db_session=db_session,
+        )
+        yield run_kws
+
     # database teardown
     clear_database()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "run_fixture",
-    [
-        dict(
-            feedstock_spec="pangeo-forge/staged-recipes",
-            is_test=True,
-            feedstock_subdir="gpcp",
-        ),
-    ],
-    indirect=True,
-)
+@pytest.mark.parametrize("raises_called_process_error", [True, False])
 async def test_run(
     mocker,
     run_fixture,
+    raises_called_process_error,
 ):
-    recipe_run, feedstock_spec, feedstock_subdir, gh_backend = run_fixture
-    mock_gh = get_mock_github_session(gh_backend)(http_session)
-    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+    run_kws = run_fixture
 
-    with Session(engine) as db_session:
-        await run(
-            html_url=f"{feedstock_spec}",
-            ref=recipe_run.head_sha,
-            recipe_run=recipe_run,
-            feedstock_spec=feedstock_spec,
-            feedstock_subdir=feedstock_subdir,
-            gh=mock_gh,
-            db_session=db_session,
+    if raises_called_process_error:
+        mocker.patch.object(
+            subprocess,
+            "check_output",
+            mock_subprocess_check_output_raises_called_process_error,
         )
+        with pytest.raises(KeyError, match=r"status"):
+            await run(**run_kws)
+    else:
+        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+        await run(**run_kws)
