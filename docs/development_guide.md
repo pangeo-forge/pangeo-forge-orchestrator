@@ -28,8 +28,6 @@ https://pangeo-forge-api-pr-80.herokuapp.com will be broken
    > $ git add secrets/config.review.yaml
    > ```
 
-   > TODO: Note (or fix!) annoying thing where `prettier` re-formats SOPS-encrypted yaml.
-
 ## 6.3 Check the `review` deployment
 
 On the PR discussion thread you should see a notification that the review app deployment is "pending".

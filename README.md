@@ -21,18 +21,13 @@ This repo deploys the backend service for Pangeo Forge Cloud. It provides the da
 
 ## API Documentation
 
-Auto-generated API Documentation for
+API Documentation for the named deployments are available at the following locations:
 
-| Deployment  | API Docs                                  |
-| ----------- | ----------------------------------------- |
-| Prod API    | https://api.pangeo-forge.org/docs         |
-| Staging API | https://api-staging.pangeo-forge.org/docs |
+| Deployment | API Docs                                  |
+| ---------- | ----------------------------------------- |
+| `prod`     | https://api.pangeo-forge.org/docs         |
+| `staging`  | https://api-staging.pangeo-forge.org/docs |
 
 ## Developer Documentation
 
-- [Development Guide](/docs/development_guide.md)
-- [Heroku](/docs/heroku.md)
-- [Migrations](/docs/migrations.md)
-- []
-- [Testing](/docs/testing.md)
--
+For developer documentation, see [`docs/README.md`](/docs/README.md).
