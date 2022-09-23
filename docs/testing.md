@@ -33,3 +33,12 @@ To do so:
 
 5.  Run `python -m alembic upgrade head` to execute alembic migration against the new Postgres `DATABASE_URL`
 6.  `pytest -vx`
+
+- [7 Before merge: automated testing]()
+  - [7.1 Mocking payloads]()
+  - [7.2 Local run]()
+    - [7.2.1 sqlite]()
+    - [7.3.2 postgres]()
+  - [7.3 Containerized run]()
+    - [7.3.1 Starting the containerized services]()
+    - [7.3.2 Testing on the containerized services]()
