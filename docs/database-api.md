@@ -85,3 +85,5 @@ case, it's recommended to review the contents of `scripts/initialize_database.py
 how to edit the database using Python's `requests` library. This code can also be translated to be
 run from the command line with `curl`. And remember, the full API documentation is available at
 http://localhost:8000/docs.
+
+# Manually editing database entries
