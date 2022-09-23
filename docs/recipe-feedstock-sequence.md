@@ -1,0 +1,67 @@
+# Sequence of events: recipe PR to feedstock repo
+
+```mermaid
+sequenceDiagram
+    participant Pangeo Forge Admin
+    participant Contributor
+    participant Staged Recipes Repo
+    participant FastAPI
+    participant Database
+    participant Bakery
+    participant Feedstock Repo
+    participant Frontend Site
+    participant Data User
+
+    Contributor->>Staged Recipes Repo: opens PR
+    Staged Recipes Repo-->>FastAPI: webhook: PR opened
+    FastAPI->>Database: creates `queued` recipe_run(s)
+    FastAPI->>Staged Recipes Repo: updates check run status
+    Contributor->>Staged Recipes Repo: commits to PR
+    Staged Recipes Repo-->>FastAPI: webhook: new commits
+    FastAPI->>Database: creates `queued` recipe_run(s)
+    FastAPI->>Staged Recipes Repo: updates check run status
+    Pangeo Forge Admin->>Staged Recipes Repo: deploys test /run
+    Staged Recipes Repo-->>FastAPI: webhook: issue comment
+    FastAPI->>Database: updates recipe run to `in_progress`
+    FastAPI->>Bakery: deploys test job
+    Bakery-->>FastAPI: reports job status
+    FastAPI->>Database: updates recipe_run with job status
+    FastAPI->>Staged Recipes Repo: reports job status
+    Pangeo Forge Admin->>Staged Recipes Repo: merges PR
+    Staged Recipes Repo-->>FastAPI: webhook: PR merged
+    FastAPI->>Feedstock Repo: creates feedstock repo (empty)
+    FastAPI->>Database: records new feedstock
+    FastAPI->>Feedstock Repo: opens PR w/ recipe.py + meta.yaml
+    FastAPI->>Staged Recipes Repo: deletes PR files
+    FastAPI->>Feedstock Repo: merges PR
+    Feedstock Repo-->>FastAPI: webook: PR merged
+    FastAPI->>Database: creates recipe_run(s)
+    FastAPI->>Feedstock Repo: creates deployment API env for each recipe run
+    FastAPI->>Bakery: deploys prod run(s)
+    Bakery-->>FastAPI: reports job status
+    FastAPI->>Database: updates recipe_run(s) w/ job status
+    FastAPI->>Feedstock Repo: updates deployment API env(s) with job status
+    Data User->>Frontend Site: Browses for data
+    Frontend Site->>FastAPI: queries data
+    FastAPI->>Database: queries data
+    Database-->>FastAPI: returns data
+    FastAPI-->>Frontend Site: returns data
+    Frontend Site-->>Data User: displays data
+    Data User->>Bakery: queries ARCO dataset
+    Bakery-->>Data User: some erroneous data
+    Data User->>Feedstock Repo: opens issue describing error
+    Contributor->>Feedstock Repo: opens PR fixing issue
+    Feedstock Repo-->>FastAPI: webhook: PR opened
+    FastAPI->>Database: creates `queued` recipe_run(s)
+    FastAPI->>Feedstock Repo: updates check run status
+    Contributor->>Feedstock Repo: deploys test /run
+    Feedstock Repo-->>FastAPI: webhook: issue comment
+    FastAPI->>Database: updates recipe run to `in_progress`
+    FastAPI->>Bakery: deploys test job
+    Bakery-->>FastAPI: reports job status
+    FastAPI->>Database: updates recipe_run with job status
+    FastAPI->>Feedstock Repo: reports job status
+    Contributor->>Feedstock Repo: merges PR
+    Feedstock Repo-->>FastAPI: webook: PR merged
+    FastAPI->>FastAPI: repeats prod run -> Data User cycle described above
+```

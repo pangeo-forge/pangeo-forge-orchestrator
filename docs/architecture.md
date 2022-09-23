@@ -1,38 +1,21 @@
 # Architecture
 
-## Instance-level configuration
+A high-level overview of Pangeo Forge Cloud:
 
-- `bakeries/`
-- `secrets/`
-  - `config.${INSTANCE_NAME}.yaml`
-
-## FastAPI Application
-
-- `pangeo_forge_orchestrator/`
-
-## Deployment
-
-- `dataflow-status-monitoring/*`
-- `terraform/*`
-- `migrations/*`
-- `Dockerfile`
-- `requirements.txt`
-- `heroku.yml`
-- `app.json`
-- `scripts.deploy/release.sh`
-- `secrets/`
-  - `dataflow-status-monitoring.json`
-  - `dataflow-job-submission.json`
-- `.sops.yaml`
-
-## Testing
-
-- `tests/`
-- `setup.py`
-- `setup.cfg`
-- `pyproject.toml`
-- `docker-compose.yml`
-
-## Development
-
-- `scripts.develop/*`
+```mermaid
+sequenceDiagram
+    Feedstock Repo-->>GitHub App: event
+    GitHub App-->>FastAPI: webhook
+    FastAPI->>Database: records event
+    FastAPI->>GitHub App: authenticates as
+    GitHub App->>Feedstock Repo: to take action
+    FastAPI->>Bakery: deploys jobs
+    Bakery-->>FastAPI: reports job status
+    FastAPI->>Database: records job status
+    FastAPI->>GitHub App: authenticates as
+    GitHub App->>Feedstock Repo: to report job status
+    pangeo-forge.org-->>FastAPI: requests data
+    FastAPI-->>Database: fetches data
+    Database->>FastAPI: returns data
+    FastAPI->>pangeo-forge.org: returns data
+```
