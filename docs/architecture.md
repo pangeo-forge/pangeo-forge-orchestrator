@@ -1,6 +1,8 @@
 # Architecture
 
-A high-level overview of Pangeo Forge Cloud:
+A high-level representation of Pangeo Forge Cloud is provided below, illustrating relationships of its main components.
+
+**Note**: In the diagram below, the _GitHub App_, _FastAPI_, and _Database_ components are all configured and/or deployed by `pangeo-forge-orchestrator`.
 
 ```mermaid
 sequenceDiagram

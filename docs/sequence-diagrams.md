@@ -1,4 +1,9 @@
-# Sequence of events: recipe PR to feedstock repo
+# Sequence diagrams
+
+The diagrams below illustrate the sequence of events:
+
+1. From `staged-recipes` PR to first production run
+2.
 
 # From `staged-recipes` PR to first production run
 
@@ -86,6 +91,8 @@ sequenceDiagram
     FastAPI->>Feedstock Repo: updates deployment API env(s) with job status
 
 ```
+
+##
 
 ```mermaid
 
