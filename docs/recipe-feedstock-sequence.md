@@ -2,6 +2,7 @@
 
 ```mermaid
 sequenceDiagram
+    %%{init: {'theme':'dark'}}%%
     autonumber
     actor Pangeo Forge Admin
     actor Contributor
