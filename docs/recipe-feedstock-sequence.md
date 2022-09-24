@@ -14,6 +14,7 @@ sequenceDiagram
     participant Frontend Site
     actor Data User
 
+    rect rgb(15, 17, 22)
 
     %% ------------------------
     %% (1) Contributor opens PR
@@ -117,4 +118,6 @@ sequenceDiagram
     Contributor->>Feedstock Repo: merges PR
     Feedstock Repo-->>FastAPI: webook: PR merged
     FastAPI->>FastAPI: repeats prod run -> Data User cycle described above
+
+    end
 ```
