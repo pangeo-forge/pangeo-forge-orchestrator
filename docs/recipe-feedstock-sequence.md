@@ -1,6 +1,4 @@
-# A recipe's journey
-
-## From recipe PR to feedstock repo
+# Sequence of events: recipe PR to feedstock repo
 
 ```mermaid
 sequenceDiagram
@@ -11,6 +9,8 @@ sequenceDiagram
     participant Database
     participant Bakery
     participant Feedstock Repo
+    participant Frontend Site
+    participant Data User
 
     Contributor->>Staged Recipes Repo: opens PR
     Staged Recipes Repo-->>FastAPI: webhook: PR opened
@@ -41,21 +41,6 @@ sequenceDiagram
     Bakery-->>FastAPI: reports job status
     FastAPI->>Database: updates recipe_run(s) w/ job status
     FastAPI->>Feedstock Repo: updates deployment API env(s) with job status
-```
-
-## Data user feedback cycle
-
-```mermaid
-sequenceDiagram
-    participant Contributor
-    participant Staged Recipes Repo
-    participant FastAPI
-    participant Database
-    participant Bakery
-    participant Feedstock Repo
-    participant Frontend Site
-    participant Data User
-
     Data User->>Frontend Site: Browses for data
     Frontend Site->>FastAPI: queries data
     FastAPI->>Database: queries data
