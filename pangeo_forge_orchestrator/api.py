@@ -10,9 +10,7 @@ from .metadata import app_metadata
 from .routers.github_app import github_app_router
 from .routers.model_router import router as model_router
 from .routers.repr import repr_router
-from .routers.security import api_key_router
 from .routers.stats import stats_router
-from .security import create_admin_api_key
 
 app = FastAPI(**app_metadata)
 
@@ -33,7 +31,6 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     maybe_create_db_and_tables()
-    create_admin_api_key()
     http_session.start()
 
 
@@ -45,7 +42,6 @@ def on_shutdown():
 
 
 app.include_router(model_router)
-app.include_router(api_key_router)
 app.include_router(stats_router)
 app.include_router(github_app_router)
 app.include_router(repr_router)
