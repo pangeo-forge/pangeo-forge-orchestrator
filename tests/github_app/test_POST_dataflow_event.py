@@ -14,7 +14,7 @@ from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_se
 @pytest_asyncio.fixture
 async def dataflow_request_fixture(
     webhook_secret,
-    admin_key,
+    api_key,
     async_app_client,
     request,
 ):
@@ -33,7 +33,7 @@ async def dataflow_request_fixture(
     }
 
     # setup database for this test
-    admin_headers = {"X-API-Key": admin_key}
+    admin_headers = {"X-API-Key": api_key}
     bakery_create_response = await async_app_client.post(
         "/bakeries/",
         json={  # TODO: set dynamically

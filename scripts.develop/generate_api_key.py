@@ -1,4 +1,3 @@
-import hashlib
 import os
 import sys
 import uuid
@@ -12,14 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def main(app_name):
     creds_outpath = REPO_ROOT / f"secrets/config.{app_name}.yaml"
 
-    salt = uuid.uuid4().hex
-    raw_key = uuid.uuid4().hex
-    encrypted_key = hashlib.sha256(salt.encode() + raw_key.encode()).hexdigest()
-    keys = {
-        "ENCRYPTION_SALT": salt,
-        "PANGEO_FORGE_API_KEY": raw_key,
-        "ADMIN_API_KEY_SHA256": encrypted_key,
-    }
+    key = {"PANGEO_FORGE_API_KEY": uuid.uuid4().hex}
     if os.path.exists(creds_outpath):
         with open(creds_outpath) as c:
             creds = yaml.safe_load(c)
@@ -27,7 +19,7 @@ def main(app_name):
         creds = {}
 
     with open(creds_outpath, "w") as out:
-        creds["fastapi"] = keys
+        creds["fastapi"] = key
         yaml.dump(creds, out)
 
 

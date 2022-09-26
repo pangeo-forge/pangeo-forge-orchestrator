@@ -219,27 +219,3 @@ recipe_run_models = MultipleModels(
 )
 
 MODELS = {"recipe_run": recipe_run_models, "bakery": bakery_models, "feedstock": feedstock_models}
-
-
-class APIKeyBase(SQLModel):
-    is_active: bool = Field(default=True)
-    is_admin: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.now)
-
-
-class APIKeyCreate(SQLModel):
-    is_admin: bool = Field(default=False)
-
-
-class APIKeyRead(APIKeyBase):
-    pass
-
-
-# keeping api keys separate because they are special
-class APIKey(APIKeyBase, table=True):  # type: ignore
-    # encrypted with SHA-256
-    encrypted_key: str = Field(primary_key=True)
-
-
-class APIKeyNew(APIKeyBase):
-    key: str
