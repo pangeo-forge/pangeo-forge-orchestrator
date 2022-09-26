@@ -19,7 +19,7 @@ from .mock_pangeo_forge_runner import (
 async def synchronize_request_fixture(
     webhook_secret,
     async_app_client,
-    admin_key,
+    api_key,
     request,
     staged_recipes_pulls_files,
     app_hook_config_url,
@@ -50,7 +50,7 @@ async def synchronize_request_fixture(
     request = {"headers": headers, "payload": payload}
 
     # setup database for this test
-    admin_headers = {"X-API-Key": admin_key}
+    admin_headers = {"X-API-Key": api_key}
     bakery_create_response = await async_app_client.post(
         "/bakeries/",
         json={  # TODO: set dynamically

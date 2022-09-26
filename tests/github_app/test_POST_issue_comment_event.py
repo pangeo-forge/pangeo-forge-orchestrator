@@ -14,7 +14,7 @@ from .mock_pangeo_forge_runner import mock_subprocess_check_output
 async def issue_comment_request_fixture(
     webhook_secret,
     async_app_client,
-    admin_key,
+    api_key,
     request,
     staged_recipes_pulls_files,
 ):
@@ -44,7 +44,7 @@ async def issue_comment_request_fixture(
     event_request = {"headers": headers, "payload": payload}
 
     # setup database
-    admin_headers = {"X-API-Key": admin_key}
+    admin_headers = {"X-API-Key": api_key}
     bakery_create_response = await async_app_client.post(
         "/bakeries/",
         json={  # TODO: set dynamically
