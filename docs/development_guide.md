@@ -840,3 +840,30 @@ file, as described above. If you believe the issue is not with the review app cr
 ## 6.6 Initialize `review` database
 
 ## 6.7 Trigger a webhook
+
+## manually editing the database
+
+```python
+import os
+import json
+import requests
+from pangeo_forge_orchestrator.config import get_fastapi_config
+
+os.environ["PANGEO_FORGE_DEPLOYMENT"] = "pforge-pr-136"
+app_address = "https://pforge-pr-136.herokuapp.com"
+headers = {
+    "X-API-Key": get_fastapi_config().PANGEO_FORGE_API_KEY,
+    "accept": "application/json",
+    "Content-Type": "application/json",
+}
+
+data = {"spec": "pangeo-forge/staged-recipes"}
+
+response = requests.post(
+    f"{app_address}/feedstocks/",
+    headers=headers,
+    data=json.dumps(data),
+)
+response.status_code  # --> 200
+response.json()  # -->  {'spec': 'pangeo-forge/staged-recipes', 'provider': 'github', 'id': 1}
+```
