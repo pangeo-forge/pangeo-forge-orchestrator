@@ -22,7 +22,8 @@ s3fs==2022.8.2
 # these will eventually be brought into the recipe parsing container dynamically
 # from requirements.txt, environment.yml, etc. For now, we are hardcoding so that
 # we can work on the feedstocks that require them.
-pangeo-forge-esgf
+pangeo-forge-esgf==0.0.3
+python-cmr==0.7.0
 
 # for `/repr/xarray/` route
 zarr
