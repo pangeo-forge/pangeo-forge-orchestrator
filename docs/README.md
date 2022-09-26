@@ -6,7 +6,7 @@ For simplicity, these docs are a collection of `.md` files. The easiest way to n
 
 - [What is Pangeo Forge Orchestrator?](#1-what-is-pangeo-forge-orchestrator)
 
-# 1 What is Pangeo Forge Orchestrator?
+# What is Pangeo Forge Orchestrator?
 
 ```mermaid
 flowchart
@@ -41,23 +41,26 @@ flowchart
 
 ```
 
+In the following diagram, participants denoted with stars are deployed from `pangeo-forge-orchestrator`:
+
 ```mermaid
 sequenceDiagram
-    Feedstock Repo-->>GitHub App: event
-    GitHub App-->>FastAPI: webhook
-    FastAPI->>Database: records event
-    FastAPI->>GitHub App: authenticates as
-    GitHub App->>Feedstock Repo: to take action
-    FastAPI->>Bakery: deploys jobs
-    Bakery->>Status Monitoring: reports job status
-    Status Monitoring-->>FastAPI: forwards job status
-    FastAPI->>Database: records job status
-    FastAPI->>GitHub App: authenticates as
-    GitHub App->>Feedstock Repo: to report job status
-    pangeo-forge.org-->>FastAPI: requests data
-    FastAPI-->>Database: fetches data
-    Database->>FastAPI: returns data
-    FastAPI->>pangeo-forge.org: returns data
+
+    Feedstock Repo-->>GitHub App #9733;: event
+    GitHub App #9733;-->>FastAPI #9733;: webhook
+    FastAPI #9733;->>Database #9733;: records event
+    FastAPI #9733;->>GitHub App #9733;: authenticates as
+    GitHub App #9733;->>Feedstock Repo: to take action
+    FastAPI #9733;->>Bakery: deploys jobs
+    Bakery->>Status Monitoring #9733;: reports job status
+    Status Monitoring #9733;-->>FastAPI #9733;: forwards job status
+    FastAPI #9733;->>Database #9733;: records job status
+    FastAPI #9733;->>GitHub App #9733;: authenticates as
+    GitHub App #9733;->>Feedstock Repo: to report job status
+    pangeo-forge.org-->>FastAPI #9733;: requests data
+    FastAPI #9733;-->>Database #9733;: fetches data
+    Database #9733;->>FastAPI #9733;: returns data
+    FastAPI #9733;->>pangeo-forge.org: returns data
 ```
 
 # -------------
