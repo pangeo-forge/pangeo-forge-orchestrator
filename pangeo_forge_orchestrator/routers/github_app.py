@@ -546,7 +546,10 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
     #   )
     #   ```
     # Finally, dataflow job names *have to* start with a lowercase letter, so prepending "a":
-    return f"a{encoded_webhook_url_plus_recipe_run_id}"
+    job_name = f"a{encoded_webhook_url_plus_recipe_run_id}"
+    if len(job_name) > 64:
+        raise ValueError(f"{len(job_name) = } exceeds max dataflow job name len of 64 chars.")
+    return job_name
 
 
 async def run(
