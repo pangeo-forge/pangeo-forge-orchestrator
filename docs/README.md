@@ -155,33 +155,53 @@ All deployments require:
 
 2. `PANGEO_FORGE_DEPLOYMENT` env var. The deployment name, e.g. `pforge-pr-136`, or `pangeo-forge-staging`.
 3. AWS CLI authentication. The AWS account must have read access to the `pangeo-forge` AWS project KMS.
-4. `DATABASE_URL` env var. A valid SQLAlchemy URI pointing to a SQLite (for local deployments) or Postgres
-   (for all other deployments) database.
+4. `DATABASE_URL` env var. A valid SQLAlchemy URI pointing to a SQLite (for local deployments) or
+   Postgres (for all other deployments) database.
 
 # How to use SOPS
 
+Credentials for each deployment are commited to the `pangeo-forge-orchestrator` repo as encrypted YAML.
+Committing encrypted secrets directly to this repo allows for transparent and version-controlled
+management of credentials. [SOPS](https://github.com/mozilla/sops) is used to encrypt and decrypt these
+files. The [pre-commit-hook-ensure-sops](https://github.com/yuvipanda/pre-commit-hook-ensure-sops) and `gitleaks` hooks
+installed in this repo's `.pre-commit-config.yaml` ensure that we don't accidentally commit unencrypted
+secrets. For this reason, please always make sure that
+[**pre-commit is installed**](https://pre-commit.com/#quick-start) in your local development environment.
+
+The `sops.yaml` config in this repo instructs SOPS to use a particular pair of AWS KMS keys for
+encryption and decryption of secrets. Members of the `pangeo-forge` AWS project with access to KMS
+can use these keys for encrypt/decrypt operations.
+
+## Setup
+
+1. Make sure you are signed into the AWS CLI with `aws configure`.
+2. Install SOPS. On MacOS, the easiest way is probably `brew install sops`.
+
 ## Encrypt
 
+```console
+$ sops -d -i secrets/${filename}
+```
+
 ## Decrypt
+
+```console
+$ sops -e -i secrets/${filename}
+```
 
 # The `local` deployment
 
 ## Secret config
 
-Before starting work on your PR, you will need a local deployment of the application to work with. In
-order to run this deployment, you will need to generate credentials for FastAPI.
-
-Each deployment requires FastAPI credentials. These are the creds that are used to authorize protected
-actions on such as creating, patching, and deleting entries in the database.
-
-To generate these credentials for the `local` deployment, from the repo root, run:
+To generate these FastAPI credentials for the `local` deployment, from the repo root, run:
 
 ```console
-$ python3 scripts.develop/generate_api_key.py local
+$ python3 scripts.develop/generate_api_key.py local ${Your GitHub Username}
 ```
 
-If you look at `secrets/config.local.yaml` now, you should see that creds have been added to it under the
-`fastapi` heading.
+Now, `secrets/config.pforge-local-${Your GitHub Username}.yaml` should contain an api key.
+
+Next, add GitHub App creds to
 
 ## Database
 
@@ -223,6 +243,8 @@ a local Postgres server as a final check. To do so:
 
 5.  Run `python -m alembic upgrade head` to execute alembic migration against the new Postgres `DATABASE_URL`
 6.  `pytest -vx`
+
+#
 
 # Heroku deployments
 
@@ -388,13 +410,6 @@ For more on hash signature verification, see:
 > https://docs.github.com/en/github-ae@latest/rest/guides/best-practices-for-integrators#secure-payloads-delivered-from-github
 
 ## Secrets
-
-Credentials for each deployment are commited to the `pangeo-forge-orchestrator` repo as encrypted YAML.
-Committing encrypted secrets directly to this repo allows for transparent and version-controlled
-management of credentials. [SOPS](https://github.com/mozilla/sops) is used to encrypt and decrypt these
-files. The [pre-commit-hook-ensure-sops](https://github.com/yuvipanda/pre-commit-hook-ensure-sops) hook
-installed in this repo's `.pre-commit-config.yaml` ensures that we don't accidentally commit unencrypted
-secrets. For this reason, please always make sure that [**pre-commit is installed**](https://pre-commit.com/#quick-start) in your local development environment.
 
 # Testing
 
