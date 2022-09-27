@@ -218,6 +218,34 @@ Your `GITHUB_PAT` should have repo scope, and you will also need to be a member 
 
 The script
 
+## Database
+
+The easiest way to set the `DATABASE_URL` env var is by using a sqlite database, as follows:
+
+```console
+$ export DATABASE_URL=sqlite:///`pwd`/database.sqlite
+```
+
+The file `database.sqlite` does not need to exist before you start the application; the application will
+create it for you on start-up. Note that of the four deployment types , the `local` deployment is the only once which can use sqlite. All of the others use postgres:
+
+|          | local | review | staging | prod |
+| -------- | ----- | ------ | ------- | ---- |
+| sqlite   | ✅    | ✖️     | ✖️      | ✖️   |
+| postgres | ✅    | ✅     | ✅      | ✅   |
+
+As noted by this table, the `local` deployment _can_ also run with postgres. This may be useful for
+debugging issues related to postgres specifically. (The sqlite and postgres idioms, while similar, are
+different enough that code developed _only_ against sqlite can sometimes fail against postgres.) To use a local Postgres server:
+
+1. Install https://postgresapp.com
+2. Start the database using the app
+3. Run `echo "CREATE DATABASE ${Your Database Name};" | psql` to create a database
+4. Set `export DATABASE_URL=postgresql://localhost/${Your Database Name}`
+5. If your working branch changes the SQLModel models, generate a new database version
+   according to [Database: Migrations with Alembic](#database-migrations-with-alembic)
+6. Run `python -m alembic upgrade head` to run migrations against the Postgres `DATABASE_URL`
+
 ## Proxy
 
 > **Note**: If you do not plan to work on the `/github` routes, you can skip this.
@@ -266,36 +294,8 @@ If this script succeeds, you will get a response to stdout such as:
 
 where the `"url"` field should be updated to refect the `PROXY_URL` you passed to the script.
 
-🎊 Your GitHub App will now POST webhooks to the specified proxy url. You can change your proxy url at any
+Your GitHub App will now POST webhooks to the specified proxy url. You can change your proxy url at any
 time. If you do, repeat this step to assign the new url to your GitHub App.
-
-## Database
-
-The easiest way to set the `DATABASE_URL` env var is by using a sqlite database, as follows:
-
-```console
-$ export DATABASE_URL=sqlite:///`pwd`/database.sqlite
-```
-
-The file `database.sqlite` does not need to exist before you start the application; the application will
-create it for you on start-up. Note that of the four deployment types , the `local` deployment is the only once which can use sqlite. All of the others use postgres:
-
-|          | local | review | staging | prod |
-| -------- | ----- | ------ | ------- | ---- |
-| sqlite   | ✅    | ✖️     | ✖️      | ✖️   |
-| postgres | ✅    | ✅     | ✅      | ✅   |
-
-As noted by this table, the `local` deployment _can_ also run with postgres. This may be useful for
-debugging issues related to postgres specifically. (The sqlite and postgres idioms, while similar, are
-different enough that code developed _only_ against sqlite can sometimes fail against postgres.) To use a local Postgres server:
-
-1. Install https://postgresapp.com
-2. Start the database using the app
-3. Run `echo "CREATE DATABASE ${Your Database Name};" | psql` to create a database
-4. Set `export DATABASE_URL=postgresql://localhost/${Your Database Name}`
-5. If your working branch changes the SQLModel models, generate a new database version
-   according to [Database: Migrations with Alembic](#database-migrations-with-alembic)
-6. Run `python -m alembic upgrade head` to run migrations against the Postgres `DATABASE_URL`
 
 ## Start the server
 
@@ -333,12 +333,17 @@ Pipeline main link: [pangeo-forge-api-flow](https://dashboard.heroku.com/pipelin
 
 ## Relevant files
 
-- `Dockerfile` -
-- `requirements.txt` - used to build the app's environment. Versions are pinned for stability.
-  We will need to manually update these on a regular schedule.
-- `heroku.yml` -
-- `app.json` - more configuration, including
-- `scripts.deploy/release.sh` -
+- `Dockerfile` - The FastAPI worker image.
+- `requirements.txt` - Dependencies to be pip-installed in FastAPI image to build the app's environment. Versions are pinned for stability. We will need to manually update these on a regular schedule.
+- `heroku.yml` - Configures Heroku container stack.
+- `app.json` - More configuration, including `PANGEO_FORGE_DEPLOYMENT` env var for review apps.
+- `scripts.deploy/release.sh` - The release script used for all Heroku deployments. This script:
+  1.  Runs database migrations with alembic
+  2.  Runs terraform (in the deployment specific terraform env) to ensure that status monitoring
+      infra exists on dataflow for the current release. If
+
+> **Note**: Heroku's container stack is not supported on Heroku CI. Therefore we use
+> `docker-compose.yml` for [Testing](#testing) this stack in a GitHub Workflow.
 
 ## DNS
 
@@ -375,6 +380,19 @@ It app is configured with a `heroku-postgresql:standard-0` add-on.
 ([Database control panel](https://data.heroku.com/datastores/bcd81fa2-0601-4882-b439-d5cefc63dfe3))
 
 # Debugging Docker issues
+
+To debug Docker issues, such as container build issues, you can stand up a close facsimile of the
+production stack by running, from the repo root:
+
+```console
+$ AWS_ACCESS_KEY_ID=${Your AWS access key} \
+AWS_SECRET_ACCESS_KEY=${Your AWS secret} \
+PANGEO_FORGE_DEPLOYMENT=pforge-local-${Your GitHub username} \
+docker-compose up --build
+```
+
+Here, the AWS credentials are used to authenticate with the AWS CLI at container start time, and the
+which allows the container to decrypt your local creds on startup.
 
 # Database: migrations with Alembic
 
