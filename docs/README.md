@@ -439,8 +439,7 @@ PANGEO_FORGE_DEPLOYMENT=pforge-local-${Your GitHub username} \
 docker-compose up --build
 ```
 
-Here, the AWS credentials are used to authenticate with the AWS CLI at container start time, and the
-which allows the container to decrypt your local creds on startup.
+Here, the AWS credentials are used to authenticate with the AWS CLI at container start time, which allows the container to decrypt your local creds on startup.
 
 # Database: migrations with Alembic
 
