@@ -1,4 +1,3 @@
-import hashlib
 import os
 import secrets
 import uuid
@@ -114,13 +113,10 @@ def webhook_secret():
 
 
 @pytest.fixture(scope="session")
-def mock_config_kwargs(webhook_secret, private_key, api_keys):
-    salt, raw_key, encrypted_key = api_keys
+def mock_config_kwargs(webhook_secret, private_key, api_key):
     return {
         "fastapi": {
-            "ADMIN_API_KEY_SHA256": encrypted_key,
-            "ENCRYPTION_SALT": salt,
-            "PANGEO_FORGE_API_KEY": raw_key,
+            "PANGEO_FORGE_API_KEY": api_key,
         },
         "github_app": {
             "id": 1234567,
@@ -232,17 +228,8 @@ def clear_database():
 
 
 @pytest.fixture(scope="session")
-def api_keys():
-    salt = uuid.uuid4().hex
-    raw_key = uuid.uuid4().hex
-    encrypted_key = hashlib.sha256(salt.encode() + raw_key.encode()).hexdigest()
-    return salt, raw_key, encrypted_key
-
-
-@pytest.fixture(scope="session")
-def admin_key(api_keys):
-    _, raw_key, _ = api_keys
-    return raw_key
+def api_key():
+    return uuid.uuid4().hex
 
 
 @pytest.fixture
@@ -264,9 +251,9 @@ def fastapi_test_crud_client(session):
 
 
 @pytest.fixture
-def fastapi_test_crud_client_authorized(session, admin_key):
+def fastapi_test_crud_client_authorized(session, api_key):
     with TestClient(app) as fastapi_test_client:
-        return FastAPITestClientCRUD(fastapi_test_client, api_key=admin_key)
+        return FastAPITestClientCRUD(fastapi_test_client, api_key=api_key)
 
 
 # alias

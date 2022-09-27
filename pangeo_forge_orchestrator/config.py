@@ -8,8 +8,6 @@ from pydantic import BaseModel, Extra, SecretStr
 
 
 class FastAPIConfig(BaseModel):
-    ADMIN_API_KEY_SHA256: str
-    ENCRYPTION_SALT: str
     PANGEO_FORGE_API_KEY: str
 
 

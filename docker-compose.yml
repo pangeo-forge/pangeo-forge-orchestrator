@@ -16,8 +16,6 @@ services:
       # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
       # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
       DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
-      # TODO: variablize this so others can use with their own local config
-      PANGEO_FORGE_DEPLOYMENT: 'pforge-local-cisaacstern'
       # Get the project_id dynamically after dataflow key file is decrypted in entrypoint.
       # Python command for parsing JSON is set as env var because putting it directly in
       # entrypoint is too many layers of nested quotation marks.

@@ -63,8 +63,8 @@ async def test_get_all_deliveries(
 
 
 @pytest_asyncio.fixture
-async def feedstock_deliveries_fixture(admin_key, async_app_client, app_hook_deliveries):
-    admin_headers = {"X-API-Key": admin_key}
+async def feedstock_deliveries_fixture(api_key, async_app_client, app_hook_deliveries):
+    admin_headers = {"X-API-Key": api_key}
     feedstock_create_response = await async_app_client.post(
         "/feedstocks/",
         json={"spec": "pangeo-forge/staged-recipes"},
@@ -125,9 +125,9 @@ async def test_get_delivery(
 
 
 @pytest_asyncio.fixture
-async def check_run_create_kwargs(admin_key, async_app_client):
+async def check_run_create_kwargs(api_key, async_app_client):
     # setup database
-    admin_headers = {"X-API-Key": admin_key}
+    admin_headers = {"X-API-Key": api_key}
     fstock_response = await async_app_client.post(
         "/feedstocks/",
         json={"spec": "pangeo-forge/staged-recipes"},  # TODO: set dynamically

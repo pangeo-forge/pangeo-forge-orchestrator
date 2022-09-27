@@ -69,7 +69,7 @@ async def pr_merged_request_fixture(
     staged_recipes_pulls_files,
     gpcp_feedstock_pulls_files,
     frontend_pulls_files,
-    admin_key,
+    api_key,
     async_app_client,
 ):
 
@@ -101,7 +101,7 @@ async def pr_merged_request_fixture(
         payload["pull_request"].update({"merge_commit_sha": "654321qwerty0987"})
 
         # staged-recipes merges don't need this database state
-        admin_headers = {"X-API-Key": admin_key}
+        admin_headers = {"X-API-Key": api_key}
         bakery_create_response = await async_app_client.post(
             "/bakeries/",
             json={  # TODO: set dynamically

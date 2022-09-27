@@ -31,12 +31,12 @@ from .mock_pangeo_forge_runner import (
     ],
 )
 async def run_fixture(
-    admin_key,
+    api_key,
     async_app_client,
     request,
 ):
 
-    admin_headers = {"X-API-Key": admin_key}
+    admin_headers = {"X-API-Key": api_key}
     bakery_create_response = await async_app_client.post(
         "/bakeries/",
         json={  # TODO: set dynamically
