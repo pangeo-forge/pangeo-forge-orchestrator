@@ -444,22 +444,6 @@ Webhooks are POSTed to the `/github/hooks/` route. On a public deployment of the
 forwarded to this route by the proxy service. The handler for the `/github/hooks/` route is a function defined
 in `/pangeo_forge_orchestrator/routers/github_app.py`.
 
-### 3.6.1 Hash signature verification
-
-Every webhook received from GitHub comes with a hash signature which certifies that it was actually sent by
-GitHub (and not a hostile actor impersonating GitHub). The first thing that the `/github/hooks/` route
-handler does after receiving a webhook is to verify this hash signature. Webhooks with a missing or incorrect
-hash signature are rejected, and an error code is returned to the sender.
-
-> 💡 **Side note**: These hash signatures are another reason why receiving payloads directly from the _real_
-> GitHub App is helpful for development. If we attempt to simulate payloads ourselves, we'd either need to
-> disable hash signature verification during development, or generate hash signatures for every simulated
-> payload. I've tried both of these approaches, and while possible, both options are rather cumbersome.
-
-For more on hash signature verification, see:
-
-> https://docs.github.com/en/github-ae@latest/rest/guides/best-practices-for-integrators#secure-payloads-delivered-from-github
-
 ### 3.6.2 Checking event and action types
 
 After the hash signature is verified, the event and action types (passed in the request header and body,
