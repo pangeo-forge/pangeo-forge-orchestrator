@@ -179,13 +179,13 @@ can use these keys for encrypt/decrypt operations.
 ## Encrypt
 
 ```console
-$ sops -d -i secrets/${filename}
+$ sops -e -i secrets/${filename}
 ```
 
 ## Decrypt
 
 ```console
-$ sops -e -i secrets/${filename}
+$ sops -d -i secrets/${filename}
 ```
 
 # The `local` deployment
