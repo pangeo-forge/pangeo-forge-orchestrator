@@ -1,33 +1,43 @@
 Welcome to the `pangeo-forge-orchestrator` developer docs.
 
-**Prerequisites**: In order to work on every aspect of infrastructure deployed by this repo, you
-will need to be a member of the following organizations/teams:
+We welcome anyone to contribute by opening issues on this repo. To contribute
+code to this repo, you will need membership in:
 
-- GitHub `pangeo-forge` organization
-- GitHub `pforgetest` organization
-- Heroku `pangeo-forge` team
 - AWS `pangeo-forge` team (with KMS permissions)
-- GCP `pangeo-forge-4967` project (optional; there's a lot that can be accomplished
-  without membership here)
+- Heroku `pangeo-forge` team
+- GitHub `pangeo-forge` org
+- GitHub `pforgetest` org
+- GCP `pangeo-forge-4967` project
 
-Over time, we aim to lower the barrier of credentials required to contribute this repo.
+Over time, we aim to establish a pathway for contributors
+external to the above-listed teams to contribute code to this repository.
 
 # Table of Contents
 
-- [What is Pangeo Forge Orchestrator?](#what-is-pangeo-forge-orchestrator)
-- [Deployments: overview](#deployments-overview)
-  - [Naming](#naming)
-  - [Resource locations](#resource-locations)
-  - [Requirements](#requirements)
-- [The local deployment](#the-local-deployment)
-- [Heroku deployments](#heroku-deployments)
-  - [review](#review)
-  - [staging](#staging)
-  - [prod](#prod)
-- [Database migrations]()
-- [Detailed sequence diagrams](#updating-the-feedstock-repository)
-  - [From staged-recipes PR to first prod run](#from-staged-recipes-pr-to-first-production-run)
-  - [Updating the feedstock repository](#updating-the-feedstock-repository)
+- [What is Pangeo Forge Orchestrator?](#what-is-pangeo-forge-orchestrator) - Introduces the four
+  components deployed and/or configured by this repo, and their relationship to other components of
+  Pangeo Forge Cloud.
+- [Deployments: overview](#deployments-overview) - General presentation of the four deployment types,
+  including naming format, resource locations for each deployment stage, and common requirements.
+- [How to use SOPS](#how-to-use-sops) - Using SOPS to encrypt/decrypt repo secrets.
+- [The local deployment](#the-local-deployment) - Setup a local deployment, with optional
+  proxy server.
+- [Heroku deployments](#heroku-deployments) - Overview of Heroku configuration and details
+  on how to deploy each of the three Heroku deployments (review, staging, and prod).
+- [Debugging Docker issues](#debugging-docker-issues) - Use docker-compose to debug Docker builds.
+- [Database: migrations with Alembic](#database-migrations-with-alembic) - Generating new database
+  versions automatically.
+- [Database: manual edits](#database-manual-edits)
+- [Bakeries: `pangeo-forge-runner` config](#bakeries-pangeo-forge-runner-config) - Configure named
+  compute & storage backends.
+- [Bakeries: job status monitoring](#bakeries-job-status-monitoring) - This is how the FastAPI app
+  knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
+- [Security](#security) - Some notes on security.
+- [Testing](#testing) - Automated testing in both local envs and production container contexts.
+- [GitHub App: best practices](#github-app-best-practices)
+- [GitHub App: manual API calls](#github-app-manual-api-calls)
+- [History & roadmap](#history--roadmap)
+- [Detailed sequence diagrams](#detailed-sequence-diagrams) -
 
 # What is Pangeo Forge Orchestrator?
 
@@ -141,6 +151,8 @@ All deployments require:
 3. To be logged into the
 4. `DATABASE_URL`
 
+# How to use SOPS
+
 # The `local` deployment
 
 ## Secret config
@@ -215,15 +227,16 @@ Heroku configuation:
 
 Pipeline main link: [pangeo-forge-api-flow](https://dashboard.heroku.com/pipelines/17cc0239-494f-4a68-aa75-3da7c466709c) (membership in Heroku `pangeo-forge` group required for access)
 
-### Relevant files
+## Relevant files
 
 - `Dockerfile` -
 - `requirements.txt` - used to build the app's environment. Versions are pinned for stability.
   We will need to manually update these on a regular schedule.
 - `heroku.yml` -
 - `app.json` - more configuration, including
+- `scripts.deploy/release.sh` -
 
-### DNS
+## DNS
 
 DNS is managed at https://dns.he.net/ under Ryan's account.
 It was configured following the [Heroku custom domains docs](https://devcenter.heroku.com/articles/custom-domains).
@@ -257,7 +270,9 @@ This is currently the only deployment configured in Heroku.
 It app is configured with a `heroku-postgresql:standard-0` add-on.
 ([Database control panel](https://data.heroku.com/datastores/bcd81fa2-0601-4882-b439-d5cefc63dfe3))
 
-# Database migrations with Alembic
+# Debugging Docker issues
+
+# Database: migrations with Alembic
 
 This application is configured to use Alembic database migrations.
 The configuration was pieced together from the following resources:
@@ -313,6 +328,12 @@ when we want to migrate.
 If the migration is complex or ambiguous, the migration script might have to be
 tweaked manually.
 
+# Database: manual edits
+
+# Bakeries: `pangeo-forge-runner` config
+
+# Bakeries: job status monitoring
+
 # Security
 
 ## Database API routes
@@ -365,6 +386,10 @@ installed in this repo's `.pre-commit-config.yaml` ensures that we don't acciden
 secrets. For this reason, please always make sure that [**pre-commit is installed**](https://pre-commit.com/#quick-start) in your local development environment.
 
 # Testing
+
+# GitHub App: best practices
+
+# GitHub App: manual API calls
 
 # History & roadmap
 
@@ -500,30 +525,3 @@ sequenceDiagram
     FastAPI->>FastAPI: repeats prod run -> Data User cycle described above
 
 ```
-
-# -------------
-
-## Overview
-
-- [roadmap](roadmap.md) - A look at what's to come.
-- [security](security.md) - How secrets are handled here.
-
-## Application
-
-The FastAPI app deployed from this repo serves two primary functions: to interface with a postgres database, and to interface with GitHub. For details of each of these roles, see:
-
-- [database-api](database-api.md) - Details on database configuration and interface.
-- [github-app](github-app.md) - Details on the GitHub App integration.
-
-Instructions
-
-- [deploy-local](deploy-local.md) -
-- [deploy-heroku](deploy-heroku.md) -
-
-Each
-
-- [dataflow-status-monitoring](dataflow-status-monitoring.md)
-
-## Testing
-
-- [testing](testing.md)
