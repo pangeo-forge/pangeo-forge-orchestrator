@@ -22,7 +22,7 @@ def xarray(
     try:
 
         with xr.open_dataset(url, engine="zarr", chunks={}) as ds:
-            html = ds._repr_html_().strip()
+            html = ds._repr_html_().strip().encode("utf-8", "replace").decode("utf-8")
 
         del ds
 
