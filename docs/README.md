@@ -193,6 +193,8 @@ $ sops -e -i secrets/${filename}
 
 ## Secret config
 
+### FastAPI
+
 To generate these FastAPI credentials for the `local` deployment, from the repo root, run:
 
 ```console
@@ -201,23 +203,82 @@ $ python3 scripts.develop/generate_api_key.py local ${Your GitHub Username}
 
 Now, `secrets/config.pforge-local-${Your GitHub Username}.yaml` should contain an api key.
 
-Next, add GitHub App creds to
+### GitHub App
+
+> **Note**: If you do not plan to work on the `/github` routes, you can skip this.
+
+Add GitHub App creds to your secret config with:
+
+```console
+$ GITHUB_PAT=${Your GitHub PAT} python3 scripts.develop/new_github_app.py ${Your GitHub Username} local
+```
+
+Your `GITHUB_PAT` should have repo scope, and you will also need to be a member of the
+`pforgetest` GitHub organization.
+
+The script
+
+## Proxy
+
+> **Note**: If you do not plan to work on the `/github` routes, you can skip this.
+
+```mermaid
+sequenceDiagram
+    Feedstock Repo-->>GitHub App: event
+    GitHub App-->>Proxy Service: webhook
+    Proxy Service-->>FastAPI: webhook
+    FastAPI->>Database: records event
+    FastAPI->>GitHub App: authenticates as
+    GitHub App->>Feedstock Repo: to take action
+```
+
+Navigate to https://smee.io/ and click **Start a new channel**. Smee will generate a your proxy url for
+you, which will look something like this: https://smee.io/pGKLaDu6CJwiBjJU.
+
+> Smee is _only a webhook forwarding service_, therefore you do not append the `/github/hooks/` route to
+> the proxy url; this route is specified by the `--path` option when starting the `smee` client.
+
+Assign your smee proxy as, e.g.:
+
+```console
+$ export PROXY_URL=https://smee.io/pGKLaDu6CJwiBjJU
+```
+
+Navigating to your smee proxy url in a browser will provide you instructions for installing the smee
+command line utility. Install it, then start the smee client with:
+
+```console
+$ smee -u $PROXY_URL -p 8000 --path /github/hooks/
+```
+
+where `-p` is the localhost port you plan to serve FastAPI on, and `--path` is the route to which GitHub
+App webhooks are posted.
+
+```console
+$ python3 scripts/update_hook_url.py local $PROXY_URL
+```
+
+If this script succeeds, you will get a response to stdout such as:
+
+```
+200 {"content_type":"json","secret":"********","url":"https://smee.io/pGKLaDu6CJwiBjJU","insecure_ssl":"0"}
+```
+
+where the `"url"` field should be updated to refect the `PROXY_URL` you passed to the script.
+
+🎊 Your GitHub App will now POST webhooks to the specified proxy url. You can change your proxy url at any
+time. If you do, repeat this step to assign the new url to your GitHub App.
 
 ## Database
 
-You will not be able to start your `local` dev server without first setting the `DATABASE_URL` env
-variable, which tells the application where to connect to the database.
-
-The easiest way to do this is by using a sqlite database, as follows:
+The easiest way to set the `DATABASE_URL` env var is by using a sqlite database, as follows:
 
 ```console
 $ export DATABASE_URL=sqlite:///`pwd`/database.sqlite
 ```
 
 The file `database.sqlite` does not need to exist before you start the application; the application will
-create it for you on start-up. Note that of the four deployments described in the
-[Deployment Lifecycle](#1-deployment-lifecycle) section above, the `local` deployment is the only once which
-can use sqlite. All of the others use postgres:
+create it for you on start-up. Note that of the four deployment types , the `local` deployment is the only once which can use sqlite. All of the others use postgres:
 
 |          | local | review | staging | prod |
 | -------- | ----- | ------ | ------- | ---- |
@@ -226,25 +287,35 @@ can use sqlite. All of the others use postgres:
 
 As noted by this table, the `local` deployment _can_ also run with postgres. This may be useful for
 debugging issues related to postgres specifically. (The sqlite and postgres idioms, while similar, are
-different enough that code developed _only_ against sqlite can sometimes fail against postgres.)
+different enough that code developed _only_ against sqlite can sometimes fail against postgres.) To use a local Postgres server:
 
-All Heroku deployments run with a Postgres server. Postgres implements certain features not present in
-SQLite. As such, after your local tests passes against the SQLite database, you may want to test against
-a local Postgres server as a final check. To do so:
+1. Install https://postgresapp.com
+2. Start the database using the app
+3. Run `echo "CREATE DATABASE ${Your Database Name};" | psql` to create a database
+4. Set `export DATABASE_URL=postgresql://localhost/${Your Database Name}`
+5. If your working branch changes the SQLModel models, generate a new database version
+   according to [Database: Migrations with Alembic](#database-migrations-with-alembic)
+6. Run `python -m alembic upgrade head` to run migrations against the Postgres `DATABASE_URL`
 
-1.  Install https://postgresapp.com
-2.  Start the database using the app
-3.  Run `echo "CREATE DATABASE test_db;" | psql` to create a database
-4.  Set `export DATABASE_URL=postgresql://localhost/test_db`
+## Start the server
 
-    > If you are working on a PR that includes changes to `pangeo_forge_orchestrator.models`, you may
-    > need to generate a new alembic migration version before proceeding to Step 4. Refer to **Running
-    > Migrations** above for details.
+If you have not already, in a clean Python 3.9 env, from the repo root run:
 
-5.  Run `python -m alembic upgrade head` to execute alembic migration against the new Postgres `DATABASE_URL`
-6.  `pytest -vx`
+```console
+$ pip install -e '.[dev]'
+```
 
-#
+to install the app dependencies. The from the repo root, run:
+
+```console
+$ uvicorn pangeo_forge_orchestrator.api:app --reload --reload-dir=`pwd`/pangeo_forge_orchestrator
+```
+
+to start the dev server with hot reloads.
+
+## Install your GitHub App in `pforgetest`
+
+> **Note**: If you do not plan to work on the `/github` routes, you can skip this.
 
 # Heroku deployments
 
