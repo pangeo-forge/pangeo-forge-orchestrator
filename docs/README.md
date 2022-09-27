@@ -539,13 +539,91 @@ response.json()  # -->  {'spec': 'pangeo-forge/staged-recipes', 'provider': 'git
 
 # Bakeries: `pangeo-forge-runner` config
 
-All deployment to bakeries
+In a recipes PR, when a contributor specifies the name of their target bakery, e.g.:
+
+```yaml
+# meta.yaml
+# ...
+bakery:
+  id: 'pangeo-ldeo-nsf-earthcube'
+```
+
+what does Pangeo Forge Orchestrator do with this information?
+
+The answer lies first in the `bakeries/` directory. Here we have a set of YAML files with names
+conforming to the style `{bakery-name}.{deployment-name}.yaml`, i.e.:
+
+```
+bakeries
+├── pangeo-ldeo-nsf-earthcube.pangeo-forge-staging.yaml
+├── pangeo-ldeo-nsf-earthcube.pangeo-forge.yaml
+├── pangeo-ldeo-nsf-earthcube.pforge-local-cisaacstern.yaml
+└── pangeo-ldeo-nsf-earthcube.pforge-pr-125.yaml
+```
+
+In `pangeo_forge_orchestrator/config.py`, the FastAPI application looks for all unique bakery names
+in this directory _for which the `.{deployment-name}.` equals the `PANGEO_FORGE_DEPLOYMENT`_ env var.
+For example, if `PANGEO_FORGE_DEPLOYMENT=pangeo-forge-staging`, then FastAPI will identify
+`bakeries/pangeo-ldeo-nsf-earthcube.pangeo-forge-staging.yaml` as the config for
+`pangeo-ldeo-nsf-earthcube` in the FastAPI instance.
+
+What if a bakery requires secrets as part of its config? For each bakery identified in the `bakeries/`
+directory, `pangeo_forge_orchestrator/config.py` will check for a corresponding file in the `secrets/`
+directory. If a file exists with the name `secrets/bakery-args.{bakery-name}.yaml`, the values in this
+file will be loaded and added to the bakery's configuration.
+
+This combined public + secret config object will be used in subprocess calls to https://github.com/
+pangeo-forge/pangeo-forge-runner.
+
+> **Note**: Currently the config passes from YAML on disk, to a Pydantic model in-memory, and then
+> is eventually dumped to a temporary JSON file on disk for each `pangeo-forge-runner` call. This is
+> unnecessarily convoluted. Some notes on how it could be improved are available in
+> https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
 
 # Bakeries: job status monitoring
 
+An important function of Pangeo Forge Orchestrator is to deploy the status monitoring infrastructure
+which watches for job status completion on each bakery. While it might initially seem like this
+should be the bakery's responsiblity, in fact deploying this infrastructure from Pangeo Forge
+Orchestrator is essential, because this ensures that _**each deployed FastAPI instance** will always
+have a compatible status monitoring deployment on each bakery it is configured to interoperate with_.
+
+## Dataflow
+
+For Google Cloud Dataflow, status monitoring infrastructure is defined in the
+`dataflow-status-monitoring` submodule of this repo.
+
+## Flink
+
+Status monitoring is not yet implemented for Flink.
+
+## Terraform Environments
+
+On each Heroku release, `scripts.deploy/release.sh` runs terraform to ensure that the status
+monitoring infrastructure is up-to-date for the current release. Three distinct terraform
+environments are defined in the `terraform/` directory in this repo:
+
+```
+terraform
+├── dev
+│   └── main.tf
+├── pangeo-forge
+│   └── main.tf
+└── pangeo-forge-staging
+    └── main.tf
+```
+
+Using separate terraform envs for dev (inclusive of `local` and `review` deployments), `staging`, and
+`prod` ensures that releases of Review Apps, e.g., will not accidentally teardown or break prod's
+status monitoring infra.
+
+This project layout is based directly on https://blog.gruntwork.io/how-to-manage-terraform-state-28f5697e68fa.
+
+See also [Resource locations](#resource-locations) for a table referencing these terraform envs.
+
 # Security
 
-## Database API routes
+## Database API
 
 Clients authenticate by providing their API key in the `X-API-Key` HTTP header.
 The configuration is based loosely on https://github.com/mrtolkien/fastapi_simple_security.
@@ -558,12 +636,14 @@ There are currently two levels of authorization in the app
 
 Moving forward, we will likely need to make this more fine-grained.
 In particular, we may wish to associate API keys with bakeries and / or users,
-and restrict permissions based on these properties. Todo:
+and restrict permissions based on these properties.
+
+TODO:
 
 - Implement key expiry policies
-- Link keys to specific users and / or bakeries (i.e. service accounts
+- Link keys to specific users and / or bakeries i.e. service accounts. (If/wheb need arises.)
 
-## GitHub App routes
+## GitHub App
 
 Every webhook received from GitHub comes with a hash signature which certifies that it was actually sent
 by GitHub (and not a hostile actor impersonating GitHub). The first thing that the `/github/hooks/` route
@@ -676,9 +756,21 @@ async with aiohttp.ClientSession() as session:
     )
 ```
 
-# History & roadmap
+# Roadmap
 
-subprocess.run vs. dockerized subprocess
+The most important strategic issue to note about the forthcoming plans for this project is:
+
+1. `pangeo-forge-runner` executes arbitrary Python (i.e. recipes)
+2. In addition to containing untrusted code, these recipes may require arbitrary environments.
+3. We therefore want to isolate these calls in a sibling container.
+4. To do so, we will need to be able to run a Docker daemon to build and manage these sibling
+   containers, and `exec` things in them.
+5. To get a Docker daemon, we will need to move off of Heroku (probably to GCP).
+6. Once we are able to run a Docker daemon, we can replace `subprocess` calls to
+   `pangeo-forge-runner` with `docker-py` calls.
+
+Of course there are many other issues and features which we'll want to address, but this
+one has the most far-reaching effect on the structure of the project, so highlighting it here.
 
 # Detailed sequence diagrams
 
