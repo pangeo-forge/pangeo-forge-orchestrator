@@ -14,7 +14,8 @@
     "review": {
       "env": {
         "PANGEO_FORGE_DEPLOYMENT": "pforge-pr-136"
-      }
+      },
+      "addons": ["papertrail:choklad"]
     }
   }
 }
