@@ -34,7 +34,6 @@ external to the above-listed teams to contribute code to this repository.
   knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
 - [Security](#security) - Some notes on security.
 - [Testing](#testing) - Automated testing in both local envs and production container contexts.
-- [GitHub App: best practices](#github-app-best-practices) - Guidelines for developing the GitHub integration.
 - [GitHub App: manual API calls](#github-app-manual-api-calls) - How to manually call the GitHub API _as a GitHub App_.
 - [History & roadmap](#history--roadmap) - Where this platform started, where it's going.
 - [Detailed sequence diagrams](#detailed-sequence-diagrams) - Fine-grained look at call stacks.
@@ -479,6 +478,8 @@ response.json()  # -->  {'spec': 'pangeo-forge/staged-recipes', 'provider': 'git
 
 # Bakeries: `pangeo-forge-runner` config
 
+All deployment to bakeries
+
 # Bakeries: job status monitoring
 
 # Security
@@ -525,9 +526,41 @@ For more on hash signature verification, see:
 
 ## Secrets
 
+As noted in [How to use SOPS](#how-to-use-sops), SOPS is used to encrypt repo secrets.
+The pre-commit hooks `pre-commit-ensure-sops` and `gitleaks` are used to minimize the chance that
+unencrypted secrets are ever commited to the repo.
+
 # Testing
 
-# GitHub App: best practices
+## Local invocation
+
+In a local Python 3.9 environment, tests can be run by first installing the dev dependencies:
+
+```console
+$ pip install -e '.[dev]'
+```
+
+and then calling
+
+```console
+pytest tests -v
+```
+
+## Docker invocation
+
+Tests can also be called inside the built container. Please refer to the steps defined in
+`.github/workflows/test-docker.yaml` for how to do this.
+
+## Mocks
+
+Note that for testing the GitHub App integration, mocking is used to stand in for both the GitHub API
+and for subprocess calls to `pangeo-forge-runner`. This allows us to run the tests repeatably and
+efficiently, but comes at the cost of maintenance of the mocks. We should always be keeping an eye out
+for problem areas in our relationship to these two third party services (one web API, one package), and
+making sure that our mocks realistically capture those areas of friction. In time, we may want to
+consider adding an alternate pathway to test against the live GitHub API and/or make real calls to
+`pangeo-forge-runner`. This comes with its own challenges, of course, including fixturization & managing
+rate limits, in the case of the GitHub API.
 
 # GitHub App: manual API calls
 
