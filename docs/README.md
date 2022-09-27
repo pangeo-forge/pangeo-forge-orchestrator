@@ -5,7 +5,16 @@ For simplicity, these docs are a collection of `.md` files. The easiest way to n
 # Table of Contents
 
 - [What is Pangeo Forge Orchestrator?](#what-is-pangeo-forge-orchestrator)
-
+- [Deployments: overview](#deployments-overview)
+  - [Naming](#naming)
+  - [Resource locations](#resource-locations)
+  - [Requirements](#requirements)
+- [The local deployment](#the-local-deployment)
+- [Heroku deployments](#heroku-deployments)
+  - [review](#review)
+  - [staging](#staging)
+  - [prod](#prod)
+-
 - [Detailed sequence diagrams](#updating-the-feedstock-repository)
   - [From staged-recipes PR to first prod run](#from-staged-recipes-pr-to-first-production-run)
   - [Updating the feedstock repository](#updating-the-feedstock-repository)
@@ -66,6 +75,73 @@ sequenceDiagram
     Database #9733;->>FastAPI #9733;: returns data
     FastAPI #9733;->>pangeo-forge.org: returns data
 ```
+
+# Deployments: overview
+
+Every PR to `pangeo-forge-orchestrator` travels though a series of (up to) four deployment types:
+
+```mermaid
+flowchart LR
+    local-->review-->staging-->prod
+```
+
+## Naming
+
+The specific names for these deployments follow the following formats:
+
+| type      | naming format                               | example                    |
+| --------- | ------------------------------------------- | -------------------------- |
+| `local`   | `pforge-local-${Developer GitHub Username}` | `pforge-local-cisaacstern` |
+| `review`  | `pforge-pr-${Orchestrator PR Number}`       | `pforge-pr-136`            |
+| `staging` | always named `pangeo-forge-staging`         | n/a                        |
+| `prod`    | always named `pangeo-forge`                 | n/a                        |
+
+## Resource locations
+
+As noted above
+
+| type      | FastAPI | Database | GitHub App (Organizaton) | Status Monitoring (Terraform Env) |
+| --------- | ------- | -------- | ------------------------ | --------------------------------- |
+| `local`   | local   | local    | `pforgetest`             | `dev`                             |
+| `review`  | Heroku  | Heroku   | `pforgetest`             | `dev`                             |
+| `staging` | Heroku  | Heroku   | `pforgetest`             | `pangeo-forge-staging`            |
+| `prod`    | Heroku  | Heroku   | `pangeo-forge`           | `pangeo-forge`                    |
+
+## Requirements
+
+All deployments require:
+
+1. A secrets config file named `secrets/config.${deployment-name}.yaml`, containing:
+
+   ```yaml
+   # secrets/config.${deployment-name}.yaml
+
+   fastapi:
+     PANGEO_FORGE_API_KEY: ${api key for protected fastapi routes}
+   github_app:
+     app_name: ${the deployment name}
+     # following three fields are auto-generated
+     # for us by github at app creation time
+     id: ${github app id}
+     private_key: ${github app rsa private key}
+     webhook_secret: ${github app hmac webhook secret}
+   ```
+
+2. `PANGEO_FORGE_DEPLOYMENT`
+3. To be logged into the
+4. `DATABASE_URL`
+
+# The `local` deployment
+
+# Heroku deployments
+
+## `review`
+
+## `staging`
+
+## `prod`
+
+#
 
 # Detailed sequence diagrams
 
@@ -211,17 +287,6 @@ The FastAPI app deployed from this repo serves two primary functions: to interfa
 
 - [database-api](database-api.md) - Details on database configuration and interface.
 - [github-app](github-app.md) - Details on the GitHub App integration.
-
-## Deployment
-
-Every PR to `pangeo-forge-orchestrator` travels though a series of (up to) four deployments:
-
-```mermaid
-flowchart LR
-    local-->review-->staging-->prod
-```
-
-> **Note**: Depending on the level of complexity of the PR, the `local` and/or `review` deployments may be omitted.
 
 Instructions
 
