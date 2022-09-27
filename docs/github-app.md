@@ -323,35 +323,6 @@ in the diagram above) is provided in the next section.
 
 # 5 Interlude: Calling the GitHub API directly, as your GitHub App
 
-Situations may arise in which you want to call the GitHup API directly, authenticated as your
-dev app. An example would be: you've been working on a feature which creates a check run, and then
-you want to manually edit that check run. (Perhaps it's been left in an "in-progress" state.) Users
-(even the owners of an app instance) can't patch check runs created by the app, so you'll need to
-call the GitHub API _as the app_. How do we do this?
-
-The good news is that we can use the convenience functions baked into `pangeo_forge_orchestrator`
-to help us in retreiving the necessary credentials.
-
-### 5.1 Get a JWT
-
-```python
-from pangeo_forge_orchestrator.routers.github_app import get_jwt
-get_jwt()  # --> returns a JWT for your dev app
-```
-
-### 5.2 Get an installation access token
-
-```python
-import aiohttp
-from gidgethub.aiohttp import GitHubAPI
-from pangeo_forge_orchestrator.routers.github_app import get_access_token
-
-async with aiohttp.ClientSession() as session:
-     gh = GitHubAPI(session, "your-github-username")
-     token = await get_access_token(gh)
-     print(token)  # --> prints an installation access token for your dev app
-```
-
 ### 5.3 Call the API
 
 # 6 Next steps: the `review` deployment
@@ -383,8 +354,6 @@ https://pangeo-forge-api-pr-80.herokuapp.com will be broken
    > ```console
    > $ git add secrets/config.review.yaml
    > ```
-
-   > TODO: Note (or fix!) annoying thing where `prettier` re-formats SOPS-encrypted yaml.
 
 ## 6.3 Check the `review` deployment
 

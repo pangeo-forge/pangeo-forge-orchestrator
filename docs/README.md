@@ -434,6 +434,31 @@ tweaked manually.
 
 # Database: manual edits
 
+```python
+import os
+import json
+import requests
+from pangeo_forge_orchestrator.config import get_fastapi_config
+
+os.environ["PANGEO_FORGE_DEPLOYMENT"] = "pforge-pr-136"
+app_address = "https://pforge-pr-136.herokuapp.com"
+headers = {
+    "X-API-Key": get_fastapi_config().PANGEO_FORGE_API_KEY,
+    "accept": "application/json",
+    "Content-Type": "application/json",
+}
+
+data = {"spec": "pangeo-forge/staged-recipes"}
+
+response = requests.post(
+    f"{app_address}/feedstocks/",
+    headers=headers,
+    data=json.dumps(data),
+)
+response.status_code  # --> 200
+response.json()  # -->  {'spec': 'pangeo-forge/staged-recipes', 'provider': 'github', 'id': 1}
+```
+
 # Bakeries: `pangeo-forge-runner` config
 
 # Bakeries: job status monitoring
@@ -487,6 +512,57 @@ For more on hash signature verification, see:
 # GitHub App: best practices
 
 # GitHub App: manual API calls
+
+Situations may arise in which you want to call the GitHup API directly, authenticated as a
+GitHub App. An example would be: you've been working on a feature which creates a check run, and then
+you want to manually edit that check run. (Perhaps it's been left in an "in-progress" state.) Users
+(even the owners of an app instance) can't patch check runs created by the app, so you'll need to
+call the GitHub API _as the app_.
+
+We can use the convenience functions of `pangeo_forge_orchestrator`
+to help us in retreiving the necessary credentials.
+
+## Get a JWT
+
+```python
+from pangeo_forge_orchestrator.routers.github_app import get_jwt
+get_jwt()  # --> returns a JWT for your dev app
+```
+
+## Get an installation access token
+
+```python
+import aiohttp
+from gidgethub.aiohttp import GitHubAPI
+from pangeo_forge_orchestrator.routers.github_app import get_access_token
+
+async with aiohttp.ClientSession() as session:
+     gh = GitHubAPI(session, "your-github-username")
+     token = await get_access_token(gh)
+     print(token)  # --> prints an installation access token for your dev app
+```
+
+## Call the API
+
+```python
+import aiohttp
+from gidgethub.aiohttp import GitHubAPI
+
+async with aiohttp.ClientSession() as session:
+    gh = GitHubAPI(session, "your-github-username")
+    # certain routes require token authentication
+    gh.post(
+        "github/api/route/",
+        # using `token` retrieved above
+        oauth_token=token,
+    )
+    # ... and others use jwt authentication...
+    gh.post(
+        "github/api/some/other/route/",
+        # using `jwt` created above
+        jwt=jwt,
+    )
+```
 
 # History & roadmap
 
