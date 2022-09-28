@@ -15,7 +15,10 @@
       "env": {
         "PANGEO_FORGE_DEPLOYMENT": "pforge-pr-143"
       },
-      "addons": ["papertrail:choklad"]
+      "scripts": {
+        "postdeploy": "scripts.deploy/review-app-postdeploy.sh"
+      },
+      "addons": ["heroku-postgresql:hobby-dev", "papertrail:choklad"]
     }
   }
 }
