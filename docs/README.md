@@ -296,7 +296,14 @@ The last step before starting the app server is to setup bakeries config for you
 ```console
 $ cp bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml
 ```
+Finally, decrypt the secret args for this bakery:
 
+```console
+$ sops -d -i secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
+```
+> **Note from @cisaacstern**: This entire bakeries config setup (which I wrote) is _far to convoluted_. These 
+instructions are designed to get your local app running under the current paradigm. This should be revisited and 
+simplified considerably. For further discussion on this, see https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
 ## Start the server
 
 If you have not already, in a clean Python 3.9 env, from the repo root run:
