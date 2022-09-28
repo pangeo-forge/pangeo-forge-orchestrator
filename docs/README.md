@@ -202,12 +202,6 @@ $ python3 scripts.develop/generate_api_key.py ${Your GitHub Username} local
 
 Now, `secrets/config.pforge-local-${Your GitHub Username}.yaml` should contain an api key.
 
-In addition, you will need to create a configuration file with the bakery information by copying the `bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml` file to `bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml`:
-
-```console
-$ cp bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml
-```
-
 ### GitHub App
 
 > **Note**: If you do not plan to work on the `/github` routes, you can skip this.
@@ -294,6 +288,14 @@ $ python3 scripts.develop/update_hook_url.py secrets/pforge-local-${Your GitHub 
 The `"url"` field in the response should refect the `PROXY_URL` you passed to the script. Your
 GitHub App will now send webhooks to the specified proxy url. You can change your proxy url at any
 time by re-running this last script with a different argument.
+
+## Bakeries config
+
+The last step before starting the app server is to setup bakeries config for your local app instance. You can create a configuration file with the bakery information by copying the `bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml` file to `bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml`:
+
+```console
+$ cp bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml
+```
 
 ## Start the server
 
