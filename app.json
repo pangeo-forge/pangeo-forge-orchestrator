@@ -18,7 +18,7 @@
       "scripts": {
         "postdeploy": "scripts.deploy/review-app-postdeploy.sh"
       },
-      "addons": ["heroku-postgresql:hobby-dev", "papertrail:choklad"]
+      "addons": ["heroku-postgresql:hobby-basic", "papertrail:choklad"]
     }
   }
 }
