@@ -6,7 +6,7 @@ code to this repo, you will need membership in:
 - AWS `pangeo-forge` team (with KMS permissions)
 - Heroku `pangeo-forge` team
 - GitHub `pangeo-forge` org
-- GitHub `pforgetest` org
+- GitHub `pforgetest` org (with owner role. Otherwise, you can't manage GitHub App within the org)
 - GCP `pangeo-forge-4967` project
 
 Over time, we aim to establish a pathway for contributors
@@ -280,7 +280,7 @@ to which GitHub App webhooks are posted. Finally, update your GitHub App's webho
 will send webhooks to the proxy:
 
 ```console
-$ python3 scripts/update_hook_url.py local $PROXY_URL
+$ python3 scripts.develop/update_hook_url.py secrets/pforge-local-${Your GitHub Username} $PROXY_URL
 
 200 {"content_type":"json","secret":"********","url":"https://smee.io/pGKLaDu6CJwiBjJU","insecure_ssl":"0"}
 ```
@@ -288,6 +288,24 @@ $ python3 scripts/update_hook_url.py local $PROXY_URL
 The `"url"` field in the response should refect the `PROXY_URL` you passed to the script. Your
 GitHub App will now send webhooks to the specified proxy url. You can change your proxy url at any
 time by re-running this last script with a different argument.
+
+## Bakeries config
+
+The last step before starting the app server is to setup bakeries config for your local app instance. You can create a configuration file with the bakery information by copying the `bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml` file to `bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml`:
+
+```console
+$ cp bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml
+```
+
+Finally, decrypt the secret args for this bakery:
+
+```console
+$ sops -d -i secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
+```
+
+> **Note from @cisaacstern**: This entire bakeries config setup (which I wrote) is _far to convoluted_. These
+> instructions are designed to get your local app running under the current paradigm. This should be revisited and
+> simplified considerably. For further discussion on this, see https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
 
 ## Start the server
 
@@ -309,7 +327,7 @@ to start the dev server with hot reloads.
 
 > **Note**: If you do not plan to work on the `/github` routes, you can skip this.
 
-Finally, navigate to https://github.com/pforgetest/settings/apps. Find your newly created app
+Finally, navigate to https://github.com/organizations/pforgetest/settings/apps. Find your newly created app
 on the list of GitHub Apps. Click on it, and then install it in all repositories in `pforgetest`.
 
 If other apps are installed on `pforgetest` (e.g. `pangeo-forge-staging`, some review apps), you
