@@ -1,1 +1,1 @@
-echo "This is a postdeploy script test. Hello World."
+python3.9 seed_test_data.py
