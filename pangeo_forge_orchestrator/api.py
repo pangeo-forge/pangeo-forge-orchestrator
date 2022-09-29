@@ -8,6 +8,7 @@ from .database import maybe_create_db_and_tables
 from .http import http_session
 from .metadata import app_metadata
 from .routers.github_app import github_app_router
+from .routers.logs import logs_router
 from .routers.model_router import router as model_router
 from .routers.repr import repr_router
 from .routers.stats import stats_router
@@ -41,6 +42,7 @@ def on_shutdown():
     http_session.stop()
 
 
+app.include_router(logs_router)
 app.include_router(model_router)
 app.include_router(stats_router)
 app.include_router(github_app_router)
