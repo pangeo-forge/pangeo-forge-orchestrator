@@ -1,3 +1,12 @@
+"""Seed test data for review apps, so the developer does not need to do this manually
+for each review app. This is only called once, following build of a review app. It is not
+called on any other apps (staging, prod, etc.). See also:
+
+    app.json -> environments -> review -> scripts -> postdeploy
+
+which is where this script is configured to be called by Heroku.
+"""
+
 from pangeo_forge_orchestrator.dependencies import get_session
 from pangeo_forge_orchestrator.models import MODELS
 

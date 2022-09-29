@@ -57,4 +57,3 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
     && cd -
 
 RUN chmod +x scripts.deploy/release.sh
-RUN chmod +x scripts.deploy/review-app-postdeploy.sh
