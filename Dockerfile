@@ -41,12 +41,13 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
 
 COPY requirements.txt ./
 RUN python3.9 -m pip install -r requirements.txt
-# the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
-# `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
-RUN pip install -e . --no-deps
 
 COPY . /opt/app
 WORKDIR /opt/app
+
+# the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
+# `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
+RUN pip install -e . --no-deps
 
 # heroku can't fetch submodule contents from github:
 # https://devcenter.heroku.com/articles/github-integration#does-github-integration-work-with-git-submodules
