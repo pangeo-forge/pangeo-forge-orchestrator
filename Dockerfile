@@ -58,6 +58,6 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
 
 # the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
 # `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
-RUN pip install . --no-deps
+RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0 pip install . --no-deps
 
 RUN chmod +x scripts.deploy/release.sh
