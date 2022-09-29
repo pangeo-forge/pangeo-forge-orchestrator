@@ -402,11 +402,9 @@ To ensure a successful build of a Review App for your PR:
    ```console
    $ sops -e -i secrets/pforge-pr-${PR number}.yaml
    ```
-3. In `app.json`, changing the review app `PANGEO_FORGE_DEPLOYMENT` var to `pforge-pr-${PR number}`
-4. Pushing these changes to your PR
-5. From https://github.com/pforgetest/settings/apps, install the `pforge-pr-${PR number}` app on
-   all repos in the `pforgetest` org.
-6. Update the Review App's webhook url:
+3. Push these creds to your PR
+4. From https://github.com/pforgetest/settings/apps, install the `pforge-pr-${PR number}` app on all repos in the `pforgetest` org.
+5. Update the Review App's webhook url:
    ```console
    $ python3 scripts/update_hook_url.py review http://pforge-pr-${PR number}.herokuapp.com
    ```
