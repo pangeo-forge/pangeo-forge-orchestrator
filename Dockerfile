@@ -45,10 +45,6 @@ RUN python3.9 -m pip install -r requirements.txt
 COPY . /opt/app
 WORKDIR /opt/app
 
-# the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
-# `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
-RUN pip install -e . --no-deps
-
 # heroku can't fetch submodule contents from github:
 # https://devcenter.heroku.com/articles/github-integration#does-github-integration-work-with-git-submodules
 # so even though we have this in the repo (for development & testing convenience), we actually .dockerignore
@@ -59,5 +55,9 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
     && cd dataflow-status-monitoring \
     && git reset --hard c72a594b2aea5db45d6295fadd801673bee9746f \
     && cd -
+
+# the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
+# `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
+RUN pip install . --no-deps
 
 RUN chmod +x scripts.deploy/release.sh
