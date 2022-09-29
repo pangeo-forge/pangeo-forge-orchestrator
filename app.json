@@ -15,9 +15,6 @@
       "env": {
         "PANGEO_FORGE_DEPLOYMENT": "pforge-pr-143"
       },
-      "scripts": {
-        "postdeploy": "python3.9 postdeploy/seed_review_app_data.py"
-      },
       "addons": ["heroku-postgresql:hobby-basic", "papertrail:choklad"]
     }
   }
