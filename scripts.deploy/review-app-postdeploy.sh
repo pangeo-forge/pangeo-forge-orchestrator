@@ -1,1 +1,1 @@
-python3.9 seed_test_data.py
+python3.9 scripts.deploy/seed_review_app_data.py
