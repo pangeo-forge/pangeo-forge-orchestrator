@@ -386,6 +386,16 @@ For each PR to `pangeo-forge-recipes`, Heroku creates a Review App which will ha
 This is a live version of the app running against an ephemeral database. It can be used for manual
 checks or further integration testing.
 
+> We use Heroku's Review Apps
+> [injected-environment-variables](https://devcenter.heroku.com/articles/github-integration-review-apps#injected-environment-variables)
+> feature to dynamically set the `PANGEO_FORGE_DEPLOYMENT` env var for review apps to the value of the injected env var `HEROKU_APP_NAME`, which follows the pattern `pforge-pr-${PR number}`. Take a look at both `heroku.yml` and `scripts.deploy/release.sh` to see where this happens.
+
+> We also use Heroku's Review Apps
+> [postdeploy script](https://devcenter.heroku.com/articles/github-integration-review-apps#the-postdeploy-script)
+> feature to automatically seed each review app database with the
+> https://github.com/pforgetest/test-staged-recipes feedstock.
+> To see where this happens (and/or seed additional test data), see `postdeploy/seed_review_app_data.py`.
+
 To ensure a successful build of a Review App for your PR:
 
 1. Generate a `secrets/pforge-pr-${PR number}.yaml` secrets config for your review app, by:
