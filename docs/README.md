@@ -678,6 +678,12 @@ recipe contributors, and the fact that truncation reduces the risk of leaked sec
 sanitization and/or formatting of these logs could be implemented in the future, to make them
 even more secure, and useful.
 
+## Retention
+
+We should look into the retention policies for Dataflow job logs. It's possible these logs will
+not be queryable after some time has elapsed since the completed recipe run. Initial observations
+suggest the logs may be discarded by default after as short as 24 hours.
+
 # Security
 
 ## Database API
