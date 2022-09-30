@@ -56,18 +56,14 @@ def get_logs(
     return logs
 
 
-def logs_from_recipe_run_id(
+def recipe_run_from_id(
     id: int,
     db_session: Session,
-    severity: str,
-    limit: int,
-):
+) -> SQLModel:
     recipe_run = db_session.exec(
         select(MODELS["recipe_run"].table).where(MODELS["recipe_run"].table.id == id)
     ).one()
-    job_id = job_id_from_recipe_run(recipe_run)
-    logs = get_logs(job_id, severity, limit)
-    return logs
+    return recipe_run
 
 
 @logs_router.get(
@@ -84,18 +80,18 @@ async def raw_logs_from_recipe_run_id(
     severity: str = DEFAULT_SEVERITY,
     limit: int = DEFAULT_LIMIT,
 ):
-    raw_logs = logs_from_recipe_run_id(id, db_session, severity, limit)
+    recipe_run = recipe_run_from_id(id, db_session)
+    job_id = job_id_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_id, severity, limit)
     return raw_logs
 
 
-def logs_from_feedstock_spec_commit_and_recipe_id(
+def recipe_run_from_feedstock_spec_commit_and_recipe_id(
     feedstock_spec: str,
     commit: str,
     recipe_id: str,
     db_session: Session,
-    severity: str,
-    limit: int,
-):
+) -> SQLModel:
     feedstock = db_session.exec(
         select(MODELS["feedstock"].table).where(MODELS["feedstock"].table.spec == feedstock_spec)
     ).one()
@@ -106,9 +102,7 @@ def logs_from_feedstock_spec_commit_and_recipe_id(
         .where(MODELS["recipe_run"].table.feedstock_id == feedstock.id)
     )
     recipe_run = db_session.exec(statement).one()
-    job_id = job_id_from_recipe_run(recipe_run)
-    logs = get_logs(job_id, severity, limit)
-    return logs
+    return recipe_run
 
 
 @logs_router.get(
@@ -127,12 +121,12 @@ async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
     severity: str = DEFAULT_SEVERITY,
     limit: int = DEFAULT_LIMIT,
 ):
-    raw_logs = logs_from_feedstock_spec_commit_and_recipe_id(
+    recipe_run = recipe_run_from_feedstock_spec_commit_and_recipe_id(
         feedstock_spec,
         commit,
         recipe_id,
         db_session,
-        severity,
-        limit,
     )
+    job_id = job_id_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_id, severity, limit)
     return raw_logs
