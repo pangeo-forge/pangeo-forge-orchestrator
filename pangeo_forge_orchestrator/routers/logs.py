@@ -56,19 +56,11 @@ def get_logs(
     return logs
 
 
-@logs_router.get(
-    "/recipe_runs/{id}/logs",
-    summary="Get job logs for a recipe_run, specified by database id.",
-    tags=["recipe_run", "logs", "admin"],
-    response_class=PlainTextResponse,
-    dependencies=[Depends(check_authentication_header)],
-)
-async def logs_from_recipe_run_id(
+def logs_from_recipe_run_id(
     id: int,
-    *,
-    db_session: Session = Depends(get_database_session),
-    severity: str = DEFAULT_SEVERITY,
-    limit: int = DEFAULT_LIMIT,
+    db_session: Session,
+    severity: str,
+    limit: int,
 ):
     recipe_run = db_session.exec(
         select(MODELS["recipe_run"].table).where(MODELS["recipe_run"].table.id == id)
@@ -79,20 +71,30 @@ async def logs_from_recipe_run_id(
 
 
 @logs_router.get(
-    "/feedstocks/{feedstock_spec:path}/{commit}/{recipe_id}/logs",
-    summary="Get job logs for a recipe run, specified by feedstock_spec, commit, and recipe_id.",
-    tags=["feedstock", "logs", "admin"],
+    "/recipe_runs/{id}/logs",
+    summary="Get job logs for a recipe_run, specified by database id.",
+    tags=["recipe_run", "logs", "admin"],
     response_class=PlainTextResponse,
     dependencies=[Depends(check_authentication_header)],
 )
-async def logs_from_feedstock_spec_commit_and_recipe_id(
-    feedstock_spec: str,
-    commit: str,
-    recipe_id: str,
+async def raw_logs_from_recipe_run_id(
+    id: int,
     *,
     db_session: Session = Depends(get_database_session),
     severity: str = DEFAULT_SEVERITY,
     limit: int = DEFAULT_LIMIT,
+):
+    raw_logs = logs_from_recipe_run_id(id, db_session, severity, limit)
+    return raw_logs
+
+
+def logs_from_feedstock_spec_commit_and_recipe_id(
+    feedstock_spec: str,
+    commit: str,
+    recipe_id: str,
+    db_session: Session,
+    severity: str,
+    limit: int,
 ):
     feedstock = db_session.exec(
         select(MODELS["feedstock"].table).where(MODELS["feedstock"].table.spec == feedstock_spec)
@@ -107,3 +109,30 @@ async def logs_from_feedstock_spec_commit_and_recipe_id(
     job_id = job_id_from_recipe_run(recipe_run)
     logs = get_logs(job_id, severity, limit)
     return logs
+
+
+@logs_router.get(
+    "/feedstocks/{feedstock_spec:path}/{commit}/{recipe_id}/logs",
+    summary="Get job logs for a recipe run, specified by feedstock_spec, commit, and recipe_id.",
+    tags=["feedstock", "logs", "admin"],
+    response_class=PlainTextResponse,
+    dependencies=[Depends(check_authentication_header)],
+)
+async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
+    feedstock_spec: str,
+    commit: str,
+    recipe_id: str,
+    *,
+    db_session: Session = Depends(get_database_session),
+    severity: str = DEFAULT_SEVERITY,
+    limit: int = DEFAULT_LIMIT,
+):
+    raw_logs = logs_from_feedstock_spec_commit_and_recipe_id(
+        feedstock_spec,
+        commit,
+        recipe_id,
+        db_session,
+        severity,
+        limit,
+    )
+    return raw_logs
