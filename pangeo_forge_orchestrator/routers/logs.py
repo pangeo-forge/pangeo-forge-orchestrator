@@ -36,9 +36,9 @@ def job_id_from_recipe_run(recipe_run: SQLModel) -> str:
 
 
 def get_logs(
-    job_id="2022-09-29_11_31_40-14379398480910960453",  # set from recipe_run
-    severity="ERROR",  # set from query
-    limit=1,  # set from query
+    job_id: str,
+    severity: str,
+    limit: int,
 ):
     log_name_prefix = "projects/pangeo-forge-4967/logs/dataflow.googleapis.com"
     query = (
