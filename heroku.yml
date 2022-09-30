@@ -9,8 +9,15 @@ release:
     - ./scripts.deploy/release.sh
   image: web
 run:
+  # The first line of this command sets PANGEO_FORGE_DEPLOYMENT to itself, if it exists,
+  # but if it doesn't exist, PANGEO_FORGE_DEPLOYMENT is set to the value of HEROKU_APP_NAME.
+  # The latter case occurs only in the review app context. We use this method because review
+  # app names are dynaically generated based on the PR number and are therefore to cumbersome
+  # to set manually for each PR. More on this syntax in: https://stackoverflow.com/a/2013589.
   web: >
-    sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
+    export PANGEO_FORGE_DEPLOYMENT="${PANGEO_FORGE_DEPLOYMENT:=$HEROKU_APP_NAME}"
+    && echo "PANGEO_FORGE_DEPLOYMENT set to ${PANGEO_FORGE_DEPLOYMENT}"
+    && sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
     && export DATAFLOW_CREDS='./secrets/dataflow-job-submission.json'
     && sops -d -i ${DATAFLOW_CREDS}
     && gcloud auth activate-service-account --key-file=${DATAFLOW_CREDS}
