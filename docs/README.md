@@ -660,13 +660,23 @@ See also [Resource locations](#resource-locations) for a table referencing these
 
 To query logs for recipe runs, see the API docs at the `/docs#/logs` route of the deployment
 (https://api.pangeo-forge.org/docs#/logs for the production deployment).
-These routes are protected, due to the risk of leaking secrets in the logs. The
+
+## Raw logs (admin only)
+
+Routes returning raw logs are protected, due to the risk of leaking secrets. The
 `PANGEO_FORGE_API_KEY` is available to admins via in the deployments secrets config:
 
 ```console
 $ sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
-# cat secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
+$ cat secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
 ```
+
+## Error traces (public)
+
+Logs routes returning (truncated) error traces are public, given the utility of these logs to
+recipe contributors, and the fact that truncation reduces the risk of leaked secrets. Further
+sanitization and/or formatting of these logs could be implemented in the future, to make them
+even more secure, and useful.
 
 # Security
 
