@@ -2,7 +2,9 @@
 This module tests the `run` function, which is a special case.
 """
 
+import json
 import subprocess
+from typing import List
 
 import pytest
 import pytest_asyncio
@@ -15,10 +17,7 @@ from pangeo_forge_orchestrator.routers.github_app import run
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, get_mock_github_session
-from .mock_pangeo_forge_runner import (
-    mock_subprocess_check_output,
-    mock_subprocess_check_output_raises_called_process_error,
-)
+from .mock_pangeo_forge_runner import mock_subprocess_check_output_raises_called_process_error
 
 
 @pytest_asyncio.fixture(
@@ -107,10 +106,37 @@ async def run_fixture(
 
 
 @pytest.mark.asyncio
-async def test_run(mocker, run_fixture):
+@pytest.mark.parametrize(
+    "job_name, job_id",
+    [
+        (
+            "a6170692e70616e67656f2d666f7267652e6f7267251162",
+            "2022-09-28_13_30_25-9666562633575851936",
+        )
+    ],
+)
+async def test_run(mocker, run_fixture, job_name, job_id, async_app_client):
     run_kws = run_fixture
+
+    def mock_subprocess_check_output(cmd: List[str]):
+        loglines = [
+            {
+                "message": f"Submitted job {job_id} for recipe casm-soil-moisture",
+                "recipe": "casm-soil-moisture",
+                "job_name": job_name,
+                "job_id": job_id,
+                "status": "submitted",
+            },
+        ]
+        return "\n".join([json.dumps(line) for line in loglines]).encode("utf-8")
+
     mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
     await run(**run_kws)
+
+    recipe_run = await async_app_client.get("recipe_runs/1")
+    recipe_run_message = recipe_run.json()["message"]
+    assert json.loads(recipe_run_message)["job_name"] == job_name
+    assert json.loads(recipe_run_message)["job_id"] == job_id
 
 
 @pytest.mark.xfail(reason="https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132")
