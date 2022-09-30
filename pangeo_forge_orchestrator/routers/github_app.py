@@ -699,22 +699,21 @@ async def synchronize(
                 if p["status"] == "failed":
                     tracelines = p["exc_info"].splitlines()
                     logger.debug(f"Synchronize errored with:\n {tracelines}")
-                    if tracelines[-1].startswith("FileNotFoundError"):
-                        # A required file is missing: either meta.yaml or recipe.py
-                        update_request = dict(
-                            status="completed",
-                            conclusion="failure",
-                            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                            output=dict(title="FileNotFoundError", summary=tracelines[-1]),
-                        )
-                        await gh.patch(
-                            f"{base_api_url}/check-runs/{checks_response['id']}",
-                            data=update_request,
-                            **gh_kws,
-                        )
-                        raise ValueError(tracelines[-1]) from e
-                    else:
-                        raise NotImplementedError from e
+                    update_request = dict(
+                        status="completed",
+                        conclusion="failure",
+                        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                        output=dict(
+                            title="Synchronize error - click details for summary",
+                            summary=tracelines[-1],
+                        ),
+                    )
+                    await gh.patch(
+                        f"{base_api_url}/check-runs/{checks_response['id']}",
+                        data=update_request,
+                        **gh_kws,
+                    )
+                    raise ValueError(tracelines[-1]) from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
         # case it doesn't, raise a NotImplementedError here to prevent moving forward.
         raise NotImplementedError from e
