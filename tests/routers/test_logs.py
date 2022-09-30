@@ -1,5 +1,6 @@
 import json
 import subprocess
+from textwrap import dedent
 from typing import List
 
 import pytest
@@ -95,8 +96,8 @@ async def get_logs_fixture(
         "version": "",
         "started_at": "2022-09-19T16:31:43",
         "completed_at": None,
-        "conclusion": None,
-        "status": "in_progress",
+        "conclusion": request.param["conclusion"],
+        "status": request.param["status"],
         "is_test": True,
         "dataset_type": "zarr",
         "dataset_public_url": None,
@@ -130,6 +131,8 @@ async def get_logs_fixture(
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
             gcloud_logging_response="Some logging message from gcloud API.",
+            status="completed",
+            conclusion="failure",
         ),
     ],
     indirect=True,
@@ -154,6 +157,55 @@ async def test_get_logs_via_recipe_run_id(
     assert response.text == gcloud_logging_response
 
 
+trace_tests_base_params = dict(
+    message='{"job_id": "abc"}',
+    feedstock_spec="pangeo-forge/staged-recipes",
+    commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
+    recipe_id="liveocean",
+    gcloud_logging_response=dedent(
+        """
+    Traceback
+        a b c error
+    Traceback
+        e f g error
+    """
+    ),
+)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "get_logs_fixture",
+    [
+        trace_tests_base_params | dict(status="completed", conclusion="failure"),
+        trace_tests_base_params | dict(status="in_progress", conclusion=None),
+        trace_tests_base_params | dict(status="queued", conclusion=None),
+        trace_tests_base_params | dict(status="completed", conclusion="success"),
+    ],
+    indirect=True,
+)
+async def test_get_trace_via_recipe_run_id(
+    mocker,
+    get_logs_fixture,
+    async_app_client,
+):
+    _, gcloud_logging_response, *_ = get_logs_fixture
+
+    def mock_gcloud_logging_call(cmd: List[str]):
+        return gcloud_logging_response
+
+    mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
+
+    recipe_run = await async_app_client.get("/recipe_runs/1")
+    trace_response = await async_app_client.get("/recipe_runs/1/logs/trace")
+    if recipe_run.json()["status"] == "completed" and recipe_run.json()["conclusion"] == "failure":
+        assert trace_response.status_code == 200
+        assert trace_response.text == "Traceback\n    e f g error\n"
+    else:
+        assert trace_response.status_code == 204
+        assert trace_response.json()["detail"].endswith("has either not completed or did not fail.")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "get_logs_fixture",
@@ -164,6 +216,8 @@ async def test_get_logs_via_recipe_run_id(
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
             gcloud_logging_response="Some logging message from gcloud API.",
+            status="completed",
+            conclusion="failure",
         ),
     ],
     indirect=True,

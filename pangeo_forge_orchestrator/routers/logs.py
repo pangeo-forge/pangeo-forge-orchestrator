@@ -86,6 +86,30 @@ async def raw_logs_from_recipe_run_id(
     return raw_logs
 
 
+@logs_router.get(
+    "/recipe_runs/{id}/logs/trace",
+    summary="Get an error trace for a failed recipe_run, specified by database id.",
+    tags=["recipe_run", "logs", "public"],
+    response_class=PlainTextResponse,
+)
+async def trace_from_recipe_run_id(
+    id: int,
+    *,
+    db_session: Session = Depends(get_database_session),
+):
+    recipe_run = recipe_run_from_id(id, db_session)
+    if recipe_run.status != "completed" or recipe_run.conclusion != "failure":
+        raise HTTPException(
+            status_code=status.HTTP_204_NO_CONTENT,
+            detail=f"{recipe_run = } has either not completed or did not fail.",
+        )
+    job_id = job_id_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_id, severity="ERROR", limit=1)
+    trace = raw_logs.split("Traceback")[-1]
+    trace = "Traceback" + trace
+    return trace
+
+
 def recipe_run_from_feedstock_spec_commit_and_recipe_id(
     feedstock_spec: str,
     commit: str,
@@ -130,3 +154,37 @@ async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
     job_id = job_id_from_recipe_run(recipe_run)
     raw_logs = get_logs(job_id, severity, limit)
     return raw_logs
+
+
+@logs_router.get(
+    "/feedstocks/{feedstock_spec:path}/{commit}/{recipe_id}/logs/trace",
+    summary=(
+        "Get an error trace a failed recipe run, "
+        "specified by feedstock_spec, commit, and recipe_id."
+    ),
+    tags=["feedstock", "logs", "public"],
+    response_class=PlainTextResponse,
+)
+async def trace_from_feedstock_spec_commit_and_recipe_id(
+    feedstock_spec: str,
+    commit: str,
+    recipe_id: str,
+    *,
+    db_session: Session = Depends(get_database_session),
+):
+    recipe_run = recipe_run_from_feedstock_spec_commit_and_recipe_id(
+        feedstock_spec,
+        commit,
+        recipe_id,
+        db_session,
+    )
+    if recipe_run.status != "completed" or recipe_run.conclusion != "failure":
+        raise HTTPException(
+            status_code=status.HTTP_204_NO_CONTENT,
+            detail=f"{recipe_run = } has is either not completed or did not fail.",
+        )
+    job_id = job_id_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_id, severity="ERROR", limit=1)
+    trace = raw_logs.split("Traceback")[-1]
+    trace = "Traceback" + trace
+    return trace
