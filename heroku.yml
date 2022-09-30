@@ -9,13 +9,13 @@ release:
     - ./scripts.deploy/release.sh
   image: web
 run:
-  # The first line of this command sets PANGEO_FORGE_DEPLOYMENT to itself, if it exists,
-  # but if it doesn't exist, PANGEO_FORGE_DEPLOYMENT is set to the value of HEROKU_APP_NAME.
-  # The latter case occurs only in the review app context. We use this method because review
-  # app names are dynaically generated based on the PR number and are therefore to cumbersome
-  # to set manually for each PR. More on this syntax in: https://stackoverflow.com/a/2013589.
+  # The first line of this command sets PANGEO_FORGE_DEPLOYMENT to HEROKU_APP_NAME, if
+  # HEROKU_APP_NAME exists. The HEROKU_APP_NAME env var only exists in the review app context,
+  # in which app names are dynamically generated. The generated names are deterministic, but
+  # it is cumbersome to set PANGEO_FORGE_DEPLOYMENT manually for each review PR, so this method
+  # is preferable. More on the syntax: https://stackoverflow.com/a/2013589.
   web: >
-    export PANGEO_FORGE_DEPLOYMENT="${PANGEO_FORGE_DEPLOYMENT:=$HEROKU_APP_NAME}"
+    export PANGEO_FORGE_DEPLOYMENT="${HEROKU_APP_NAME:=$PANGEO_FORGE_DEPLOYMENT}"
     && echo "PANGEO_FORGE_DEPLOYMENT set to ${PANGEO_FORGE_DEPLOYMENT}"
     && sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
     && export DATAFLOW_CREDS='./secrets/dataflow-job-submission.json'
