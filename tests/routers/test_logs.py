@@ -171,19 +171,16 @@ trace_tests_base_params = dict(
     """
     ),
 )
+trace_tests_params = [
+    trace_tests_base_params | dict(status="completed", conclusion="failure"),
+    trace_tests_base_params | dict(status="in_progress", conclusion=None),
+    trace_tests_base_params | dict(status="queued", conclusion=None),
+    trace_tests_base_params | dict(status="completed", conclusion="success"),
+]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "get_logs_fixture",
-    [
-        trace_tests_base_params | dict(status="completed", conclusion="failure"),
-        trace_tests_base_params | dict(status="in_progress", conclusion=None),
-        trace_tests_base_params | dict(status="queued", conclusion=None),
-        trace_tests_base_params | dict(status="completed", conclusion="success"),
-    ],
-    indirect=True,
-)
+@pytest.mark.parametrize("get_logs_fixture", trace_tests_params, indirect=True)
 async def test_get_trace_via_recipe_run_id(
     mocker,
     get_logs_fixture,
@@ -246,3 +243,35 @@ async def test_get_logs_human_readable_method(
     )
     assert response.status_code == 200
     assert response.text == gcloud_logging_response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("get_logs_fixture", trace_tests_params, indirect=True)
+async def test_get_trace_human_readable_method(
+    mocker,
+    get_logs_fixture,
+    async_app_client,
+):
+    (
+        _,
+        gcloud_logging_response,
+        feedstock_spec,
+        commit,
+        recipe_id,
+    ) = get_logs_fixture
+
+    def mock_gcloud_logging_call(cmd: List[str]):
+        return gcloud_logging_response
+
+    mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
+
+    recipe_run = await async_app_client.get("recipe_runs/1")
+    trace_response = await async_app_client.get(
+        f"/feedstocks/{feedstock_spec}/{commit}/{recipe_id}/logs/trace",
+    )
+    if recipe_run.json()["status"] == "completed" and recipe_run.json()["conclusion"] == "failure":
+        assert trace_response.status_code == 200
+        assert trace_response.text == "Traceback\n    e f g error\n"
+    else:
+        assert trace_response.status_code == 204
+        assert trace_response.json()["detail"].endswith("has either not completed or did not fail.")

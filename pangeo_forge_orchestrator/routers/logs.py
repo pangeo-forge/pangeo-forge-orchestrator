@@ -181,7 +181,7 @@ async def trace_from_feedstock_spec_commit_and_recipe_id(
     if recipe_run.status != "completed" or recipe_run.conclusion != "failure":
         raise HTTPException(
             status_code=status.HTTP_204_NO_CONTENT,
-            detail=f"{recipe_run = } has is either not completed or did not fail.",
+            detail=f"{recipe_run = } has either not completed or did not fail.",
         )
     job_id = job_id_from_recipe_run(recipe_run)
     raw_logs = get_logs(job_id, severity="ERROR", limit=1)
