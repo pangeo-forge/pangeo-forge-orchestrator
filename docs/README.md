@@ -24,6 +24,8 @@ external to the above-listed teams to contribute code to this repository.
   proxy server.
 - [Heroku deployments](#heroku-deployments) - Overview of Heroku configuration and details
   on how to deploy each of the three Heroku deployments (review, staging, and prod).
+- [Heroku server logs](#heroku-server-logs) - How to find the Papertrail logs dashboard for any
+  Heroku deployment.
 - [Debugging Docker issues](#debugging-docker-issues) - Use docker-compose to debug Docker builds.
 - [Database: migrations with Alembic](#database-migrations-with-alembic) - Generating new database
   versions automatically.
@@ -459,6 +461,36 @@ It app is configured with a `heroku-postgresql:standard-0` add-on.
 The staging app secrets config are stored in `secrets/config.pangeo-forge.yaml`.
 
 The produciton app is the only GitHub App installed in the public-facing `pangeo-forge` org.
+
+# Heroku server logs
+
+For any Heroku deployment, the server logs are an essential debugging resource.
+
+We use the [Papertrail](https://elements.heroku.com/addons/papertrail) add-on to view logs.
+
+To find the papertrail instance associated with a particular deployment, run `heroky addons`:
+
+```console
+$ heroku addons
+
+Owning App                Add-on                        Plan                          Price      State
+────────────────────────  ────────────────────────────  ────────────────────────────  ─────────  ───────
+pangeo-forge-api-prod     postgresql-fitted-67704       heroku-postgresql:standard-0  $50/month  created
+pangeo-forge-api-staging  postgresql-transparent-63390  heroku-postgresql:hobby-dev   free       created
+pangeo-forge-api-staging  papertrail-opaque-15860       papertrail:choklad            free       created
+pforge-pr-150             postgresql-tetrahedral-03001  heroku-postgresql:hobby-dev   free       created
+pforge-pr-150             papertrail-globular-69250     papertrail:choklad            free       created
+```
+
+Then find the desired instance name from the `Add-on` column. For example, the papertrail instance for
+the `pangeo-forge-api-staging` app (at the time these docs were written) is named
+`papertrail-opaque-15860`. To open a browser tab to these logs, run:
+
+```console
+$ heroku addons:open papertrail-opaque-15860
+```
+
+More information and docs for papertrail can be found at https://devcenter.heroku.com/articles/papertrail.
 
 # Debugging Docker issues
 
