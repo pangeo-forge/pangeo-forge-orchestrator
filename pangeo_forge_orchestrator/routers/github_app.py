@@ -623,8 +623,11 @@ async def run(
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
-                if p["status"] == "failed":
-                    trace = p["exc_info"]
+                if (
+                    "status" in p
+                ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+                    if p["status"] == "failed":
+                        trace = p["exc_info"]
 
             logger.error(f"Recipe run {recipe_run} failed with: {trace}")
 
@@ -690,16 +693,20 @@ async def synchronize(
     except subprocess.CalledProcessError as e:
         for line in e.output.splitlines():
             p = json.loads(line)
-            if p["status"] == "failed":
-                tracelines = p["exc_info"].splitlines()
-                logger.debug(f"Synchronize errored with:\n {tracelines}")
-                if tracelines[-1].startswith("FileNotFoundError"):
-                    # A required file is missing: either meta.yaml or recipe.py
+            if (
+                "status" in p
+            ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+                if p["status"] == "failed":
+                    tracelines = p["exc_info"].splitlines()
+                    logger.debug(f"Synchronize errored with:\n {tracelines}")
                     update_request = dict(
                         status="completed",
                         conclusion="failure",
                         completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                        output=dict(title="FileNotFoundError", summary=tracelines[-1]),
+                        output=dict(
+                            title="Synchronize error - click details for summary",
+                            summary=tracelines[-1],
+                        ),
                     )
                     await gh.patch(
                         f"{base_api_url}/check-runs/{checks_response['id']}",
@@ -707,16 +714,17 @@ async def synchronize(
                         **gh_kws,
                     )
                     raise ValueError(tracelines[-1]) from e
-                else:
-                    raise NotImplementedError from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
         # case it doesn't, raise a NotImplementedError here to prevent moving forward.
         raise NotImplementedError from e
 
     for line in out.splitlines():
         p = json.loads(line)
-        if p["status"] == "completed":
-            meta = p["meta"]
+        if (
+            "status" in p
+        ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+            if p["status"] == "completed":
+                meta = p["meta"]
     logger.debug(meta)
 
     # TODO[IMPORTANT]:
@@ -1066,8 +1074,11 @@ async def deploy_prod_run(
 
     for line in out.splitlines():
         p = json.loads(line)
-        if p["status"] == "completed":
-            meta = p["meta"]
+        if (
+            "status" in p
+        ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+            if p["status"] == "completed":
+                meta = p["meta"]
     logger.debug(f"Retrieved meta: {meta}")
 
     # (2) find the feedstock and bakery in the database

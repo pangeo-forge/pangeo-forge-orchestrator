@@ -1,4 +1,6 @@
+import json
 import subprocess
+from typing import List
 from urllib.parse import urlparse
 
 import pytest
@@ -9,10 +11,7 @@ from pangeo_forge_orchestrator.routers.github_app import DEFAULT_BACKEND_NETLOC
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
-from .mock_pangeo_forge_runner import (
-    mock_subprocess_check_output,
-    mock_subprocess_check_output_raises_called_process_error,
-)
+from .mock_pangeo_forge_runner import mock_subprocess_check_output
 
 
 @pytest_asyncio.fixture
@@ -152,7 +151,12 @@ async def synchronize_request_fixture(
         dict(
             number=5,
             base_repo_full_name="pangeo-forge/staged-recipes",
-            title="Add ABC dataset (missing meta.yaml)",
+            title="Add ABC dataset, throws FileNotFoundError",
+        ),
+        dict(
+            number=5,
+            base_repo_full_name="pangeo-forge/staged-recipes",
+            title="Add ABC dataset, throws ImportError",
         ),
         dict(
             number=1,
@@ -180,11 +184,16 @@ async def test_receive_synchronize_request(
     )
     title = synchronize_request["payload"]["pull_request"]["title"]
 
-    if title == "Add ABC dataset (missing meta.yaml)":
-        mocker.patch.object(
-            subprocess, "check_output", mock_subprocess_check_output_raises_called_process_error
-        )
-        with pytest.raises(ValueError, match=r"FileNotFoundError: meta.yaml"):
+    if title.startswith("Add ABC dataset, throws "):
+        error_type = title.split()[-1]  # hacky way to get error types fixturized in pr title
+
+        def mock_subprocess_check_output_raises(cmd: List[str]):
+            loglines = [{"status": "failed", "exc_info": f"Traceback\n{error_type}: error msg"}]
+            output = "\n".join([json.dumps(line) for line in loglines])
+            raise subprocess.CalledProcessError(1, cmd, output)
+
+        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output_raises)
+        with pytest.raises(ValueError, match=rf"{error_type}: error msg"):
             response = await async_app_client.post(
                 "/github/hooks/",
                 json=synchronize_request["payload"],
