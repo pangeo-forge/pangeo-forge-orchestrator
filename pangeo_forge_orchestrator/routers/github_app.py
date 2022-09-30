@@ -620,7 +620,6 @@ async def run(
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
-            out = subprocess.check_output(cmd)
             for line in out.splitlines():
                 p = json.loads(line)
                 if p["status"] == "submitted":
