@@ -9,6 +9,13 @@ export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id
 echo "running database migration..."
 python3.9 -m alembic upgrade head
 
+if [[ -z "${PANGEO_FORGE_DEPLOYMENT}" ]]; then
+  echo "PANGEO_FORGE_DEPLOYMENT undefined, so this must be a review app..."
+  echo "Review app injected env var \$HEROKU_APP_NAME=${HEROKU_APP_NAME}..."
+  echo "Setting PANGEO_FORGE_DEPLOYMENT=\$HEROKU_APP_NAME..."
+  export PANGEO_FORGE_DEPLOYMENT=$HEROKU_APP_NAME
+fi
+
 echo "setting terraform env..."
 # PANGEO_FORGE_DEPLOYMENT is the exact name of the GitHub App to release.
 # For the persistent deployments (i.e. GitHub Apps) 'pangeo-forge' & 'pangeo-forge-staging',
