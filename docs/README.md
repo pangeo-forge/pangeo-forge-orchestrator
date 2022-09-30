@@ -32,6 +32,8 @@ external to the above-listed teams to contribute code to this repository.
   compute & storage backends.
 - [Bakeries: job status monitoring](#bakeries-job-status-monitoring) - This is how the FastAPI app
   knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
+- [Bakeries: querying job logs](#bakeries-querying-job-logs) - Query bakery job logs for recipe runs.
+  Especially useful for diagnosing failed jobs.
 - [Security](#security) - Some notes on security.
 - [Testing](#testing) - Automated testing in both local envs and containerized contexts.
 - [GitHub App: manual API calls](#github-app-manual-api-calls) - How to manually call the GitHub API _as a GitHub App_.
@@ -638,6 +640,18 @@ status monitoring infra.
 This project layout is based directly on https://blog.gruntwork.io/how-to-manage-terraform-state-28f5697e68fa.
 
 See also [Resource locations](#resource-locations) for a table referencing these terraform envs.
+
+# Bakeries: querying job logs
+
+To query logs for recipe runs, see the API docs at the `/docs#/logs` route of the deployment
+(https://api.pangeo-forge.org/docs#/logs for the production deployment).
+These routes are protected, due to the risk of leaking secrets in the logs. The
+`PANGEO_FORGE_API_KEY` is available to admins via in the deployments secrets config:
+
+```console
+$ sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
+# cat secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
+```
 
 # Security
 
