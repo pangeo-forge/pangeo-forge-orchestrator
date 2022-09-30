@@ -412,10 +412,17 @@ To ensure a successful build of a Review App for your PR:
    ```console
    $ sops -e -i secrets/pforge-pr-${PR number}.yaml
    ```
-3. Push these creds to your PR
-4. From https://github.com/pforgetest/settings/apps, install the `pforge-pr-${PR number}` app on all repos in the `pforgetest` org.
-5. Update the Review App's webhook url:
+3. Rename the review app bakery config as follows (where `SOME_OTHER_NUMBER` is a prior review app's PR number):
    ```console
+   $ mv bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-SOME_OTHER_NUMBER.yaml bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-${PR number}.yaml
+   ```
+4. Push these changes (the secrets and bakeries config for your review app) to your PR
+5. From https://github.com/organizations/pforgetest/settings/apps, manually install the
+   `pforge-pr-${PR number}` app on all repos in the `pforgetest` org. (Optionally, suspend
+   all other installations from `pforgetest`, so that multiple apps are not active at one time.)
+6. Update the Review App's webhook url (decrypting your review app creds first):
+   ```console
+   $ sops -d -i secrets/pforge-pr-${PR number}.yaml
    $ python3 scripts/update_hook_url.py review http://pforge-pr-${PR number}.herokuapp.com
    ```
 
