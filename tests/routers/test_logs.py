@@ -200,7 +200,7 @@ async def test_get_trace_via_recipe_run_id(
         assert trace_response.text == "Traceback\n    e f g error\n"
     else:
         assert trace_response.status_code == 204
-        assert trace_response.json()["detail"].endswith("has either not completed or did not fail.")
+        assert "has either not completed or did not fail." in trace_response.text
 
 
 @pytest.mark.asyncio
@@ -274,4 +274,4 @@ async def test_get_trace_human_readable_method(
         assert trace_response.text == "Traceback\n    e f g error\n"
     else:
         assert trace_response.status_code == 204
-        assert trace_response.json()["detail"].endswith("has either not completed or did not fail.")
+        assert "has either not completed or did not fail." in trace_response.text
