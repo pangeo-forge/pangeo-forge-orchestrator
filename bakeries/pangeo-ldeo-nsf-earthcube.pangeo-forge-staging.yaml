@@ -2,7 +2,7 @@ Bake:
   bakery_class: 'pangeo_forge_runner.bakery.dataflow.DataflowBakery'
 
 DataflowBakery:
-  temp_gcs_location: 'gs://beam-dataflow-test/temp'
+  temp_gcs_location: 'gs://pangeo-forge-staging-dataflow/temp'
 
 TargetStorage:
   fsspec_class: 's3fs.S3FileSystem'
@@ -18,10 +18,10 @@ TargetStorage:
 InputCacheStorage:
   fsspec_class: 'gcsfs.GCSFileSystem'
   fsspec_args:
-    bucket: 'pfcsb-bucket'
-  root_path: 'pfcsb-bucket/cache'
+    bucket: 'pangeo-forge-staging-cache'
+  root_path: 'pangeo-forge-staging-cache'
 
 MetadataCacheStorage:
   fsspec_class: 'gcsfs.GCSFileSystem'
   fsspec_args: {}
-  root_path: 'pfcsb-bucket/cache/metadata/{subpath}'
+  root_path: 'pangeo-forge-staging-cache/metadata/{subpath}'
