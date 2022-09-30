@@ -16,6 +16,7 @@ run:
   # to set manually for each PR. More on this syntax in: https://stackoverflow.com/a/2013589.
   web: >
     export PANGEO_FORGE_DEPLOYMENT="${PANGEO_FORGE_DEPLOYMENT:=$HEROKU_APP_NAME}"
+    && echo "PANGEO_FORGE_DEPLOYMENT set to ${PANGEO_FORGE_DEPLOYMENT}"
     && sops -d -i secrets/config.${PANGEO_FORGE_DEPLOYMENT}.yaml
     && export DATAFLOW_CREDS='./secrets/dataflow-job-submission.json'
     && sops -d -i ${DATAFLOW_CREDS}
