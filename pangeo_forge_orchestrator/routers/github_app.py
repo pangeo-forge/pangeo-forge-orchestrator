@@ -622,13 +622,18 @@ async def run(
             logger.debug(f"Command output is {out.decode('utf-8')}")
             for line in out.splitlines():
                 p = json.loads(line)
-                if p["status"] == "submitted":
-                    existing_message = json.loads(recipe_run.message) if recipe_run.message else {}
-                    recipe_run.message = json.dumps(
-                        existing_message | dict(job_name=p["job_name"], job_id=p["job_id"])
-                    )
-                    db_session.add(recipe_run)
-                    db_session.commit()
+                if (
+                    "status" in p
+                ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+                    if p["status"] == "submitted":
+                        existing_message = (
+                            json.loads(recipe_run.message) if recipe_run.message else {}
+                        )
+                        recipe_run.message = json.dumps(
+                            existing_message | dict(job_name=p["job_name"], job_id=p["job_id"])
+                        )
+                        db_session.add(recipe_run)
+                        db_session.commit()
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
