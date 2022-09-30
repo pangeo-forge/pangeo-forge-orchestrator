@@ -625,7 +625,8 @@ async def run(
                 p = json.loads(line)
                 if p["status"] == "submitted":
                     recipe_run.message = json.dumps(
-                        dict(job_name=p["job_name"], job_id=p["job_id"])
+                        json.loads(recipe_run.message)
+                        | dict(job_name=p["job_name"], job_id=p["job_id"])
                     )
                     db_session.add(recipe_run)
                     db_session.commit()
