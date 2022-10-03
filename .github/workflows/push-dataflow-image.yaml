@@ -31,10 +31,8 @@ jobs:
         uses: 'google-github-actions/setup-gcloud@v0'
       - name: push image to gcr
         run: >
-          gcloud auth activate-service-account ${{ env.GCP_ACCOUNT }} \
-          --key-file=${{ steps.auth.outputs.credentials_file_path }} \
-          && gcloud auth print-access-token \
-          | docker login -u oauth2accesstoken --password-stdin https://gcr.io
+          gcloud auth activate-service-account ${{ env.GCP_ACCOUNT }} --key-file='${{ steps.auth.outputs.credentials_file_path }}'
+          && gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://gcr.io
           && export IMAGE_SRC=$(cat dataflow-container-image.txt)
           && docker pull $IMAGE_SRC
           && export IMAGE_DST=gcr.io/${{ env.GCP_PROJECT }}/$IMAGE_SRC
