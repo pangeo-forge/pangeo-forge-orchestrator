@@ -22,7 +22,7 @@ class GitHubAppConfig(BaseModel):
 class Bake(BaseModel):
     bakery_class: str
     job_name: Optional[str]
-    container_image: str = "pangeo/forge:7c87e6c"
+    container_image: str = "docker.io/pangeo/forge:7c87e6c"
 
 
 class FsspecArgs(BaseModel):
