@@ -19,12 +19,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GCP_PROJECT: pangeo-forge-4967
+      GCP_ACCOUNT: google-container-registry@pangeo-forge-4967.iam.gserviceaccount.com
     steps:
       - uses: actions/checkout@v2
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v0'
+        with:
+          credentials_json: '${{ secrets.GOOGLE_CONTAINER_REGISTRY_CREDS }}'
+      - name: 'Setup gcloud'
+        uses: 'google-github-actions/setup-gcloud@v0'
       - name: push image to gcr
         run: >
-          echo ${{ secrets.GOOGLE_CONTAINER_REGISTRY_CREDS }} \
-          | docker login -u _json_key --password-stdin https://gcr.io
+          gcloud auth activate-service-account ${{ env.GCP_ACCOUNT }} \
+          --key-file=${{ steps.auth.outputs.credentials_file_path }} \
+          && gcloud auth print-access-token \
+          | docker login -u oauth2accesstoken --password-stdin https://gcr.io
           && export IMAGE_SRC=$(cat dataflow-container-image.txt)
           && docker pull $IMAGE_SRC
           && export IMAGE_DST=gcr.io/${{ env.GCP_PROJECT }}/$IMAGE_SRC
