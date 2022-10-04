@@ -24,12 +24,16 @@ external to the above-listed teams to contribute code to this repository.
   proxy server.
 - [Heroku deployments](#heroku-deployments) - Overview of Heroku configuration and details
   on how to deploy each of the three Heroku deployments (review, staging, and prod).
+- [Heroku server logs](#heroku-server-logs) - How to find the Papertrail logs dashboard for any
+  Heroku deployment.
 - [Debugging Docker issues](#debugging-docker-issues) - Use docker-compose to debug Docker builds.
 - [Database: migrations with Alembic](#database-migrations-with-alembic) - Generating new database
   versions automatically.
 - [Database: manual edits](#database-manual-edits) - Manually edit the database for any deployment.
 - [Bakeries: `pangeo-forge-runner` config](#bakeries-pangeo-forge-runner-config) - Configure named
   compute & storage backends.
+- [Bakeries: default `container_image`](#bakeries-default-container_image) - How the `container_image`
+  used on Dataflow is set, and how to upgrade it.
 - [Bakeries: job status monitoring](#bakeries-job-status-monitoring) - This is how the FastAPI app
   knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
 - [Bakeries: querying job logs](#bakeries-querying-job-logs) - Query bakery job logs for recipe runs.
@@ -462,6 +466,36 @@ The staging app secrets config are stored in `secrets/config.pangeo-forge.yaml`.
 
 The produciton app is the only GitHub App installed in the public-facing `pangeo-forge` org.
 
+# Heroku server logs
+
+For any Heroku deployment, the server logs are an essential debugging resource.
+
+We use the [Papertrail](https://elements.heroku.com/addons/papertrail) add-on to view logs.
+
+To find the papertrail instance associated with a particular deployment, run `heroky addons`:
+
+```console
+$ heroku addons
+
+Owning App                Add-on                        Plan                          Price      State
+────────────────────────  ────────────────────────────  ────────────────────────────  ─────────  ───────
+pangeo-forge-api-prod     postgresql-fitted-67704       heroku-postgresql:standard-0  $50/month  created
+pangeo-forge-api-staging  postgresql-transparent-63390  heroku-postgresql:hobby-dev   free       created
+pangeo-forge-api-staging  papertrail-opaque-15860       papertrail:choklad            free       created
+pforge-pr-150             postgresql-tetrahedral-03001  heroku-postgresql:hobby-dev   free       created
+pforge-pr-150             papertrail-globular-69250     papertrail:choklad            free       created
+```
+
+Then find the desired instance name from the `Add-on` column. For example, the papertrail instance for
+the `pangeo-forge-api-staging` app (at the time these docs were written) is named
+`papertrail-opaque-15860`. To open a browser tab to these logs, run:
+
+```console
+$ heroku addons:open papertrail-opaque-15860
+```
+
+More information and docs for papertrail can be found at https://devcenter.heroku.com/articles/papertrail.
+
 # Debugging Docker issues
 
 To debug Docker issues, such as container build issues, you can stand up a close facsimile of the
@@ -614,6 +648,34 @@ pangeo-forge/pangeo-forge-runner.
 > is eventually dumped to a temporary JSON file on disk for each `pangeo-forge-runner` call. This is
 > unnecessarily convoluted. Some notes on how it could be improved are available in
 > https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
+
+# Bakeries: default `container_image`
+
+## Image definition
+
+The `container_image` used by Pangeo Forge Cloud workers is defined in the `forge` directory of
+https://github.com/pangeo-data/pangeo-docker-images. The tag of this image used in the current
+orchestrator release is stored in the `dataflow-container-image.txt` file in the root of this repo.
+
+## Mirroring to gcr.io
+
+We've experienced difficulty pulling this image directly from Docker Hub into Dataflow jobs. Therefore,
+whenever the `dataflow-container-image.txt` file is changed, the
+`.github/workflows/push-dataflow-image.yaml` GitHub Workflow is run, which mirrors the specified image
+tag onto Google Container Registry (GCR).
+
+Arguably, this image mirroring workflow would be well-suited to be a part of the automations run by
+`scripts.deploy/release.sh`. It has been setup as its own GitHub Workflow, however, for two reasons:
+
+1. This workflow requires the `docker` CLI, which is not installed in the container. We could install
+   it there, however we are not able to run a Docker daemon on Heroku.
+2. Unlike the other automations in `scripts.deploy/release.sh`, this workflow is a patch until we can
+   find a better upstream solution.
+
+## Updating the image tag
+
+To update the `container_image` tag used in production, change the tag in
+`dataflow-container-image.txt` and then follow the release cycle of merging to `main` -> `prod`.
 
 # Bakeries: job status monitoring
 
