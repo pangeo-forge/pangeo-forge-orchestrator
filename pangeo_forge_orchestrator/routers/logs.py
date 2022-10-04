@@ -72,7 +72,7 @@ def get_logs(
     db_session: Session,
 ):
     cmd = f"python3 ../bakeries/dataflow/fetch_logs.py {job_name} --source={source}".split()
-    logs = subprocess.check_output(cmd).decode("utf-8")
+    logs = subprocess.check_output(cmd)
 
     # First security check: ensure known bakery secrets do not appear in logs
     statement = select(MODELS["bakery"].table).where(
@@ -82,7 +82,7 @@ def get_logs(
     bakery_config = get_config().bakeries[bakery.name]
     bakery_secrets = secret_str_vals_from_basemodel(bakery_config)
     for secret in bakery_secrets:
-        if secret in logs:
+        if secret in str(logs):
             raise ValueError("Bakery secret detected in logs.")
 
     # Second security check: gitleaks

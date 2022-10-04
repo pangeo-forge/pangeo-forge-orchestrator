@@ -5,7 +5,9 @@ from typing import List
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException
+from sqlmodel import Session
 
+from pangeo_forge_orchestrator.database import engine
 from pangeo_forge_orchestrator.models import MODELS
 from pangeo_forge_orchestrator.routers.logs import get_logs, job_name_from_recipe_run
 
@@ -44,24 +46,6 @@ def test_job_name_from_recipe_run(message, expected_error):
     else:
         with pytest.raises(HTTPException):
             job_name_from_recipe_run(recipe_run)
-
-
-@pytest.mark.parametrize(
-    "gcloud_logging_response",
-    ["Some logs returned by gcloud logging API"],
-)
-def test_get_logs(mocker, gcloud_logging_response):
-    def mock_gcloud_logging_call(cmd: List[str]):
-        return gcloud_logging_response
-
-    mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
-
-    logs = get_logs(
-        job_name="a9g8f8d7sa",
-        # severity="ERROR",
-        # limit=1,
-    )
-    assert logs == gcloud_logging_response
 
 
 @pytest_asyncio.fixture
@@ -118,6 +102,57 @@ async def get_logs_fixture(
     )
     # database teardown
     clear_database()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "get_logs_fixture",
+    [
+        dict(
+            message='{"job_name": "abc"}',
+            feedstock_spec="pangeo-forge/staged-recipes",
+            commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
+            recipe_id="liveocean",
+            gcloud_logging_response="Some logging message from gcloud API.",
+            status="completed",
+            conclusion="failure",
+        ),
+    ],
+    indirect=True,
+)
+async def test_get_logs(mocker, get_logs_fixture, async_app_client):
+
+    (
+        _,
+        gcloud_logging_response,
+        _,
+        _,
+        _,
+    ) = get_logs_fixture
+
+    def mock_fetch_logs_call(cmd: List[str]):
+        return gcloud_logging_response
+
+    mocker.patch.object(subprocess, "check_output", mock_fetch_logs_call)
+
+    recipe_run_response = await async_app_client.get("/recipe_runs/1")
+    recipe_run_kws = {
+        # drop extended response fields
+        k: v
+        for k, v in recipe_run_response.json().items()
+        if k not in ["bakery", "feedstock"]
+    }
+    recipe_run = MODELS["recipe_run"].table(**recipe_run_kws)
+    with Session(engine) as db_session:
+        logs = get_logs(
+            job_name=json.loads(recipe_run.message)["job_name"],
+            source="worker",
+            recipe_run=recipe_run,
+            db_session=db_session,
+            # severity="ERROR",
+            # limit=1,
+        )
+    assert logs == gcloud_logging_response
 
 
 @pytest.mark.asyncio
