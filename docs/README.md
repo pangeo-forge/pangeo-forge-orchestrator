@@ -32,7 +32,7 @@ external to the above-listed teams to contribute code to this repository.
 - [Database: manual edits](#database-manual-edits) - Manually edit the database for any deployment.
 - [Bakeries: `pangeo-forge-runner` config](#bakeries-pangeo-forge-runner-config) - Configure named
   compute & storage backends.
-- [Bakeries: default `container_image`](#bakeries-default-containerimage) - How the `container_image`
+- [Bakeries: default `container_image`](#bakeries-default-container_image) - How the `container_image`
   used on Dataflow is set, and how to upgrade it.
 - [Bakeries: job status monitoring](#bakeries-job-status-monitoring) - This is how the FastAPI app
   knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
