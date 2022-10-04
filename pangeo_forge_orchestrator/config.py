@@ -4,7 +4,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml  # type: ignore
-from pydantic import BaseModel, Extra, SecretStr
+from pydantic import BaseModel, Extra, Field, SecretStr
+
+GCP_PROJECT = "pangeo-forge-4967"
+root = Path(__file__).resolve().parent.parent
 
 
 class FastAPIConfig(BaseModel):
@@ -19,9 +22,15 @@ class GitHubAppConfig(BaseModel):
     run_only_on: Optional[List[str]] = None
 
 
+def get_gcr_container_image_url():
+    with open(root / "dataflow-container-image.txt") as img_tag:
+        return f"gcr.io/{GCP_PROJECT}/{img_tag.read().strip()}"
+
+
 class Bake(BaseModel):
     bakery_class: str
     job_name: Optional[str]
+    container_image: str = Field(default_factory=get_gcr_container_image_url)
 
 
 class FsspecArgs(BaseModel):
@@ -94,9 +103,6 @@ class Config(BaseModel):
     fastapi: FastAPIConfig
     github_app: GitHubAppConfig
     bakeries: Dict[str, Bakery]
-
-
-root = Path(__file__).resolve().parent.parent
 
 
 def get_app_config_path() -> str:
