@@ -6,7 +6,7 @@ code to this repo, you will need membership in:
 - AWS `pangeo-forge` team (with KMS permissions)
 - Heroku `pangeo-forge` team
 - GitHub `pangeo-forge` org
-- GitHub `pforgetest` org
+- GitHub `pforgetest` org (with owner role. Otherwise, you can't manage GitHub App within the org)
 - GCP `pangeo-forge-4967` project
 
 Over time, we aim to establish a pathway for contributors
@@ -24,12 +24,16 @@ external to the above-listed teams to contribute code to this repository.
   proxy server.
 - [Heroku deployments](#heroku-deployments) - Overview of Heroku configuration and details
   on how to deploy each of the three Heroku deployments (review, staging, and prod).
+- [Heroku server logs](#heroku-server-logs) - How to find the Papertrail logs dashboard for any
+  Heroku deployment.
 - [Debugging Docker issues](#debugging-docker-issues) - Use docker-compose to debug Docker builds.
 - [Database: migrations with Alembic](#database-migrations-with-alembic) - Generating new database
   versions automatically.
 - [Database: manual edits](#database-manual-edits) - Manually edit the database for any deployment.
 - [Bakeries: `pangeo-forge-runner` config](#bakeries-pangeo-forge-runner-config) - Configure named
   compute & storage backends.
+- [Bakeries: default `container_image`](#bakeries-default-containerimage) - How the `container_image`
+  used on Dataflow is set, and how to upgrade it.
 - [Bakeries: job status monitoring](#bakeries-job-status-monitoring) - This is how the FastAPI app
   knows when compute jobs have concluded. Terraform for this infra is run on each Heroku deploy.
 - [Security](#security) - Some notes on security.
@@ -280,7 +284,7 @@ to which GitHub App webhooks are posted. Finally, update your GitHub App's webho
 will send webhooks to the proxy:
 
 ```console
-$ python3 scripts/update_hook_url.py local $PROXY_URL
+$ python3 scripts.develop/update_hook_url.py secrets/pforge-local-${Your GitHub Username} $PROXY_URL
 
 200 {"content_type":"json","secret":"********","url":"https://smee.io/pGKLaDu6CJwiBjJU","insecure_ssl":"0"}
 ```
@@ -288,6 +292,24 @@ $ python3 scripts/update_hook_url.py local $PROXY_URL
 The `"url"` field in the response should refect the `PROXY_URL` you passed to the script. Your
 GitHub App will now send webhooks to the specified proxy url. You can change your proxy url at any
 time by re-running this last script with a different argument.
+
+## Bakeries config
+
+The last step before starting the app server is to setup bakeries config for your local app instance. You can create a configuration file with the bakery information by copying the `bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml` file to `bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml`:
+
+```console
+$ cp bakeries/pangeo-ldeo-nsf-earthcube.pforge-local-cisasacstern.yaml bakeries/pangeo-ldeo-nsf-earthcube.local-${Your GitHub Username}.yaml
+```
+
+Finally, decrypt the secret args for this bakery:
+
+```console
+$ sops -d -i secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
+```
+
+> **Note from @cisaacstern**: This entire bakeries config setup (which I wrote) is _far to convoluted_. These
+> instructions are designed to get your local app running under the current paradigm. This should be revisited and
+> simplified considerably. For further discussion on this, see https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
 
 ## Start the server
 
@@ -309,7 +331,7 @@ to start the dev server with hot reloads.
 
 > **Note**: If you do not plan to work on the `/github` routes, you can skip this.
 
-Finally, navigate to https://github.com/pforgetest/settings/apps. Find your newly created app
+Finally, navigate to https://github.com/organizations/pforgetest/settings/apps. Find your newly created app
 on the list of GitHub Apps. Click on it, and then install it in all repositories in `pforgetest`.
 
 If other apps are installed on `pforgetest` (e.g. `pangeo-forge-staging`, some review apps), you
@@ -368,6 +390,16 @@ For each PR to `pangeo-forge-recipes`, Heroku creates a Review App which will ha
 This is a live version of the app running against an ephemeral database. It can be used for manual
 checks or further integration testing.
 
+> We use Heroku's Review Apps
+> [injected-environment-variables](https://devcenter.heroku.com/articles/github-integration-review-apps#injected-environment-variables)
+> feature to dynamically set the `PANGEO_FORGE_DEPLOYMENT` env var for review apps to the value of the injected env var `HEROKU_APP_NAME`, which follows the pattern `pforge-pr-${PR number}`. Take a look at both `heroku.yml` and `scripts.deploy/release.sh` to see where this happens.
+
+> We also use Heroku's Review Apps
+> [postdeploy script](https://devcenter.heroku.com/articles/github-integration-review-apps#the-postdeploy-script)
+> feature to automatically seed each review app database with the
+> https://github.com/pforgetest/test-staged-recipes feedstock.
+> To see where this happens (and/or seed additional test data), see `postdeploy/seed_review_app_data.py`.
+
 To ensure a successful build of a Review App for your PR:
 
 1. Generate a `secrets/pforge-pr-${PR number}.yaml` secrets config for your review app, by:
@@ -384,12 +416,17 @@ To ensure a successful build of a Review App for your PR:
    ```console
    $ sops -e -i secrets/pforge-pr-${PR number}.yaml
    ```
-3. In `app.json`, changing the review app `PANGEO_FORGE_DEPLOYMENT` var to `pforge-pr-${PR number}`
-4. Pushing these changes to your PR
-5. From https://github.com/pforgetest/settings/apps, install the `pforge-pr-${PR number}` app on
-   all repos in the `pforgetest` org.
-6. Update the Review App's webhook url:
+3. Rename the review app bakery config as follows (where `SOME_OTHER_NUMBER` is a prior review app's PR number):
    ```console
+   $ mv bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-SOME_OTHER_NUMBER.yaml bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-${PR number}.yaml
+   ```
+4. Push these changes (the secrets and bakeries config for your review app) to your PR
+5. From https://github.com/organizations/pforgetest/settings/apps, manually install the
+   `pforge-pr-${PR number}` app on all repos in the `pforgetest` org. (Optionally, suspend
+   all other installations from `pforgetest`, so that multiple apps are not active at one time.)
+6. Update the Review App's webhook url (decrypting your review app creds first):
+   ```console
+   $ sops -d -i secrets/pforge-pr-${PR number}.yaml
    $ python3 scripts/update_hook_url.py review http://pforge-pr-${PR number}.herokuapp.com
    ```
 
@@ -426,6 +463,36 @@ It app is configured with a `heroku-postgresql:standard-0` add-on.
 The staging app secrets config are stored in `secrets/config.pangeo-forge.yaml`.
 
 The produciton app is the only GitHub App installed in the public-facing `pangeo-forge` org.
+
+# Heroku server logs
+
+For any Heroku deployment, the server logs are an essential debugging resource.
+
+We use the [Papertrail](https://elements.heroku.com/addons/papertrail) add-on to view logs.
+
+To find the papertrail instance associated with a particular deployment, run `heroky addons`:
+
+```console
+$ heroku addons
+
+Owning App                Add-on                        Plan                          Price      State
+────────────────────────  ────────────────────────────  ────────────────────────────  ─────────  ───────
+pangeo-forge-api-prod     postgresql-fitted-67704       heroku-postgresql:standard-0  $50/month  created
+pangeo-forge-api-staging  postgresql-transparent-63390  heroku-postgresql:hobby-dev   free       created
+pangeo-forge-api-staging  papertrail-opaque-15860       papertrail:choklad            free       created
+pforge-pr-150             postgresql-tetrahedral-03001  heroku-postgresql:hobby-dev   free       created
+pforge-pr-150             papertrail-globular-69250     papertrail:choklad            free       created
+```
+
+Then find the desired instance name from the `Add-on` column. For example, the papertrail instance for
+the `pangeo-forge-api-staging` app (at the time these docs were written) is named
+`papertrail-opaque-15860`. To open a browser tab to these logs, run:
+
+```console
+$ heroku addons:open papertrail-opaque-15860
+```
+
+More information and docs for papertrail can be found at https://devcenter.heroku.com/articles/papertrail.
 
 # Debugging Docker issues
 
@@ -579,6 +646,34 @@ pangeo-forge/pangeo-forge-runner.
 > is eventually dumped to a temporary JSON file on disk for each `pangeo-forge-runner` call. This is
 > unnecessarily convoluted. Some notes on how it could be improved are available in
 > https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/129.
+
+# Bakeries: default `container_image`
+
+## Image definition
+
+The `container_image` used by Pangeo Forge Cloud workers is defined in the `forge` directory of
+https://github.com/pangeo-data/pangeo-docker-images. The tag of this image used in the current
+orchestrator release is stored in the `dataflow-container-image.txt` file in the root of this repo.
+
+## Mirroring to gcr.io
+
+We've experienced difficulty pulling this image directly from Docker Hub into Dataflow jobs. Therefore,
+whenever the `dataflow-container-image.txt` file is changed, the
+`.github/workflows/push-dataflow-image.yaml` GitHub Workflow is run, which mirrors the specified image
+tag onto Google Container Registry (GCR).
+
+Arguably, this image mirroring workflow would be well-suited to be a part of the automations run by
+`scripts.deploy/release.sh`. It has been setup as its own GitHub Workflow, however, for two reasons:
+
+1. This workflow requires the `docker` CLI, which is not installed in the container. We could install
+   it there, however we are not able to run a Docker daemon on Heroku.
+2. Unlike the other automations in `scripts.deploy/release.sh`, this workflow is a patch until we can
+   find a better upstream solution.
+
+## Updating the image tag
+
+To update the `container_image` tag used in production, change the tag in
+`dataflow-container-image.txt` and then follow the release cycle of merging to `main` -> `prod`.
 
 # Bakeries: job status monitoring
 
