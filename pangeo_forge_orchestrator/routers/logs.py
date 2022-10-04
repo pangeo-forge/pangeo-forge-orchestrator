@@ -1,16 +1,28 @@
 import json
 import subprocess
+import tempfile
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, SecretStr
 from sqlmodel import Session, SQLModel, select
 from starlette import status
 
+from ..config import get_config
 from ..dependencies import check_authentication_header, get_session as get_database_session
 from ..models import MODELS
 
 logs_router = APIRouter()
 
+DEFAULT_SOURCE = Query(
+    "worker",
+    description=(
+        "A valid dataflow logging source. Must be one of: ['kubelet', 'shuffler', 'harness', "
+        "'harness-startup', 'vm-health', 'vm-monitor', 'resource', 'agent', 'docker', 'system', "
+        "'shuffler-startup', 'worker']"
+    ),
+)
 DEFAULT_SEVERITY = Query(
     "ERROR",
     description=(
@@ -21,40 +33,67 @@ DEFAULT_SEVERITY = Query(
 DEFAULT_LIMIT = Query(1, description="Max number of log entries to return.")
 
 
-def job_id_from_recipe_run(recipe_run: SQLModel) -> str:
+def job_name_from_recipe_run(recipe_run: SQLModel) -> str:
     try:
-        job_id = json.loads(recipe_run.message)["job_id"]
+        job_name = json.loads(recipe_run.message)["job_name"]
     except (KeyError, json.JSONDecodeError) as e:
         detail = (
-            f"Message field of {recipe_run = } missing 'job_id'."
+            f"Message field of {recipe_run = } missing 'job_name'."
             if type(e) == KeyError
             else f"Message field of {recipe_run = } not JSON decodable."
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
-    return job_id
+    return job_name
+
+
+def secret_str_vals_from_basemodel(obj: BaseModel) -> List[str]:
+    """From a pydantic BaseModel, recursively surface all fields with type SecretStr."""
+
+    def is_pydantic_model(obj):
+        return isinstance(obj, BaseModel)
+
+    secret_str_vals = []
+    if is_pydantic_model(obj):
+        for var in vars(obj):
+            if is_pydantic_model(getattr(obj, var)):
+                secret_str_vals_from_basemodel(getattr(obj, var))
+            elif isinstance(getattr(obj, var), SecretStr):
+                secret_str_vals.append(json.loads(obj.json())[var])
+
+    return secret_str_vals
 
 
 def get_logs(
-    job_id: str,
-    severity: str,
-    limit: int,
+    job_name: str,
+    # TODO: add param `severity: str,`
+    source: str,
+    recipe_run: SQLModel,
+    db_session: Session,
 ):
-    log_name_prefix = "projects/pangeo-forge-4967/logs/dataflow.googleapis.com"
-    query = (
-        'resource.type="dataflow_step" '
-        f'AND resource.labels.job_id="{job_id}" '
-        f'AND logName=("{log_name_prefix}%2Fjob-message" OR "{log_name_prefix}%2Flauncher") '
-        f'AND severity="{severity}"'
+    cmd = f"python3 ../bakeries/dataflow/fetch_logs.py {job_name} --source={source}".split()
+    logs = subprocess.check_output(cmd).decode("utf-8")
+
+    # First security check: ensure known bakery secrets do not appear in logs
+    statement = select(MODELS["bakery"].table).where(
+        MODELS["bakery"].table.id == recipe_run.bakery_id
     )
-    cmd = "gcloud logging read".split() + [query]
+    bakery = db_session.exec(statement).one()
+    bakery_config = get_config().bakeries[bakery.name]
+    bakery_secrets = secret_str_vals_from_basemodel(bakery_config)
+    for secret in bakery_secrets:
+        if secret in logs:
+            raise ValueError("Bakery secret detected in logs.")
 
-    if limit:
-        cmd += [f"--limit={limit}"]
+    # Second security check: gitleaks
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(f"{tmpdir}/c.json", mode="w") as f:
+            json.dump(logs, f)
+            gitleaks_cmd = "gitleaks detect --no-git".split()
+            gitleaks = subprocess.run(gitleaks_cmd, cwd=tmpdir)
+            if not gitleaks.returncode == 0:
+                raise ValueError("Gitleaks detected secrets in the logs.")
 
-    # cmd = f"python3 ../bakeries/dataflow/fetch_logs.py {job_name} --source={source}"
-
-    logs = subprocess.check_output(cmd)
     return logs
 
 
@@ -79,37 +118,14 @@ async def raw_logs_from_recipe_run_id(
     id: int,
     *,
     db_session: Session = Depends(get_database_session),
-    severity: str = DEFAULT_SEVERITY,
-    limit: int = DEFAULT_LIMIT,
+    source: str = DEFAULT_SOURCE,
+    # severity: str = DEFAULT_SEVERITY,
+    # limit: int = DEFAULT_LIMIT,
 ):
     recipe_run = recipe_run_from_id(id, db_session)
-    job_id = job_id_from_recipe_run(recipe_run)
-    raw_logs = get_logs(job_id, severity, limit)
+    job_name = job_name_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_name, source, recipe_run, db_session)
     return raw_logs
-
-
-@logs_router.get(
-    "/recipe_runs/{id}/logs/trace",
-    summary="Get an error trace for a failed recipe_run, specified by database id.",
-    tags=["recipe_run", "logs", "public"],
-    response_class=PlainTextResponse,
-)
-async def trace_from_recipe_run_id(
-    id: int,
-    *,
-    db_session: Session = Depends(get_database_session),
-):
-    recipe_run = recipe_run_from_id(id, db_session)
-    if recipe_run.status != "completed" or recipe_run.conclusion != "failure":
-        raise HTTPException(
-            status_code=status.HTTP_204_NO_CONTENT,
-            detail=f"{recipe_run = } has either not completed or did not fail.",
-        )
-    job_id = job_id_from_recipe_run(recipe_run)
-    raw_logs = get_logs(job_id, severity="ERROR", limit=1)
-    trace = raw_logs.split("Traceback")[-1]
-    trace = "Traceback" + trace
-    return trace
 
 
 def recipe_run_from_feedstock_spec_commit_and_recipe_id(
@@ -144,8 +160,9 @@ async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
     recipe_id: str,
     *,
     db_session: Session = Depends(get_database_session),
-    severity: str = DEFAULT_SEVERITY,
-    limit: int = DEFAULT_LIMIT,
+    source: str = DEFAULT_SOURCE,
+    # severity: str = DEFAULT_SEVERITY,
+    # limit: int = DEFAULT_LIMIT,
 ):
     recipe_run = recipe_run_from_feedstock_spec_commit_and_recipe_id(
         feedstock_spec,
@@ -153,40 +170,6 @@ async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
         recipe_id,
         db_session,
     )
-    job_id = job_id_from_recipe_run(recipe_run)
-    raw_logs = get_logs(job_id, severity, limit)
+    job_name = job_name_from_recipe_run(recipe_run)
+    raw_logs = get_logs(job_name, source, recipe_run, db_session)
     return raw_logs
-
-
-@logs_router.get(
-    "/feedstocks/{feedstock_spec:path}/{commit}/{recipe_id}/logs/trace",
-    summary=(
-        "Get an error trace a failed recipe run, "
-        "specified by feedstock_spec, commit, and recipe_id."
-    ),
-    tags=["feedstock", "logs", "public"],
-    response_class=PlainTextResponse,
-)
-async def trace_from_feedstock_spec_commit_and_recipe_id(
-    feedstock_spec: str,
-    commit: str,
-    recipe_id: str,
-    *,
-    db_session: Session = Depends(get_database_session),
-):
-    recipe_run = recipe_run_from_feedstock_spec_commit_and_recipe_id(
-        feedstock_spec,
-        commit,
-        recipe_id,
-        db_session,
-    )
-    if recipe_run.status != "completed" or recipe_run.conclusion != "failure":
-        raise HTTPException(
-            status_code=status.HTTP_204_NO_CONTENT,
-            detail=f"{recipe_run = } has either not completed or did not fail.",
-        )
-    job_id = job_id_from_recipe_run(recipe_run)
-    raw_logs = get_logs(job_id, severity="ERROR", limit=1)
-    trace = raw_logs.split("Traceback")[-1]
-    trace = "Traceback" + trace
-    return trace
