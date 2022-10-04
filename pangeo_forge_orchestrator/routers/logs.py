@@ -52,6 +52,8 @@ def get_logs(
     if limit:
         cmd += [f"--limit={limit}"]
 
+    # cmd = f"python3 ../bakeries/dataflow/fetch_logs.py {job_name} --source={source}"
+
     logs = subprocess.check_output(cmd)
     return logs
 
