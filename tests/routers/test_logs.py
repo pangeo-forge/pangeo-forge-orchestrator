@@ -1,6 +1,5 @@
 import json
 import subprocess
-from textwrap import dedent
 from typing import List
 
 import pytest
@@ -8,7 +7,7 @@ import pytest_asyncio
 from fastapi import HTTPException
 
 from pangeo_forge_orchestrator.models import MODELS
-from pangeo_forge_orchestrator.routers.logs import get_logs, job_id_from_recipe_run
+from pangeo_forge_orchestrator.routers.logs import get_logs, job_name_from_recipe_run
 
 from ..conftest import clear_database
 
@@ -16,12 +15,12 @@ from ..conftest import clear_database
 @pytest.mark.parametrize(
     "message, expected_error",
     [
-        ('{"job_id": "123"}', None),
-        ('{"job_name": "123"}', KeyError),
-        ('"job_id": "123"', json.JSONDecodeError),
+        ('{"job_name": "123"}', None),
+        ('{"job_id": "123"}', KeyError),
+        ('"job_name": "123"', json.JSONDecodeError),
     ],
 )
-def test_job_id_from_recipe_run(message, expected_error):
+def test_job_name_from_recipe_run(message, expected_error):
     recipe_run_kws = {
         "recipe_id": "liveocean",
         "bakery_id": 1,
@@ -40,11 +39,11 @@ def test_job_id_from_recipe_run(message, expected_error):
     }
     recipe_run = MODELS["recipe_run"].table(**recipe_run_kws)
     if not expected_error:
-        job_id = job_id_from_recipe_run(recipe_run)
-        assert job_id == json.loads(message)["job_id"]
+        job_name = job_name_from_recipe_run(recipe_run)
+        assert job_name == json.loads(message)["job_name"]
     else:
         with pytest.raises(HTTPException):
-            job_id_from_recipe_run(recipe_run)
+            job_name_from_recipe_run(recipe_run)
 
 
 @pytest.mark.parametrize(
@@ -58,9 +57,9 @@ def test_get_logs(mocker, gcloud_logging_response):
     mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
 
     logs = get_logs(
-        job_id="2022-09-29_11_31_40-14379398480910960453",
-        severity="ERROR",
-        limit=1,
+        job_name="a9g8f8d7sa",
+        # severity="ERROR",
+        # limit=1,
     )
     assert logs == gcloud_logging_response
 
@@ -126,7 +125,7 @@ async def get_logs_fixture(
     "get_logs_fixture",
     [
         dict(
-            message='{"job_id": "abc"}',
+            message='{"job_name": "abc"}',
             feedstock_spec="pangeo-forge/staged-recipes",
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
@@ -157,57 +156,12 @@ async def test_get_logs_via_recipe_run_id(
     assert response.text == gcloud_logging_response
 
 
-trace_tests_base_params = dict(
-    message='{"job_id": "abc"}',
-    feedstock_spec="pangeo-forge/staged-recipes",
-    commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
-    recipe_id="liveocean",
-    gcloud_logging_response=dedent(
-        """
-    Traceback
-        a b c error
-    Traceback
-        e f g error
-    """
-    ),
-)
-trace_tests_params = [
-    trace_tests_base_params | dict(status="completed", conclusion="failure"),
-    trace_tests_base_params | dict(status="in_progress", conclusion=None),
-    trace_tests_base_params | dict(status="queued", conclusion=None),
-    trace_tests_base_params | dict(status="completed", conclusion="success"),
-]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("get_logs_fixture", trace_tests_params, indirect=True)
-async def test_get_trace_via_recipe_run_id(
-    mocker,
-    get_logs_fixture,
-    async_app_client,
-):
-    _, gcloud_logging_response, *_ = get_logs_fixture
-
-    def mock_gcloud_logging_call(cmd: List[str]):
-        return gcloud_logging_response
-
-    mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
-
-    recipe_run = await async_app_client.get("/recipe_runs/1")
-    trace_response = await async_app_client.get("/recipe_runs/1/logs/trace")
-    if recipe_run.json()["status"] == "completed" and recipe_run.json()["conclusion"] == "failure":
-        assert trace_response.status_code == 200
-        assert trace_response.text == "Traceback\n    e f g error\n"
-    else:
-        assert trace_response.status_code == 204
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "get_logs_fixture",
     [
         dict(
-            message='{"job_id": "abc"}',
+            message='{"job_name": "abc"}',
             feedstock_spec="pangeo-forge/staged-recipes",
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
@@ -242,34 +196,3 @@ async def test_get_logs_human_readable_method(
     )
     assert response.status_code == 200
     assert response.text == gcloud_logging_response
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("get_logs_fixture", trace_tests_params, indirect=True)
-async def test_get_trace_human_readable_method(
-    mocker,
-    get_logs_fixture,
-    async_app_client,
-):
-    (
-        _,
-        gcloud_logging_response,
-        feedstock_spec,
-        commit,
-        recipe_id,
-    ) = get_logs_fixture
-
-    def mock_gcloud_logging_call(cmd: List[str]):
-        return gcloud_logging_response
-
-    mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
-
-    recipe_run = await async_app_client.get("recipe_runs/1")
-    trace_response = await async_app_client.get(
-        f"/feedstocks/{feedstock_spec}/{commit}/{recipe_id}/logs/trace",
-    )
-    if recipe_run.json()["status"] == "completed" and recipe_run.json()["conclusion"] == "failure":
-        assert trace_response.status_code == 200
-        assert trace_response.text == "Traceback\n    e f g error\n"
-    else:
-        assert trace_response.status_code == 204
