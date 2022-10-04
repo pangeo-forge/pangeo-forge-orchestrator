@@ -13,7 +13,6 @@ import asyncio
 import json
 import subprocess
 import sys
-import time
 import typing
 from datetime import datetime
 from typing import Union
@@ -218,7 +217,10 @@ async def main():
         if last_ts is None and newest_ts is not None:
             last_ts = newest_ts
 
-        time.sleep(5)
+        # Commenting this out, because we only need it for `--follow`, which we do not currently
+        # use. Leaving it here, rather than deleting, because we may want to use `--follow`
+        # eventually, in which case we would bring this back.
+        # time.sleep(5)
 
     print(json.dumps(logs_array))
 
