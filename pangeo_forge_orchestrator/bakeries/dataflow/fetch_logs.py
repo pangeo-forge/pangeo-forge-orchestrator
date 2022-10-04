@@ -38,6 +38,14 @@ class LogRecord(typing.NamedTuple):
         out += f"] {self.message}"
         return out
 
+    def asdict(self):
+        return {
+            "timestamp": self.timestamp.isoformat(),
+            "source": self.source,
+            "instance": self.instance,
+            "message": self.message,
+        }
+
 
 class DataFlowJob(typing.NamedTuple):
     """
@@ -199,17 +207,20 @@ async def main():
     job = await get_job(args.name)
     last_ts = None
 
+    logs_array = []
     while True:
         newest_ts = None
         async for log in get_job_logs(job.id, args.source, args.instance, last_ts):
             newest_ts = log.timestamp
-            print(log)
+            logs_array.append(log.asdict())
         if not args.follow:
             break
         if last_ts is None and newest_ts is not None:
             last_ts = newest_ts
 
         time.sleep(5)
+
+    print(json.dumps(logs_array))
 
 
 asyncio.run(main())
