@@ -10,7 +10,7 @@ from sqlmodel import Session, SQLModel, select
 from starlette import status
 
 from ..config import get_config
-from ..dependencies import check_authentication_header, get_session as get_database_session
+from ..dependencies import get_session as get_database_session
 from ..models import MODELS
 
 logs_router = APIRouter()
@@ -71,8 +71,13 @@ def get_logs(
     recipe_run: SQLModel,
     db_session: Session,
 ):
-    cmd = f"python3 ../bakeries/dataflow/fetch_logs.py {job_name} --source={source}".split()
-    logs = subprocess.check_output(cmd)
+    cmd = [
+        "python3",
+        "./pangeo_forge_orchestrator/bakeries/dataflow/fetch_logs.py",
+        job_name,
+        f"--source={source}",
+    ]
+    logs = subprocess.check_output(cmd).decode("utf-8")
 
     # First security check: ensure known bakery secrets do not appear in logs
     statement = select(MODELS["bakery"].table).where(
@@ -82,13 +87,13 @@ def get_logs(
     bakery_config = get_config().bakeries[bakery.name]
     bakery_secrets = secret_str_vals_from_basemodel(bakery_config)
     for secret in bakery_secrets:
-        if secret in str(logs):
+        if secret in logs:
             raise ValueError("Bakery secret detected in logs.")
 
     # Second security check: gitleaks
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(f"{tmpdir}/c.json", mode="w") as f:
-            json.dump(logs, f)
+            json.dump(json.loads(logs), f)
             gitleaks_cmd = "gitleaks detect --no-git".split()
             gitleaks = subprocess.run(gitleaks_cmd, cwd=tmpdir)
             if not gitleaks.returncode == 0:
@@ -112,7 +117,6 @@ def recipe_run_from_id(
     summary="Get job logs for a recipe_run, specified by database id.",
     tags=["recipe_run", "logs", "admin"],
     response_class=PlainTextResponse,
-    dependencies=[Depends(check_authentication_header)],
 )
 async def raw_logs_from_recipe_run_id(
     id: int,
@@ -152,7 +156,6 @@ def recipe_run_from_feedstock_spec_commit_and_recipe_id(
     summary="Get job logs for a recipe run, specified by feedstock_spec, commit, and recipe_id.",
     tags=["feedstock", "logs", "admin"],
     response_class=PlainTextResponse,
-    dependencies=[Depends(check_authentication_header)],
 )
 async def raw_logs_from_feedstock_spec_commit_and_recipe_id(
     feedstock_spec: str,

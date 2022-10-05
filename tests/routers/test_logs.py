@@ -113,7 +113,7 @@ async def get_logs_fixture(
             feedstock_spec="pangeo-forge/staged-recipes",
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
-            gcloud_logging_response="Some logging message from gcloud API.",
+            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
             status="completed",
             conclusion="failure",
         ),
@@ -131,7 +131,7 @@ async def test_get_logs(mocker, get_logs_fixture, async_app_client):
     ) = get_logs_fixture
 
     def mock_fetch_logs_call(cmd: List[str]):
-        return gcloud_logging_response
+        return bytes(gcloud_logging_response, encoding="utf-8")
 
     mocker.patch.object(subprocess, "check_output", mock_fetch_logs_call)
 
@@ -164,7 +164,7 @@ async def test_get_logs(mocker, get_logs_fixture, async_app_client):
             feedstock_spec="pangeo-forge/staged-recipes",
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
-            gcloud_logging_response="Some logging message from gcloud API.",
+            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
             status="completed",
             conclusion="failure",
         ),
@@ -179,7 +179,7 @@ async def test_get_logs_via_recipe_run_id(
     admin_headers, gcloud_logging_response, *_ = get_logs_fixture
 
     def mock_gcloud_logging_call(cmd: List[str]):
-        return gcloud_logging_response
+        return bytes(gcloud_logging_response, encoding="utf-8")
 
     mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
 
@@ -200,7 +200,7 @@ async def test_get_logs_via_recipe_run_id(
             feedstock_spec="pangeo-forge/staged-recipes",
             commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
             recipe_id="liveocean",
-            gcloud_logging_response="Some logging message from gcloud API.",
+            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
             status="completed",
             conclusion="failure",
         ),
@@ -221,7 +221,7 @@ async def test_get_logs_human_readable_method(
     ) = get_logs_fixture
 
     def mock_gcloud_logging_call(cmd: List[str]):
-        return gcloud_logging_response
+        return bytes(gcloud_logging_response, encoding="utf-8")
 
     mocker.patch.object(subprocess, "check_output", mock_gcloud_logging_call)
 
