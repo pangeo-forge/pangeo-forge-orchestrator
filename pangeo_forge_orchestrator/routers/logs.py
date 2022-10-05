@@ -47,20 +47,27 @@ def job_name_from_recipe_run(recipe_run: SQLModel) -> str:
     return job_name
 
 
-def secret_str_vals_from_basemodel(obj: BaseModel) -> List[str]:
+def secret_str_vals_from_basemodel(model: BaseModel) -> List[str]:
     """From a pydantic BaseModel, recursively surface all fields with type SecretStr."""
+
+    # this list must be defined outside the recursive `surface_secrets` function,
+    # or else it will be re-assigned to empty when the function recurses
+    secret_str_vals = []
 
     def is_pydantic_model(obj):
         return isinstance(obj, BaseModel)
 
-    secret_str_vals = []
-    if is_pydantic_model(obj):
-        for var in vars(obj):
-            if is_pydantic_model(getattr(obj, var)):
-                secret_str_vals_from_basemodel(getattr(obj, var))
-            elif isinstance(getattr(obj, var), SecretStr):
-                secret_str_vals.append(json.loads(obj.json())[var])
+    def surface_secrets(model: BaseModel):
+        if is_pydantic_model(model):
+            for var in vars(model):
+                if is_pydantic_model(getattr(model, var)):
+                    surface_secrets(getattr(model, var))
+                elif isinstance(getattr(model, var), SecretStr):
+                    secret_str_vals.append(json.loads(model.json())[var])
+        else:
+            pass
 
+    surface_secrets(model)
     return secret_str_vals
 
 

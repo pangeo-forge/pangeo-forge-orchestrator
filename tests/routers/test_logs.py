@@ -1,5 +1,6 @@
 import json
 import subprocess
+import uuid
 from typing import List
 
 import pytest
@@ -7,11 +8,26 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlmodel import Session
 
+from pangeo_forge_orchestrator.config import get_config
 from pangeo_forge_orchestrator.database import engine
 from pangeo_forge_orchestrator.models import MODELS
-from pangeo_forge_orchestrator.routers.logs import get_logs, job_name_from_recipe_run
+from pangeo_forge_orchestrator.routers.logs import (
+    get_logs,
+    job_name_from_recipe_run,
+    secret_str_vals_from_basemodel,
+)
 
 from ..conftest import clear_database
+
+
+@pytest.mark.parametrize("bakery_name", ["pangeo-ldeo-nsf-earthcube"])
+def test_secret_str_vals_from_basemodel(bakery_name):
+    bakery_config = get_config().bakeries[bakery_name]
+    bakery_secrets = secret_str_vals_from_basemodel(bakery_config)
+    assert bakery_secrets == [
+        json.loads(bakery_config.TargetStorage.fsspec_args.json())["key"],
+        json.loads(bakery_config.TargetStorage.fsspec_args.json())["secret"],
+    ]
 
 
 @pytest.mark.parametrize(
@@ -105,7 +121,8 @@ async def get_logs_fixture(
 
 
 gcloud_logging_responses = [
-    json.dumps(dict(message="logging goes here")),
+    json.dumps(dict(message="[worker] here's some normal logging with no secrets")),
+    json.dumps(dict(message=f"[worker] a secret token={uuid.uuid4().hex}")),
 ]
 logs_fixture_indirect_params = [
     dict(

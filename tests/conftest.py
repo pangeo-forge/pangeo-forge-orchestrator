@@ -158,7 +158,10 @@ def mock_bakeries_config_paths(mock_bakeries_dir):
         ),
         TargetStorage=dict(
             fsspec_class="bar",
-            fsspec_args={},
+            fsspec_args={
+                "key": secrets.token_hex(10),
+                "secret": secrets.token_hex(10),
+            },
             root_path="baz",
             public_url="https://public-endpoint.org/bucket-name/",
         ),
