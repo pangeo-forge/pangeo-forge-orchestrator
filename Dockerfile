@@ -8,8 +8,11 @@ RUN tar xzf /go/src/app/v${SOPS_VERSION}.tar.gz -C /go/src/app/
 WORKDIR /go/src/app/sops-${SOPS_VERSION}
 RUN make install
 
+FROM zricethezav/gitleaks:latest
+
 FROM ubuntu:22.04
 COPY --from=0 /go/bin/sops /usr/local/bin/sops
+COPY --from=1 /usr/bin/gitleaks /usr/local/bin/gitleaks
 # we need python3.9 because apache beam is not supported on 3.10
 # is the best way to get 3.9 on ubuntu? https://askubuntu.com/a/682875
 RUN apt-get update \
