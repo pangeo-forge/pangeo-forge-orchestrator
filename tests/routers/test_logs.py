@@ -104,20 +104,27 @@ async def get_logs_fixture(
     clear_database()
 
 
+gcloud_logging_responses = [
+    json.dumps(dict(message="logging goes here")),
+]
+logs_fixture_indirect_params = [
+    dict(
+        message='{"job_name": "abc"}',
+        feedstock_spec="pangeo-forge/staged-recipes",
+        commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
+        recipe_id="liveocean",
+        gcloud_logging_response=response,
+        status="completed",
+        conclusion="failure",
+    )
+    for response in gcloud_logging_responses
+]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "get_logs_fixture",
-    [
-        dict(
-            message='{"job_name": "abc"}',
-            feedstock_spec="pangeo-forge/staged-recipes",
-            commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
-            recipe_id="liveocean",
-            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
-            status="completed",
-            conclusion="failure",
-        ),
-    ],
+    logs_fixture_indirect_params,
     indirect=True,
 )
 async def test_get_logs(mocker, get_logs_fixture, async_app_client):
@@ -158,17 +165,7 @@ async def test_get_logs(mocker, get_logs_fixture, async_app_client):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "get_logs_fixture",
-    [
-        dict(
-            message='{"job_name": "abc"}',
-            feedstock_spec="pangeo-forge/staged-recipes",
-            commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
-            recipe_id="liveocean",
-            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
-            status="completed",
-            conclusion="failure",
-        ),
-    ],
+    logs_fixture_indirect_params,
     indirect=True,
 )
 async def test_get_logs_via_recipe_run_id(
@@ -194,17 +191,7 @@ async def test_get_logs_via_recipe_run_id(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "get_logs_fixture",
-    [
-        dict(
-            message='{"job_name": "abc"}',
-            feedstock_spec="pangeo-forge/staged-recipes",
-            commit="35d889f7c89e9f0d72353a0649ed1cd8da04826b",
-            recipe_id="liveocean",
-            gcloud_logging_response=json.dumps(dict(message="logging goes here")),
-            status="completed",
-            conclusion="failure",
-        ),
-    ],
+    logs_fixture_indirect_params,
     indirect=True,
 )
 async def test_get_logs_human_readable_method(
