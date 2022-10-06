@@ -14,6 +14,10 @@ on:
     paths:
       - 'dataflow-container-image.txt'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   push-image:
     runs-on: ubuntu-latest
