@@ -1,6 +1,8 @@
 from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_
+from sqlalchemy.orm import load_only
 from sqlmodel import Session, asc, desc, select
 
 from ..dependencies import check_authentication_header, get_session
@@ -141,3 +143,42 @@ for model_name, model in MODELS.items():
         summary=f"Delete a {model.descriptive_name}",
         tags=[model.descriptive_name, "admin"],
     )
+
+
+@router.get(
+    "/feedstocks/{id}/datasets",
+    summary="Get a list of datasets for a feedstock",
+    tags=["feedstock", "public"],
+)
+def get_feedstock_datasets(
+    id: int,
+    *,
+    session: Session = Depends(get_session),
+    type: Literal["all", "production", "test"] = Query(
+        "all", description="Filter by whether the dataset is a production or test dataset"
+    ),
+):
+
+    model = MODELS["recipe_run"]
+
+    statement = and_(
+        model.table.feedstock_id == id,
+        model.table.dataset_public_url.isnot(None),
+        model.table.status == "completed",
+        model.table.conclusion == "success",
+    )
+
+    if type == "production":
+        statement = and_(statement, model.table.is_test.is_(False))
+
+    elif type == "test":
+        statement = and_(statement, model.table.is_test.is_(True))
+
+    results = (
+        session.query(model.table)
+        .filter(statement)
+        .options(
+            load_only("recipe_id", "feedstock_id", "dataset_type", "dataset_public_url", "is_test")
+        )
+    )
+    return results.all()
