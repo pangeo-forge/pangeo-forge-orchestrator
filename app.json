@@ -6,9 +6,11 @@
     "SETUPTOOLS_SCM_PRETEND_VERSION": "9.9.9"
   },
   "addons": [
-    "papertrail:fixa",
     {
       "plan": "heroku-postgresql:standard-0"
+    },
+    {
+      "plan": "papertrail:choklad"
     }
   ],
   "environments": {
