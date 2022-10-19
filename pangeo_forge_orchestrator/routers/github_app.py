@@ -18,11 +18,11 @@ from gidgethub.apps import get_installation_access_token
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
-from pangeo_forge_orchestrator.config import get_config
-from pangeo_forge_orchestrator.dependencies import get_session as get_database_session
-from pangeo_forge_orchestrator.http import http_session
-from pangeo_forge_orchestrator.logging import logger
-from pangeo_forge_orchestrator.models import MODELS
+from ..config import get_config
+from ..dependencies import get_session as get_database_session
+from ..http import http_session
+from ..logging import logger
+from ..models import MODELS
 
 ACCEPT = "application/vnd.github+json"
 FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
