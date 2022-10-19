@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from textwrap import dedent
 from typing import List, Optional
 from urllib.parse import parse_qs, urlparse
@@ -18,11 +18,11 @@ from gidgethub.apps import get_installation_access_token
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
-from ..config import get_config
-from ..dependencies import get_session as get_database_session
-from ..http import http_session
-from ..logging import logger
-from ..models import MODELS
+from pangeo_forge_orchestrator.config import get_config
+from pangeo_forge_orchestrator.dependencies import get_session as get_database_session
+from pangeo_forge_orchestrator.http import http_session
+from pangeo_forge_orchestrator.logging import logger
+from pangeo_forge_orchestrator.models import MODELS
 
 ACCEPT = "application/vnd.github+json"
 FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
@@ -384,6 +384,7 @@ async def receive_github_hook(  # noqa: C901
 
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
+        recipe_run.completed_at = datetime.now(timezone.utc)
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
             subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
