@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from textwrap import dedent
 from typing import List, Optional
 from urllib.parse import parse_qs, urlparse
@@ -384,6 +384,7 @@ async def receive_github_hook(  # noqa: C901
 
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
+        recipe_run.completed_at = datetime.now(timezone.utc)
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
             subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
