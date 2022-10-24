@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from textwrap import dedent
 from typing import List, Optional
 from urllib.parse import parse_qs, urlparse
@@ -381,7 +381,7 @@ async def receive_github_hook(  # noqa: C901
 
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
-        recipe_run.completed_at = datetime.now(timezone.utc)
+        recipe_run.completed_at = datetime.utcnow()
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
             subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
@@ -612,7 +612,7 @@ async def run(
         recipe_run.status = "in_progress"
         # Start time was first set when recipe run was queued, which could have been ages ago,
         # so if we don't update it now, we won't capture how long the pipeline actually took.
-        recipe_run.started_at = datetime.now(timezone.utc).replace(microsecond=0)
+        recipe_run.started_at = datetime.utcnow().replace(microsecond=0)
         db_session.add(recipe_run)
         db_session.commit()
         try:
@@ -658,7 +658,7 @@ async def synchronize(
         name="synchronize",
         head_sha=head_sha,
         status="in_progress",
-        started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
         output=dict(
             title="Syncing latest commit to Pangeo Forge Cloud",
             summary="",
@@ -696,7 +696,7 @@ async def synchronize(
                 update_request = dict(
                     status="completed",
                     conclusion="failure",
-                    completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
                     output=dict(
                         title="Synchronize error - click details for summary",
                         summary=tracelines[-1],
@@ -764,7 +764,7 @@ async def synchronize(
         update_request = dict(
             status="completed",
             conclusion="failure",
-            completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             output=output,
         )
 
@@ -787,7 +787,7 @@ async def synchronize(
             feedstock_id=feedstock.id,
             head_sha=head_sha,
             version="",
-            started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             is_test=True,
             dataset_type="zarr",
         )
@@ -813,7 +813,7 @@ async def synchronize(
     update_request = dict(
         status="completed",
         conclusion="success",
-        completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
         output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
 
@@ -1109,7 +1109,7 @@ async def deploy_prod_run(
             feedstock_id=feedstock.id,
             head_sha=merge_commit_sha,
             version="",
-            started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
             is_test=False,
             dataset_type="zarr",
             message=json.dumps({"deployment_id": gh_deployment["id"]}),
