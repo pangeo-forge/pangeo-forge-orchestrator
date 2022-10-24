@@ -122,10 +122,10 @@ class MultipleModels:
         cls_name = self.make_cls_name(self.base, "")
         attrs = dict(id=Field(default=None, primary_key=True))
         annotations = dict(id=Union[int, None])
-        attrs.update(dict(__annotations__=annotations))
+        attrs |= dict(__annotations__=annotations)
         if self.relations:
             for r in self.relations:
-                attrs.update({r.field: Relationship(back_populates=r.back_populates)})
+                attrs[r.field] = Relationship(back_populates=r.back_populates)
                 attrs.get("__annotations__").update({r.field: r.annotation})  # type: ignore
         # We are using `typing.new_class` (vs. `type`) b/c it supports the `table=True` kwarg.
         # https://twitter.com/simonw/status/1430255521127305216?s=20

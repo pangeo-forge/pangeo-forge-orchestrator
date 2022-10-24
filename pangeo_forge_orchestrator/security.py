@@ -12,8 +12,7 @@ X_API_KEY = APIKeyHeader(name="X-API-Key")
 def check_authentication_header(x_api_key: str = Depends(X_API_KEY)) -> bool:
     """Takes the X-API-Key header and securely compares it to the current api key."""
 
-    matching = hmac.compare_digest(x_api_key, get_fastapi_config().PANGEO_FORGE_API_KEY)
-    if matching:
+    if hmac.compare_digest(x_api_key, get_fastapi_config().PANGEO_FORGE_API_KEY):
         return True
 
     raise HTTPException(

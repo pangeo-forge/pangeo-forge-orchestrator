@@ -61,9 +61,7 @@ def get_jwt():
         "exp": int(time.time()) + (10 * 60),
         "iss": github_app.id,
     }
-    bearer_token = jwt.encode(payload, github_app.private_key, algorithm="RS256")
-
-    return bearer_token
+    return jwt.encode(payload, github_app.private_key, algorithm="RS256")
 
 
 async def get_access_token(gh: GitHubAPI):
@@ -327,39 +325,38 @@ async def receive_github_hook(  # noqa: C901
 
         # So, what kind of slash command is this?
         cmd, *cmd_args = comment_body.split()
-        if cmd == "/run":
-            if len(cmd_args) != 1:
-                detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-                # TODO: Maybe post a comment and/or emoji reaction explaining this error.
-            recipe_id = cmd_args.pop(0)
-            statement = (
-                # https://sqlmodel.tiangolo.com/tutorial/where/#multiple-where
-                select(MODELS["recipe_run"].table)
-                .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
-                .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
-            )
-            # TODO: handle error if there is no matching result. this would arise if the slash
-            # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
-            matching_recipe_run = db_session.exec(statement).one()
-            logger.debug(matching_recipe_run)
-            args = (  # type: ignore
-                pr["head"]["repo"]["html_url"],
-                pr["base"]["repo"]["url"],
-                pr["head"]["sha"],
-                pr["number"],
-                matching_recipe_run,
-                pr["base"]["repo"]["full_name"],
-                reactions_url,
-            )
-            logger.info(f"Creating run_recipe_test task with args: {args}")
-            background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
-        else:
+        if cmd != "/run":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No handling implemented for this event type.",
             )
 
+        if len(cmd_args) != 1:
+            detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+            # TODO: Maybe post a comment and/or emoji reaction explaining this error.
+        recipe_id = cmd_args.pop(0)
+        statement = (
+            # https://sqlmodel.tiangolo.com/tutorial/where/#multiple-where
+            select(MODELS["recipe_run"].table)
+            .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
+            .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
+        )
+        # TODO: handle error if there is no matching result. this would arise if the slash
+        # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
+        matching_recipe_run = db_session.exec(statement).one()
+        logger.debug(matching_recipe_run)
+        args = (  # type: ignore
+            pr["head"]["repo"]["html_url"],
+            pr["base"]["repo"]["url"],
+            pr["head"]["sha"],
+            pr["number"],
+            matching_recipe_run,
+            pr["base"]["repo"]["full_name"],
+            reactions_url,
+        )
+        logger.info(f"Creating run_recipe_test task with args: {args}")
+        background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
     elif event == "dataflow" and payload["action"] == "completed":
         logger.info(f"Received dataflow webhook with {payload = }")
         if payload["conclusion"] not in ("success", "failure"):
@@ -434,7 +431,7 @@ async def receive_github_hook(  # noqa: C901
                 return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
 
             # make sure this is a recipe PR (not top-level config or something)
-            if not all([fname.startswith("recipes/") for fname in fnames_changed]):
+            if not all(fname.startswith("recipes/") for fname in fnames_changed):
                 return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
             args = (  # type: ignore
@@ -451,7 +448,7 @@ async def receive_github_hook(  # noqa: C901
                 return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
 
             # make sure this is a recipe PR (not config, readme, etc)
-            if not all([fname.startswith("feedstock/") for fname in fnames_changed]):
+            if not all(fname.startswith("feedstock/") for fname in fnames_changed):
                 return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
             # mypy doesn't like that `args` can have variable length depending on which
@@ -615,7 +612,7 @@ async def run(
         recipe_run.status = "in_progress"
         # Start time was first set when recipe run was queued, which could have been ages ago,
         # so if we don't update it now, we won't capture how long the pipeline actually took.
-        recipe_run.started_at = datetime.utcnow().replace(microsecond=0)
+        recipe_run.started_at = datetime.now(timezone.utc).replace(microsecond=0)
         db_session.add(recipe_run)
         db_session.commit()
         try:
@@ -624,11 +621,8 @@ async def run(
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
-                if (
-                    "status" in p
-                ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
-                    if p["status"] == "failed":
-                        trace = p["exc_info"]
+                if ("status" in p) and p["status"] == "failed":
+                    trace = p["exc_info"]
 
             logger.error(f"Recipe run {recipe_run} failed with: {trace}")
 
@@ -664,13 +658,14 @@ async def synchronize(
         name="synchronize",
         head_sha=head_sha,
         status="in_progress",
-        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+        started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
         output=dict(
             title="Syncing latest commit to Pangeo Forge Cloud",
-            summary="",  # required
+            summary="",
         ),
-        details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
-    )
+        details_url="https://pangeo-forge.org/",
+    )  # required
+
     checks_response = await gh.post(f"{base_api_url}/check-runs", data=create_request, **gh_kws)
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
@@ -694,38 +689,35 @@ async def synchronize(
     except subprocess.CalledProcessError as e:
         for line in e.output.splitlines():
             p = json.loads(line)
-            if (
-                "status" in p
-            ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
-                if p["status"] == "failed":
-                    tracelines = p["exc_info"].splitlines()
-                    logger.debug(f"Synchronize errored with:\n {tracelines}")
-                    update_request = dict(
-                        status="completed",
-                        conclusion="failure",
-                        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                        output=dict(
-                            title="Synchronize error - click details for summary",
-                            summary=tracelines[-1],
-                        ),
-                    )
-                    await gh.patch(
-                        f"{base_api_url}/check-runs/{checks_response['id']}",
-                        data=update_request,
-                        **gh_kws,
-                    )
-                    raise ValueError(tracelines[-1]) from e
+            # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+            if ("status" in p) and p["status"] == "failed":
+                tracelines = p["exc_info"].splitlines()
+                logger.debug(f"Synchronize errored with:\n {tracelines}")
+                update_request = dict(
+                    status="completed",
+                    conclusion="failure",
+                    completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
+                    output=dict(
+                        title="Synchronize error - click details for summary",
+                        summary=tracelines[-1],
+                    ),
+                )
+
+                await gh.patch(
+                    f"{base_api_url}/check-runs/{checks_response['id']}",
+                    data=update_request,
+                    **gh_kws,
+                )
+                raise ValueError(tracelines[-1]) from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
         # case it doesn't, raise a NotImplementedError here to prevent moving forward.
         raise NotImplementedError from e
 
     for line in out.splitlines():
         p = json.loads(line)
-        if (
-            "status" in p
-        ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
-            if p["status"] == "completed":
-                meta = p["meta"]
+        # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+        if ("status" in p) and p["status"] == "completed":
+            meta = p["meta"]
     logger.debug(meta)
 
     # TODO[IMPORTANT]:
@@ -772,9 +764,10 @@ async def synchronize(
         update_request = dict(
             status="completed",
             conclusion="failure",
-            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
             output=output,
         )
+
         await gh.patch(
             f"{base_api_url}/check-runs/{checks_response['id']}",
             data=update_request,
@@ -784,22 +777,23 @@ async def synchronize(
         # just want to raise the same error type but with a custom message
         raise type(e)(json.dumps(output)) from e
 
+    # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
+    # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
+    # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
     new_models = [
         MODELS["recipe_run"].creation(
             recipe_id=recipe["id"],
             bakery_id=bakery.id,
             feedstock_id=feedstock.id,
             head_sha=head_sha,
-            version="",  # TODO: Are we using this?
-            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            version="",
+            started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
             is_test=True,
-            # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
-            # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
-            # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
             dataset_type="zarr",
         )
         for recipe in meta["recipes"]
     ]
+
     created = []
     for nm in new_models:
         db_model = MODELS["recipe_run"].table.from_orm(nm)
@@ -819,9 +813,10 @@ async def synchronize(
     update_request = dict(
         status="completed",
         conclusion="success",
-        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+        completed_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
         output=dict(title="Recipe runs queued for latest commit", summary=summary),
     )
+
     await gh.patch(
         f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
     )
@@ -1075,11 +1070,9 @@ async def deploy_prod_run(
 
     for line in out.splitlines():
         p = json.loads(line)
-        if (
-            "status" in p
-        ):  # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
-            if p["status"] == "completed":
-                meta = p["meta"]
+        # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
+        if ("status" in p) and p["status"] == "completed":
+            meta = p["meta"]
     logger.debug(f"Retrieved meta: {meta}")
 
     # (2) find the feedstock and bakery in the database
@@ -1115,15 +1108,13 @@ async def deploy_prod_run(
             bakery_id=bakery.id,
             feedstock_id=feedstock.id,
             head_sha=merge_commit_sha,
-            version="",  # TODO: Are we using this?
-            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+            version="",
+            started_at=f"{datetime.now(timezone.utc).replace(microsecond=0).isoformat()}Z",
             is_test=False,
-            # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
-            # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
-            # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
             dataset_type="zarr",
             message=json.dumps({"deployment_id": gh_deployment["id"]}),
         )
+
         db_model = MODELS["recipe_run"].table.from_orm(model)
         db_session.add(db_model)
         db_session.commit()

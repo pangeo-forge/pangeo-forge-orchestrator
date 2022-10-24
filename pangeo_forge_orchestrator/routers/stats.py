@@ -25,8 +25,7 @@ class StatsResponse(BaseModel):
 )
 def get_recipe_stats(*, session: Session = Depends(get_session)):
     model = MODELS["recipe_run"]
-    response = StatsResponse(count=session.query(func.count(model.table.id)).scalar())
-    return response
+    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
 
 
 @stats_router.get(
@@ -37,8 +36,7 @@ def get_recipe_stats(*, session: Session = Depends(get_session)):
 )
 def get_bakery_stats(*, session: Session = Depends(get_session)):
     model = MODELS["bakery"]
-    response = StatsResponse(count=session.query(func.count(model.table.id)).scalar())
-    return response
+    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
 
 
 @stats_router.get(
@@ -49,8 +47,7 @@ def get_bakery_stats(*, session: Session = Depends(get_session)):
 )
 def get_feedstock_stats(*, session: Session = Depends(get_session)):
     model = MODELS["feedstock"]
-    response = StatsResponse(count=session.query(func.count(model.table.id)).scalar())
-    return response
+    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
 
 
 @stats_router.get(
