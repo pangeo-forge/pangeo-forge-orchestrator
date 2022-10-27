@@ -18,6 +18,7 @@ psycopg2-binary==2.9.3
 pangeo-forge-runner==0.7.0
 gcsfs==2022.8.2
 s3fs==2022.8.2
+google-auth-oauthlib==0.5.3 # remove this once https://github.com/fsspec/gcsfs/issues/505 has been addressed
 
 # these will eventually be brought into the recipe parsing container dynamically
 # from requirements.txt, environment.yml, etc. For now, we are hardcoding so that
