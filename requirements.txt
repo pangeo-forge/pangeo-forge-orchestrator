@@ -15,14 +15,14 @@ psycopg2-binary==2.9.3
 
 # these will eventually move out of the app container, and instead be
 # installed within the docker sibling container used for recipe handling
-pangeo-forge-runner==0.6.1
+pangeo-forge-runner==0.7.0
 gcsfs==2022.8.2
 s3fs==2022.8.2
 
 # these will eventually be brought into the recipe parsing container dynamically
 # from requirements.txt, environment.yml, etc. For now, we are hardcoding so that
 # we can work on the feedstocks that require them.
-pangeo-forge-esgf==0.0.3
+pangeo-forge-esgf==0.0.4
 python-cmr==0.7.0
 
 # for `/repr/xarray/` route

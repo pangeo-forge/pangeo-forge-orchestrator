@@ -7,8 +7,11 @@ from sqlmodel import Session, SQLModel, create_engine  # noqa: F401
 def get_database_url_from_env():
     try:
         database_url = os.environ["DATABASE_URL"]
-    except KeyError:  # pragma: no cover
-        raise ValueError("Application can't run unless DATABASE_URL environment variable is set")
+    except KeyError as e:  # pragma: no cover
+        raise ValueError(
+            "Application can't run unless DATABASE_URL environment variable is set"
+        ) from e
+
     if database_url.startswith("postgres://"):  # pragma: no cover
         # Fix Heroku's incompatible postgres database uri
         # https://stackoverflow.com/a/67754795/3266235
