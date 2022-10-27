@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from textwrap import dedent
 from typing import List, Optional
 from urllib.parse import parse_qs, urlparse
