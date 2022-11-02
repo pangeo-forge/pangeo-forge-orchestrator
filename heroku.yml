@@ -1,6 +1,7 @@
 setup:
   addons:
     - plan: heroku-postgresql:standard-0
+    - plan: papertrail:fixa
 build:
   docker:
     web: Dockerfile
@@ -27,4 +28,4 @@ run:
     && export GOOGLE_APPLICATION_CREDENTIALS=${DATAFLOW_CREDS}
     && export BAKERY_SECRETS='./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml'
     && sops -d -i ${BAKERY_SECRETS}
-    && gunicorn -w 3 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
+    && gunicorn -w 2 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
