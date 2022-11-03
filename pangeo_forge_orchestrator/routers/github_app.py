@@ -711,7 +711,7 @@ async def run(
             out = subprocess.check_output(cmd)
             for line in out.splitlines():
                 p = json.loads(line)
-                if p["status"] == "submitted":
+                if p.get("status") == "submitted":
                     recipe_run.message = json.dumps(
                         dict(job_name=p["job_name"], job_id=p["job_id"])
                     )
@@ -721,7 +721,7 @@ async def run(
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
-                if ("status" in p) and p["status"] == "failed":
+                if p.get("status") == "failed":
                     trace = p["exc_info"]
 
             logger.error(f"Recipe run {recipe_run} failed with: {trace}")
