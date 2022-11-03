@@ -709,6 +709,14 @@ async def run(
         db_session.commit()
         try:
             out = subprocess.check_output(cmd)
+            for line in out.splitlines():
+                p = json.loads(line)
+                if p["status"] == "submitted":
+                    recipe_run.message = json.dumps(
+                        dict(job_name=p["job_name"], job_id=p["job_id"])
+                    )
+                    db_session.add(recipe_run)
+                    db_session.commit()
             logger.debug(f"Command output is {out.decode('utf-8')}")
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
