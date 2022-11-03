@@ -7,7 +7,7 @@ import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -34,7 +34,7 @@ github_app_router = APIRouter()
 # Helpers -----------------------------------------------------------------------------------------
 
 
-def ignore_repo(repo):
+def ignore_repo(repo: str) -> bool:
     """Return True if the repo should be ignored."""
 
     return not repo.lower().endswith("-feedstock") and not repo.lower().endswith("staged-recipes")
@@ -52,7 +52,7 @@ def html_url_to_repo_full_name(html_url: str) -> str:
     return html_url.replace("https://github.com/", "")
 
 
-def get_jwt():
+def get_jwt() -> str:
     """Adapted from https://github.com/Mariatta/gh_app_demo"""
 
     github_app = get_config().github_app
@@ -64,7 +64,7 @@ def get_jwt():
     return jwt.encode(payload, github_app.private_key, algorithm="RS256")
 
 
-async def get_access_token(gh: GitHubAPI):
+async def get_access_token(gh: GitHubAPI) -> str:
     github_app = get_config().github_app
     async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
         installation_id = installation["id"]
@@ -86,12 +86,12 @@ async def get_access_token(gh: GitHubAPI):
     return token_response["token"]
 
 
-async def get_app_webhook_url(gh: GitHubAPI):
+async def get_app_webhook_url(gh: GitHubAPI) -> str:
     response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
     return response["url"]
 
 
-async def get_repo_id(repo_full_name: str, gh: GitHubAPI):
+async def get_repo_id(repo_full_name: str, gh: GitHubAPI) -> str:
     token = await get_access_token(gh)
     repo_response = await gh.getitem(
         f"/repos/{repo_full_name}",
@@ -101,7 +101,7 @@ async def get_repo_id(repo_full_name: str, gh: GitHubAPI):
     return repo_response["id"]
 
 
-async def list_accessible_repos(gh: GitHubAPI):
+async def list_accessible_repos(gh: GitHubAPI) -> list[str]:
     """Get all repos accessible to the GitHub App installation."""
 
     token = await get_access_token(gh)
@@ -113,7 +113,9 @@ async def list_accessible_repos(gh: GitHubAPI):
     return [r["full_name"] for r in repo_response["repositories"]]
 
 
-async def repo_id_and_spec_from_feedstock_id(id: int, gh: GitHubAPI, db_session: Session):
+async def repo_id_and_spec_from_feedstock_id(
+    id: int, gh: GitHubAPI, db_session: Session
+) -> tuple[str, str]:
     """Given a feedstock id, return the corresponding GitHub repo id and feedstock spec.
 
     In the process, confirm that the feedstock exists in the database and verify that the Pangeo
@@ -239,21 +241,8 @@ async def receive_github_hook(  # noqa: C901
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
 
-    hash_signature = request.headers.get("X-Hub-Signature-256", None)
-    if not hash_signature:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Request does not include a GitHub hash signature header.",
-        )
-
     payload_bytes = await request.body()
-    github_app = get_config().github_app
-    webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
-    h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
-    if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
-        )
+    await verify_hash_signature(request, payload_bytes)
 
     # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
     # dependencies. We can resolve these dependencies (i.e., github session, database session)
@@ -265,18 +254,7 @@ async def receive_github_hook(  # noqa: C901
     gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
     event = request.headers.get("X-GitHub-Event")
-    if event != "dataflow":
-        # This is a real github webhook, which can be loaded like this
-        payload = await request.json()
-    else:
-        # This is a webhook sent by our custom GCP Cloud Function. For some reason it can't be
-        # parsed with ``await request.json`` so just special-casing for now.
-        # TODO: What can we change in this Cloud Function to remove this special-casing? It's
-        # defined in https://github.com/pango-forge/dataflow-status-monitoring.
-        # Maybe Python ``requests`` payloads are just *inevitably* encoded as query strings, so
-        # we would need to use a different method/module/language to get uniformity w/ GitHub?
-        qs = parse_qs(payload_bytes.decode("utf-8"))
-        payload = {k: v.pop(0) for k, v in qs.items()}
+    payload = await parse_payload(request, payload_bytes, event)
 
     # TODO: maybe bring this back as a way to filter which PRs run on which apps.
     # With addition of `pforgetest` org, might not be necessary, however. TBD.
@@ -288,36 +266,148 @@ async def receive_github_hook(  # noqa: C901
     #        return {"message": "not a {label} pr, skipping"}
     #    logger.info("PR label found, continuing...")
 
-    if event == "pull_request" and payload["action"] in ("synchronize", "opened"):
-        pr = payload["pull_request"]
-        base_repo_name = pr["base"]["repo"]["full_name"]
-
-        if ignore_repo(base_repo_name):
-            return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
-
-        if pr["title"].lower().startswith("cleanup"):
-            return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
-        args = (
-            pr["head"]["repo"]["html_url"],
-            pr["head"]["sha"],
-            pr["number"],
-            pr["base"]["repo"]["url"],
-            pr["base"]["repo"]["full_name"],
+    if event == "pull_request":
+        return await handle_pr_event(
+            payload=payload,
+            background_tasks=background_tasks,
+            session_kws=session_kws,
+            gh=gh,
+            gh_kws=gh_kws,
         )
-        background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
-        return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
+    elif event == "issue_comment":
+        return await handle_pr_comment_event(
+            payload=payload,
+            gh=gh,
+            background_tasks=background_tasks,
+            session_kws=session_kws,
+            gh_kws=gh_kws,
+            db_session=db_session,
+        )
+    elif event == "dataflow":
+        return await handle_dataflow_event(
+            payload=payload,
+            db_session=db_session,
+            background_tasks=background_tasks,
+            gh_kws=gh_kws,
+            gh=gh,
+        )
 
-    elif event == "issue_comment" and payload["action"] == "created":
-        comment = payload["comment"]
+    elif event == "check_suite":
+        # We create check runs directly using the head_sha from the assocaited PR.
+        # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
+        # of these requests from GitHub, so just conveying that we expect that here, for now.
+        return {"status": "ok"}
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="No handling implemented for this event type.",
+        )
+
+
+async def handle_dataflow_event(
+    *,
+    payload: dict,
+    db_session: Session,
+    background_tasks: BackgroundTasks,
+    gh: GitHubAPI,
+    gh_kws: dict,
+):
+
+    logger.info(f"Received dataflow webhook with {payload = }")
+
+    action = payload["action"]
+
+    if action == "completed":
+
+        if payload["conclusion"] not in ("success", "failure"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No handling implemented for {payload['conclusion'] = }.",
+            )
+
+        recipe_run = db_session.exec(
+            select(MODELS["recipe_run"].table).where(
+                MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
+            )
+        ).one()
+        feedstock = db_session.exec(
+            select(MODELS["feedstock"].table).where(
+                MODELS["feedstock"].table.id == recipe_run.feedstock_id
+            )
+        ).one()
+        bakery = db_session.exec(
+            select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
+        ).one()
+
+        recipe_run.status = "completed"
+        recipe_run.conclusion = payload["conclusion"]
+        recipe_run.completed_at = datetime.utcnow()
+
+        if recipe_run.conclusion == "success":
+            bakery_config = get_config().bakeries[bakery.name]
+            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
+            root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
+            recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
+                root_path=root_path
+            )
+        db_session.add(recipe_run)
+        db_session.commit()
+
+        # Wow not every day you google a error and see a comment on it by Guido van Rossum
+        # https://github.com/python/mypy/issues/1174#issuecomment-175854832
+        args: List[SQLModel] = [recipe_run]  # type: ignore
+        if recipe_run.is_test:
+            args.append(feedstock.spec)  # type: ignore
+            logger.info(f"Calling `triage_test_run_complete` with {args=}")
+            background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
+        else:
+            logger.info(f"Calling `triage_prod_run_complete` with {args=}")
+            background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+
+
+async def handle_pr_comment_event(
+    *,
+    payload: dict,
+    gh: GitHubAPI,
+    gh_kws: dict,
+    background_tasks: BackgroundTasks,
+    session_kws: dict,
+    db_session: Session,
+):
+    """Handle a pull request comment event.
+
+    Parameters
+    ----------
+    payload : dict
+        The payload from the GitHub webhook request.
+    gh : GitHubAPI
+        The authenticated GitHub API client.
+    gh_kws : dict
+        The keyword arguments to pass to the GitHub API client.
+    background_tasks : BackgroundTasks
+        The FastAPI background tasks object.
+    session_kws : dict
+        The keyword arguments to pass to the SQLAlchemy session.
+    db_session : Session
+        The SQLAlchemy session.
+
+    """
+    logger.info(f"Handling PR comment event with payload {payload=}")
+
+    action = payload["action"]
+    comment = payload["comment"]
+    pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
+
+    if action == "created":
+
         comment_body = comment["body"]
-        reactions_url = comment["reactions"]["url"]
-
-        pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
-
         if not comment_body.startswith("/"):
             # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
             # comment with automated emoji reactions.
             return {"status": "ok", "message": "Comment is not a slash command."}
+
+        reactions_url = comment["reactions"]["url"]
 
         # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
         # that the command was received, mimicing the slash command dispatch github action UX.
@@ -357,59 +447,42 @@ async def receive_github_hook(  # noqa: C901
         )
         logger.info(f"Creating run_recipe_test task with args: {args}")
         background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
-    elif event == "dataflow" and payload["action"] == "completed":
-        logger.info(f"Received dataflow webhook with {payload = }")
-        if payload["conclusion"] not in ("success", "failure"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No handling implemented for {payload['conclusion'] = }.",
-            )
 
-        recipe_run = db_session.exec(
-            select(MODELS["recipe_run"].table).where(
-                MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
-            )
-        ).one()
-        feedstock = db_session.exec(
-            select(MODELS["feedstock"].table).where(
-                MODELS["feedstock"].table.id == recipe_run.feedstock_id
-            )
-        ).one()
-        bakery = db_session.exec(
-            select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
-        ).one()
 
-        recipe_run.status = "completed"
-        recipe_run.conclusion = payload["conclusion"]
-        recipe_run.completed_at = datetime.utcnow()
-        if recipe_run.conclusion == "success":
-            bakery_config = get_config().bakeries[bakery.name]
-            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
-            root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
-            recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
-                root_path=root_path
-            )
-        db_session.add(recipe_run)
-        db_session.commit()
+async def handle_pr_event(
+    *,
+    payload: Dict,
+    gh_kws: Dict[str, Any],
+    gh: GitHubAPI,
+    session_kws: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+):
+    """Process a PR event."""
 
-        # Wow not every day you google a error and see a comment on it by Guido van Rossum
-        # https://github.com/python/mypy/issues/1174#issuecomment-175854832
-        args: List[SQLModel] = [recipe_run]  # type: ignore
-        if recipe_run.is_test:
-            args.append(feedstock.spec)  # type: ignore
-            logger.info(f"Calling `triage_test_run_complete` with {args=}")
-            background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
-        else:
-            logger.info(f"Calling `triage_prod_run_complete` with {args=}")
-            background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+    logger.info(f"Handling PR event with payload {payload=}")
 
-    elif (
-        event == "pull_request"
-        and payload["action"] == "closed"
-        and payload["pull_request"]["merged"]
-    ):
+    action = payload["action"]
+    pr = payload["pull_request"]
+
+    if action in ("synchronize", "opened"):
+
+        base_repo_name = pr["base"]["repo"]["full_name"]
+        if ignore_repo(base_repo_name):
+            return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
+        if pr["title"].lower().startswith("cleanup"):
+            return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
+        args = (
+            pr["head"]["repo"]["html_url"],
+            pr["head"]["sha"],
+            pr["number"],
+            pr["base"]["repo"]["url"],
+            pr["base"]["repo"]["full_name"],
+        )
+        background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
+        return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
+
+    elif action == "closed" and pr["merged"]:
         logger.info("Received PR merged event...")
-        pr = payload["pull_request"]
 
         files_changed = await gh.getitem(
             f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files",
@@ -462,16 +535,35 @@ async def receive_github_hook(  # noqa: C901
             )
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
-    elif event == "check_suite":
-        # We create check runs directly using the head_sha from the assocaited PR.
-        # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
-        # of these requests from GitHub, so just conveying that we expect that here, for now.
-        return {"status": "ok"}
 
+async def parse_payload(request, payload_bytes, event):
+    if event != "dataflow":
+        # This is a real github webhook, which can be loaded like this
+        return await request.json()
+    # This is a webhook sent by our custom GCP Cloud Function. For some reason it can't be
+    # parsed with ``await request.json`` so just special-casing for now.
+    # TODO: What can we change in this Cloud Function to remove this special-casing? It's
+    # defined in https://github.com/pango-forge/dataflow-status-monitoring.
+    # Maybe Python ``requests`` payloads are just *inevitably* encoded as query strings, so
+    # we would need to use a different method/module/language to get uniformity w/ GitHub?
+    qs = parse_qs(payload_bytes.decode("utf-8"))
+    return {k: v.pop(0) for k, v in qs.items()}
+
+
+async def verify_hash_signature(request: Request, payload_bytes: bytes) -> None:
+    if hash_signature := request.headers.get("X-Hub-Signature-256", None):
+
+        github_app = get_config().github_app
+        webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
+        h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
+        if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
+            )
     else:
         raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="No handling implemented for this event type.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Request does not include a GitHub hash signature header.",
         )
 
 
