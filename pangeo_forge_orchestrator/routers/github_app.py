@@ -710,10 +710,20 @@ async def run(
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
+            for line in out.splitlines():
+                p = json.loads(line)
+                if p.get("status") == "submitted":
+                    message = json.loads(recipe_run.message or "{}") | dict(
+                        job_name=p["job_name"], job_id=p["job_id"]
+                    )
+                    recipe_run.message = json.dumps(message)
+                    db_session.add(recipe_run)
+                    db_session.commit()
+
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
-                if ("status" in p) and p["status"] == "failed":
+                if p.get("status") == "failed":
                     trace = p["exc_info"]
 
             logger.error(f"Recipe run {recipe_run} failed with: {trace}")
@@ -1227,9 +1237,11 @@ async def deploy_prod_run(
                 data=dict(status="failure"),
                 **gh_kws,
             )
-            # Don't update recipe_run as "failed" here, that's handled inside `run`.
+        # Don't update recipe_run as "failed" here, that's handled inside `run`.
         # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
         # (4.5) Update deployment with link to recipe run page
+        logger.debug("HEREEEEEEEEEEEEEEEEEe")
+        logger.debug(recipe_run.message)
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
         environment_url = (
             "https://pangeo-forge.org/dashboard/"
