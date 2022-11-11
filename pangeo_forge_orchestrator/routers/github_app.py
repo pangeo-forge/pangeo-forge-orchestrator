@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from textwrap import dedent
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
@@ -314,7 +314,8 @@ async def handle_dataflow_event(
     gh_kws: dict,
 ):
 
-    logger.info(f"Received dataflow webhook with {payload = }")
+    logger.info("Dataflow event received")
+    logger.debug(f"Received dataflow event with {payload = }")
 
     action = payload["action"]
 
@@ -393,7 +394,7 @@ async def handle_pr_comment_event(
         The SQLAlchemy session.
 
     """
-    logger.info(f"Handling PR comment event with payload {payload=}")
+    logger.info("Handling PR comment event...")
 
     action = payload["action"]
     comment = payload["comment"]
@@ -432,17 +433,52 @@ async def handle_pr_comment_event(
             .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
             .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
         )
-        # TODO: handle error if there is no matching result. this would arise if the slash
-        # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
-        matching_recipe_run = db_session.exec(statement).one()
-        logger.debug(matching_recipe_run)
+
+        try:
+            # Handle the case where the payload was redelivered, and we end up with multile runs
+            # for the same recipe_id and head_sha.
+            matching_recipe_run = db_session.exec(statement).one()
+        except MultipleResultsFound as exc:
+            logger.error(exc)
+            logger.debug(f"Multiple runs found for {recipe_id=} and {pr['head']['sha']=}.")
+            logger.debug("Using the most recent run.")
+            matching_recipe_run = db_session.exec(statement).first()
+
+        except NoResultFound as exc:
+            # handle error if there is no matching result. this would arise if the slash
+            # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
+            output = f"No run found for {recipe_id=} and {pr['head']['sha']=}."
+            logger.debug(output)
+            logger.error(exc)
+
+            matching_recipe_run = None
+
+        if matching_recipe_run is None:
+            # Post a comment and emoji reaction to confirm that the command was received.
+            key = "**The latest updates on recipe(s) in this PR:**"
+            title = """\
+
+| ID | Sync status | Conclusion | URL | Updated |
+|:------:|:------:|:---:|:---:|:-------:|"""
+
+            message = dedent(
+                f"""\
+{key}
+{title}
+| - | ❌ Failed | - | - | {get_last_update_time()} |
+
+{output}
+"""
+            )
+
+            await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+
+            raise RuntimeError(output)
+
+        logger.debug(f"Found matching run {matching_recipe_run=}")
         args = (  # type: ignore
-            pr["head"]["repo"]["html_url"],
-            pr["base"]["repo"]["url"],
-            pr["head"]["sha"],
-            pr["number"],
+            pr,
             matching_recipe_run,
-            pr["base"]["repo"]["full_name"],
             reactions_url,
         )
         logger.info(f"Creating run_recipe_test task with args: {args}")
@@ -459,25 +495,23 @@ async def handle_pr_event(
 ):
     """Process a PR event."""
 
-    logger.info(f"Handling PR event with payload {payload=}")
+    logger.info("Handling PR event with payload...")
 
     action = payload["action"]
     pr = payload["pull_request"]
 
-    if action in ("synchronize", "opened"):
+    if action in ("synchronize", "opened", "reopened"):
 
         base_repo_name = pr["base"]["repo"]["full_name"]
         if ignore_repo(base_repo_name):
             return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
         if pr["title"].lower().startswith("cleanup"):
             return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
-        args = (
-            pr["head"]["repo"]["html_url"],
-            pr["head"]["sha"],
-            pr["number"],
-            pr["base"]["repo"]["url"],
-            pr["base"]["repo"]["full_name"],
-        )
+        args = (pr,)
+        # Post comment to PR with the status of the run
+        # Update existing comment if it exists and contains message starting with "Starting CI"
+        # This is to avoid spamming the PR with comments
+
         background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
@@ -507,14 +541,11 @@ async def handle_pr_event(
             if not all(fname.startswith("recipes/") for fname in fnames_changed):
                 return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
-            args = (  # type: ignore
-                pr["base"]["repo"]["owner"]["login"],
-                pr["base"]["ref"],
-                pr["number"],
-                pr["base"]["repo"]["url"],
-            )
+            args = (pr,)  # type: ignore
             logger.info(f"Calling create_feedstock with args {args}")
+
             background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
+
         else:
             # this is not staged recipes, but make sure it's a feedstock, and not some other repo
             if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
@@ -526,14 +557,45 @@ async def handle_pr_event(
 
             # mypy doesn't like that `args` can have variable length depending on which
             # conditional block it's defined within
-            args = (  # type: ignore
-                pr["base"]["repo"]["html_url"],
-                pr["merge_commit_sha"],
-                pr["base"]["repo"]["full_name"],
-                pr["base"]["repo"]["url"],
-                pr["base"]["ref"],
-            )
+            args = (pr,)  # type: ignore
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
+
+
+async def post_comment(*, gh_kws, gh, pr, key, message):
+    """Post comment to PR with the status of the run"""
+    # Update existing comment if it exists and contains message starting with "Starting CI"
+    # This is to avoid spamming the PR with comments
+
+    comments = gh.getiter(pr["comments_url"], **gh_kws)
+    async for comment in comments:
+        if key in comment["body"]:
+            await gh.patch(comment["url"], data={"body": message}, **gh_kws)
+            break
+
+    else:
+        await gh.post(
+            pr["comments_url"],
+            data={"body": message},
+            **gh_kws,
+        )
+
+
+async def update_recipe_run_status_on_pr(*, pr, key, gh, gh_kws, recipe_run):
+
+    comments = gh.getiter(pr["comments_url"], **gh_kws)
+    async for comment in comments:
+        body = comment["body"]
+        if key in body:
+            body_lines = body.splitlines()
+            for idx, line in enumerate(body_lines):
+                if recipe_run.recipe_id in line:
+                    body_lines[
+                        idx
+                    ] = f"|{recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]() | {get_last_update_time()} |"
+                    break
+        message = "\n".join(body_lines)
+        await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+        break
 
 
 async def parse_payload(request, payload_bytes, event):
@@ -654,9 +716,13 @@ async def run(
     feedstock_spec: str,
     feedstock_subdir: Optional[str] = None,
     *,
+    pr: dict,
     gh: GitHubAPI,
+    gh_kws: dict,
     db_session: Session,
 ):
+
+    logger.info(f"Calling run with args: {html_url}, {ref}, {recipe_run}")
     statement = select(MODELS["bakery"].table).where(
         MODELS["bakery"].table.id == recipe_run.bakery_id
     )
@@ -710,6 +776,7 @@ async def run(
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
+
             for line in out.splitlines():
                 p = json.loads(line)
                 if p.get("status") == "submitted":
@@ -719,6 +786,15 @@ async def run(
                     recipe_run.message = json.dumps(message)
                     db_session.add(recipe_run)
                     db_session.commit()
+
+            if pr:
+                await update_recipe_run_status_on_pr(
+                    pr=pr,
+                    key="**The latest updates on recipe(s) in this PR:**",
+                    gh=gh,
+                    gh_kws=gh_kws,
+                    recipe_run=recipe_run,
+                )
 
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
@@ -738,6 +814,16 @@ async def run(
             db_session.add(recipe_run)
             db_session.commit()
             db_session.refresh(recipe_run)
+
+            if pr:
+                update_recipe_run_status_on_pr(
+                    pr=pr,
+                    key="**The latest updates on recipe(s) in this PR:**",
+                    gh=gh,
+                    gh_kws=gh_kws,
+                    recipe_run=recipe_run,
+                )
+
             raise e  # raise the error, so that the calling function knows what happened
 
 
@@ -745,17 +831,38 @@ async def run(
 
 
 async def synchronize(
-    head_html_url: str,
-    head_sha: str,
-    pr_number: str,
-    base_api_url: str,
-    base_full_name: str,
+    pr,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
+
+    head_html_url = pr["head"]["repo"]["html_url"]
+    head_sha = pr["head"]["sha"]
+    pr_number = pr["number"]
+    base_api_url = pr["base"]["repo"]["url"]
+    base_full_name = pr["base"]["repo"]["full_name"]
+
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
+
+    key = "**The latest updates on recipe(s) in this PR:**"
+    status_ = ":inbox_tray: Received and waiting to process"
+
+    title = """\
+
+| ID | Sync status | Conclusion | URL | Updated |
+|:------:|:------:|:---:|:---:|:-------:|"""
+
+    message = dedent(
+        f"""\
+{key}
+{title}
+| - | {status_} | - | - | {get_last_update_time()} |
+"""
+    )
+    await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+
     create_request = dict(
         name="synchronize",
         head_sha=head_sha,
@@ -810,6 +917,25 @@ async def synchronize(
                     data=update_request,
                     **gh_kws,
                 )
+
+                status_ = "❌ Failed"
+                message = dedent(
+                    f"""\
+{key}
+{title}
+| - | {status_} | - | - | {get_last_update_time()} |
+
+<details>
+<summary>Traceback: Click to expand</summary>
+
+```python
+{tracelines[-1]}
+```
+
+</details>
+"""
+                )
+                await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
                 raise ValueError(tracelines[-1]) from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
         # case it doesn't, raise a NotImplementedError here to prevent moving forward.
@@ -875,6 +1001,18 @@ async def synchronize(
             data=update_request,
             **gh_kws,
         )
+
+        status_ = "❌ Error"
+        message = dedent(
+            f"""\
+{key}
+{title}
+| - | {status_} | - | - | {get_last_update_time()} |
+
+{output}
+        """
+        )
+        await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
         # ok, this seems maybe like the wrong way to do this?
         # just want to raise the same error type but with a custom message
         raise type(e)(json.dumps(output)) from e
@@ -882,27 +1020,7 @@ async def synchronize(
     # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
     # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
     # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
-    new_models = [
-        MODELS["recipe_run"].creation(
-            recipe_id=recipe["id"],
-            bakery_id=bakery.id,
-            feedstock_id=feedstock.id,
-            head_sha=head_sha,
-            version="",
-            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-            is_test=True,
-            dataset_type="zarr",
-        )
-        for recipe in meta["recipes"]
-    ]
 
-    created = []
-    for nm in new_models:
-        db_model = MODELS["recipe_run"].table.from_orm(nm)
-        db_session.add(db_model)
-        db_session.commit()
-        db_session.refresh(db_model)
-        created.append(db_model)
     summary = f"Recipe runs created at commit `{head_sha}`:"
     backend_app_webhook_url = await get_app_webhook_url(gh)
     backend_netloc = urlparse(backend_app_webhook_url).netloc
@@ -910,8 +1028,33 @@ async def synchronize(
     query_param = f"feedstock_id={feedstock.id}"
     if backend_netloc != DEFAULT_BACKEND_NETLOC:
         query_param += f"&orchestratorEndpoint={backend_netloc}"
-    for model in created:
-        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-run/{model.id}?{query_param}"
+
+    created = []
+    table_rows = ""
+    summary = ""
+    for recipe in meta["recipes"]:
+
+        started_at = datetime.utcnow().replace(microsecond=0)
+        nm = MODELS["recipe_run"].creation(
+            recipe_id=recipe["id"],
+            bakery_id=bakery.id,
+            feedstock_id=feedstock.id,
+            head_sha=head_sha,
+            version="",
+            started_at=f"{started_at.isoformat()}Z",
+            is_test=True,
+            dataset_type="zarr",
+        )
+
+        db_model = MODELS["recipe_run"].table.from_orm(nm)
+        db_session.add(db_model)
+        db_session.commit()
+        db_session.refresh(db_model)
+        created.append(db_model)
+        url = f"{FRONTEND_DASHBOARD_URL}/recipe-run/{db_model.id}?{query_param}"
+        summary += f"\n- {url}"
+        table_rows += f"| {db_model.recipe_id} | {db_model.status} | {db_model.conclusion} | [dashboard]({url})| {get_last_update_time()} |\n"
+
     update_request = dict(
         status="completed",
         conclusion="success",
@@ -923,21 +1066,39 @@ async def synchronize(
         f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
     )
 
+    message = dedent(
+        f"""\
+{key}
+{title}
+{table_rows}
+"""
+    )
+
+    await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+
+
+def get_last_update_time():
+    last_updated = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M (UTC)")
+    return last_updated
+
 
 async def run_recipe_test(
-    head_html_url: str,
-    base_api_url: str,
-    head_sha: str,
-    pr_number: str,
+    pr,
     recipe_run: SQLModel,
-    feedstock_spec: str,
     reactions_url: str,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
-    """ """
+    """Run a recipe test for a given recipe run."""
+
+    head_html_url = pr["head"]["repo"]["html_url"]
+    base_api_url = pr["base"]["repo"]["url"]
+    head_sha = pr["head"]["sha"]
+    pr_number = pr["number"]
+
+    feedstock_spec = pr["base"]["repo"]["full_name"]
     await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
 
     # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
@@ -945,11 +1106,11 @@ async def run_recipe_test(
     feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
     args = (head_html_url, head_sha, recipe_run, feedstock_spec)
     kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
-    logger.info(f"Calling run with args, kws: {args}, {kws}")
+    # logger.info(f"Calling run with args, kws: {args}, {kws}")
     # TODO: create a check run on the head_sha this was deployed from to give
     # a point of user engagement & a details link to recipe run page on pangeo-forge.org
     try:
-        await run(*args, **kws, gh=gh, db_session=db_session)
+        await run(*args, **kws, pr=pr, gh_kws=gh_kws, gh=gh, db_session=db_session)
     except subprocess.CalledProcessError:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
         # We don't need to update the recipe_run in the database or handle the trace here,
@@ -968,10 +1129,27 @@ async def triage_test_run_complete(
             comments_url = pr["comments_url"]
             break
 
+    if comments_url:
+        key = "**The latest updates on recipe(s) in this PR:**"
+        comments = gh.getiter(comments_url, **gh_kws)
+        async for comment in comments:
+            body = comment["body"]
+            if key in body:
+                body_lines = body.splitlines()
+                for idx, line in enumerate(body_lines):
+                    if recipe_run.recipe_id in line:
+                        body_lines[
+                            idx
+                        ] = f"| {recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]() | {get_last_update_time()} |"
+                        break
+            message = "\n".join(body_lines)
+            await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+            break
+
     if recipe_run.conclusion == "failure":
         comment = dedent(
-            """\
-            The test failed, but I'm sure we can find out why!
+            f"""\
+            The test for {recipe_run.recipe_id} failed, but I'm sure we can find out why!
 
             Pangeo Forge maintainers are working diligently to provide public logs for contributors.
             That feature is not quite ready yet, however, so please reach out on this thread to a
@@ -1031,15 +1209,18 @@ async def triage_prod_run_complete(
 
 
 async def create_feedstock_repo(
-    base_repo_owner_login: dict,
-    base_ref: str,
-    pr_number: str,
-    base_repo_api_url: str,
+    pr,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
+    """Create a new feedstock repo from the base repo."""
+
+    base_repo_owner_login = pr["base"]["repo"]["owner"]["login"]
+    base_ref = pr["base"]["ref"]
+    pr_number = pr["number"]
+    base_repo_api_url = pr["base"]["repo"]["url"]
     # (1) check changed files, if we're in a subdir of recipes, then proceed
     src_files = await gh.getitem(f"{base_repo_api_url}/pulls/{pr_number}/files", **gh_kws)
     subdir = src_files[0]["filename"].split("/")[1]
@@ -1145,16 +1326,19 @@ async def create_feedstock_repo(
 
 
 async def deploy_prod_run(
-    base_html_url: str,
-    merge_commit_sha: str,
-    base_full_name: str,
-    base_api_url: str,
-    base_ref: str,
+    pr,
     *,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
 ):
+
+    base_html_url = (pr["base"]["repo"]["html_url"],)
+    merge_commit_sha = (pr["merge_commit_sha"],)
+    base_full_name = (pr["base"]["repo"]["full_name"],)
+    base_api_url = (pr["base"]["repo"]["url"],)
+    base_ref = (pr["base"]["ref"],)
+
     # (1) expand meta
     cmd = [
         "pangeo-forge-runner",
@@ -1240,7 +1424,7 @@ async def deploy_prod_run(
         # Don't update recipe_run as "failed" here, that's handled inside `run`.
         # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
         # (4.5) Update deployment with link to recipe run page
-        logger.debug("HEREEEEEEEEEEEEEEEEEe")
+
         logger.debug(recipe_run.message)
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
         environment_url = (
