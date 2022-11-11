@@ -1130,21 +1130,13 @@ async def triage_test_run_complete(
             break
 
     if comments_url:
-        key = "**The latest updates on recipe(s) in this PR:**"
-        comments = gh.getiter(comments_url, **gh_kws)
-        async for comment in comments:
-            body = comment["body"]
-            if key in body:
-                body_lines = body.splitlines()
-                for idx, line in enumerate(body_lines):
-                    if recipe_run.recipe_id in line:
-                        body_lines[
-                            idx
-                        ] = f"| {recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]() | {get_last_update_time()} |"
-                        break
-            message = "\n".join(body_lines)
-            await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
-            break
+        await update_recipe_run_status_on_pr(
+            pr=pr,
+            key="**The latest updates on recipe(s) in this PR:**",
+            gh=gh,
+            gh_kws=gh_kws,
+            recipe_run=recipe_run,
+        )
 
     if recipe_run.conclusion == "failure":
         comment = dedent(
