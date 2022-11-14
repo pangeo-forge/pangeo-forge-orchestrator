@@ -32,7 +32,7 @@ jobs:
         with:
           credentials_json: '${{ secrets.GOOGLE_CONTAINER_REGISTRY_CREDS }}'
       - name: 'Setup gcloud'
-        uses: 'google-github-actions/setup-gcloud@v0'
+        uses: 'google-github-actions/setup-gcloud@v1'
       - name: push image to gcr
         run: >
           gcloud auth activate-service-account ${{ env.GCP_ACCOUNT }} --key-file='${{ steps.auth.outputs.credentials_file_path }}'
