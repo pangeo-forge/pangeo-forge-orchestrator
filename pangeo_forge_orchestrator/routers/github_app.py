@@ -594,6 +594,9 @@ async def post_comment(*, gh_kws, gh, pr, key, message):
     # Update existing comment if it exists and contains message starting with "Starting CI"
     # This is to avoid spamming the PR with comments
 
+    if pr is None or not pr.get("comments_url"):
+        logger.info("No comments_url found in PR payload. Skipping comment.")
+        return
     comments = gh.getiter(pr["comments_url"], **gh_kws)
     async for comment in comments:
         if key in comment["body"]:

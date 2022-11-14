@@ -28,6 +28,7 @@ async def synchronize_request_fixture(
         "action": "synchronize",
         "pull_request": {
             "number": request.param["number"],
+            # "comments_url": f'https://api.github.com/repos/pangeo-forge/staged-recipes/issues/{request.param["number"]}/comments',
             "base": {
                 "repo": {
                     "html_url": f"https://github.com/{request.param['base_repo_full_name']}",
@@ -77,11 +78,12 @@ async def synchronize_request_fixture(
             "pangeo-forge/staged-recipes": {"id": 987654321},
         },
         "_app_hook_config_url": app_hook_config_url,
-        "_check_runs": list(),
+        "_check_runs": [],
         "_pulls_files": {
             "pangeo-forge/staged-recipes": staged_recipes_pulls_files,
         },
     }
+
     expected_recipe_runs_response = [
         {
             "recipe_id": "gpcp",

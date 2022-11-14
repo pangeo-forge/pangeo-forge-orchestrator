@@ -49,7 +49,6 @@ class MockGitHubAPI:
     ) -> Union[dict, List[dict]]:
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
-        # gidgethub allows us to call either the relative or absolute path, and we do both
         elif path.startswith("/repos/") or path.startswith("https://api.github.com/repos/"):
             if "/commits/" in path and path.endswith("/check-runs"):
                 # mocks getting a check run from the github api
@@ -62,13 +61,11 @@ class MockGitHubAPI:
             elif "pulls" in path:
                 # Here's an example path: "/repos/pangeo-forge/staged-recipes/pulls/1/files"
                 # The next line parses this into -> "pangeo-forge/staged-recipes"
-                repo_full_name = "/".join(path.split("/repos/")[-1].split("/")[0:2])
+                repo_full_name = "/".join(path.split("/repos/")[-1].split("/")[:2])
                 if path.endswith("files"):
-                    pr_number = int(path.split("/")[-2])
-                    return self._backend._pulls_files[repo_full_name][pr_number]
-                else:
-                    pr_number = int(path.split("/")[-1])
-                    return self._backend._pulls[repo_full_name][pr_number]
+                    return self._backend._pulls_files[repo_full_name][int(path.split("/")[-2])]
+                pr_number = int(path.split("/")[-1])
+                return self._backend._pulls[repo_full_name][pr_number]
             elif "/contents/" in path:
                 # mocks getting the contents for a file
                 # TODO: make this more realistic. I believe the response is base64 encoded.
@@ -150,16 +147,15 @@ class MockGitHubAPI:
             raise NotImplementedError(f"Path '{path}' not supported.")
 
     async def patch(self, path: str, oauth_token: str, accept: str, data: dict):
-        if "/check-runs/" in path and not path.endswith("/check-runs/"):
-            id_ = int(path.split("/check-runs/")[-1])
-            # In the mock ``.post`` method for the "/check-runs" path above, we add check runs
-            # sequentially, so we (should) be able to index the self._backend._check_runs list like this.
-            # This is shorthand for the mock. In reality, the GitHub check runs ids are longer,
-            # non-sequential integers.
-            self._backend._check_runs[id_].update(data)
-            return self._backend._check_runs[id_]
-        else:
+        if "/check-runs/" not in path or path.endswith("/check-runs/"):
             raise NotImplementedError(f"Path '{path}' not supported.")
+        id_ = int(path.split("/check-runs/")[-1])
+        # In the mock ``.post`` method for the "/check-runs" path above, we add check runs
+        # sequentially, so we (should) be able to index the self._backend._check_runs list like this.
+        # This is shorthand for the mock. In reality, the GitHub check runs ids are longer,
+        # non-sequential integers.
+        self._backend._check_runs[id_].update(data)
+        return self._backend._check_runs[id_]
 
     async def put(self, path: str, oauth_token: str, accept: str, data: Optional[dict] = None):
         # GitHub API uses the `put` method for:
@@ -167,10 +163,6 @@ class MockGitHubAPI:
         #   (2) merging PRs
         if path.endswith("/merge"):
             return {"merged": True}
-        else:
-            # this is called for adding content files
-            # TODO: actually alter state of the mock github backend here
-            pass
 
     async def delete(self, path, oauth_token: str, accept: str, data: Optional[dict] = None):
         # used, e.g., for deleting branches (without `data` kwarg),

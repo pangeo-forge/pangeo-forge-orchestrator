@@ -99,6 +99,8 @@ async def run_fixture(
             feedstock_subdir=request.param["feedstock_subdir"],
             gh=mock_gh,
             db_session=db_session,
+            gh_kws=gh_backend_kws,
+            pr=None,
         )
         yield run_kws
 
