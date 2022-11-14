@@ -756,10 +756,7 @@ async def run(
 ):
 
     logger.info(f"Calling run with args: {html_url}, {ref}, {recipe_run}")
-    statement = select(MODELS["bakery"].table).where(
-        MODELS["bakery"].table.id == recipe_run.bakery_id
-    )
-    bakery = db_session.exec(statement).one()
+    bakery = get_bakery_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
     bakery_config = get_config().bakeries[bakery.name]
 
     subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
@@ -1431,7 +1428,7 @@ async def deploy_prod_run(
         args = (base_html_url, merge_commit_sha, recipe_run, feedstock.spec)
         logger.info(f"Calling run with args: {args}")
         try:
-            await run(*args, gh=gh, db_session=db_session)  # type: ignore
+            await run(*args, gh=gh, db_session=db_session, pr=pr, gh_kws=gh_kws)  # type: ignore
         except subprocess.CalledProcessError:
             deployment_id = json.loads(recipe_run.message)["deployment_id"]
             await gh.post(
