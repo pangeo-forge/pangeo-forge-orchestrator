@@ -180,6 +180,38 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
     return f"{prefix}/{recipe_run.recipe_id}.{recipe_run.dataset_type}"
 
 
+def get_bakery_from_db(*, db_session, meta):
+    bakery_statement = select(MODELS["bakery"].table).where(
+        MODELS["bakery"].table.name == meta["bakery"]["id"]
+    )
+    return db_session.exec(bakery_statement).one()
+
+
+def get_feedstock_from_db(*, db_session, base_full_name):
+    feedstock_statement = select(MODELS["feedstock"].table).where(
+        MODELS["feedstock"].table.spec == base_full_name
+    )
+    return db_session.exec(feedstock_statement).one()
+
+
+def get_last_update_time():
+    return datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M (UTC)")
+
+
+def get_bakery_from_recipe_run(*, db_session, recipe_run):
+    return db_session.exec(
+        select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
+    ).one()
+
+
+def get_feedstock_from_recipe_run(*, db_session, recipe_run):
+    return db_session.exec(
+        select(MODELS["feedstock"].table).where(
+            MODELS["feedstock"].table.id == recipe_run.feedstock_id
+        )
+    ).one()
+
+
 # Routes ------------------------------------------------------------------------------------------
 
 
@@ -332,14 +364,8 @@ async def handle_dataflow_event(
                 MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
             )
         ).one()
-        feedstock = db_session.exec(
-            select(MODELS["feedstock"].table).where(
-                MODELS["feedstock"].table.id == recipe_run.feedstock_id
-            )
-        ).one()
-        bakery = db_session.exec(
-            select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
-        ).one()
+        feedstock = get_feedstock_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
+        bakery = get_bakery_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
 
         recipe_run.status = "completed"
         recipe_run.conclusion = payload["conclusion"]
@@ -361,7 +387,9 @@ async def handle_dataflow_event(
         if recipe_run.is_test:
             args.append(feedstock.spec)  # type: ignore
             logger.info(f"Calling `triage_test_run_complete` with {args=}")
-            background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
+            background_tasks.add_task(
+                triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws, db_session=db_session
+            )
         else:
             logger.info(f"Calling `triage_prod_run_complete` with {args=}")
             background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
@@ -580,7 +608,11 @@ async def post_comment(*, gh_kws, gh, pr, key, message):
         )
 
 
-async def update_recipe_run_status_on_pr(*, pr, key, gh, gh_kws, recipe_run):
+async def update_recipe_run_status_on_pr(*, pr, key, gh, gh_kws, recipe_run, db_session):
+    """Update the status of the recipe run on the PR"""
+
+    feedstock = get_feedstock_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
+    query_params = f"feedstock_id={feedstock.id}"
 
     comments = gh.getiter(pr["comments_url"], **gh_kws)
     async for comment in comments:
@@ -589,9 +621,10 @@ async def update_recipe_run_status_on_pr(*, pr, key, gh, gh_kws, recipe_run):
             body_lines = body.splitlines()
             for idx, line in enumerate(body_lines):
                 if recipe_run.recipe_id in line:
+                    url = f"{FRONTEND_DASHBOARD_URL}/recipe-runs/{recipe_run.id}?{query_params}"
                     body_lines[
                         idx
-                    ] = f"|{recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]() | {get_last_update_time()} |"
+                    ] = f"| {recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]({url}) | {get_last_update_time()} |"
                     break
         message = "\n".join(body_lines)
         await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
@@ -794,6 +827,7 @@ async def run(
                     gh=gh,
                     gh_kws=gh_kws,
                     recipe_run=recipe_run,
+                    db_session=db_session,
                 )
 
         except subprocess.CalledProcessError as e:
@@ -822,6 +856,7 @@ async def run(
                     gh=gh,
                     gh_kws=gh_kws,
                     recipe_run=recipe_run,
+                    db_session=db_session,
                 )
 
             raise e  # raise the error, so that the calling function knows what happened
@@ -957,14 +992,8 @@ async def synchronize(
     #     pangeo-forge-runner, so that functionality is available to users.
 
     try:
-        feedstock_statement = select(MODELS["feedstock"].table).where(
-            MODELS["feedstock"].table.spec == base_full_name
-        )
-        feedstock = db_session.exec(feedstock_statement).one()
-        bakery_statement = select(MODELS["bakery"].table).where(
-            MODELS["bakery"].table.name == meta["bakery"]["id"]
-        )
-        bakery = db_session.exec(bakery_statement).one()
+        feedstock = get_feedstock_from_db(db_session=db_session, base_full_name=base_full_name)
+        bakery = get_bakery_from_db(db_session=db_session, meta=meta)
     except (MultipleResultsFound, NoResultFound) as e:
         if isinstance(e, NoResultFound):
             output = dict(
@@ -1077,11 +1106,6 @@ async def synchronize(
     await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
 
 
-def get_last_update_time():
-    last_updated = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M (UTC)")
-    return last_updated
-
-
 async def run_recipe_test(
     pr,
     recipe_run: SQLModel,
@@ -1123,6 +1147,7 @@ async def triage_test_run_complete(
     *,
     gh: GitHubAPI,
     gh_kws: dict,
+    db_session: Session,
 ):
     async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls", **gh_kws):
         if pr["head"]["sha"] == recipe_run.head_sha:
@@ -1136,6 +1161,7 @@ async def triage_test_run_complete(
             gh=gh,
             gh_kws=gh_kws,
             recipe_run=recipe_run,
+            db_session=db_session,
         )
 
     if recipe_run.conclusion == "failure":
@@ -1325,11 +1351,11 @@ async def deploy_prod_run(
     gh_kws: dict,
 ):
 
-    base_html_url = (pr["base"]["repo"]["html_url"],)
-    merge_commit_sha = (pr["merge_commit_sha"],)
-    base_full_name = (pr["base"]["repo"]["full_name"],)
-    base_api_url = (pr["base"]["repo"]["url"],)
-    base_ref = (pr["base"]["ref"],)
+    base_html_url = pr["base"]["repo"]["html_url"]
+    merge_commit_sha = pr["merge_commit_sha"]
+    base_full_name = pr["base"]["repo"]["full_name"]
+    base_api_url = pr["base"]["repo"]["url"]
+    base_ref = pr["base"]["ref"]
 
     # (1) expand meta
     cmd = [
