@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 
+import httpx
 import pytest
-from requests.exceptions import HTTPError  # type: ignore
 
 
 @contextmanager
@@ -13,22 +13,19 @@ def passthrough(*args, **kwargs):
 @contextmanager
 def check_error_and_skip(*args, **kwargs):
     # make sure we get an error if we try an authorized path
-    with pytest.raises(HTTPError, match="403 Client Error") as e:
+    with pytest.raises(httpx.HTTPStatusError, match="Client error '403 Forbidden' for url") as e:
         yield e
     pytest.skip("Test can't proceed without auth")
 
 
 def authorization_context(api_key):
-    if api_key:
-        return passthrough
-    else:
-        return check_error_and_skip
+    return passthrough if api_key else check_error_and_skip
 
 
 class FastAPITestClientCRUD:
     """Client interface CRUD functions to pass to the fixtures objects in ``conftest.py``"""
 
-    error_cls = HTTPError
+    error_cls = httpx.HTTPStatusError
 
     def __init__(self, client, api_key=None):
         self.client = client

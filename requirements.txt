@@ -1,7 +1,7 @@
 # this is used by Heroku to install the environment
 # we should always be pinning specific versions for deployment
 aiohttp==3.8.1
-fastapi==0.86.0
+fastapi>=0.87.0
 gidgethub==5.1.0
 sqlmodel>=0.0.8
 alembic==1.7.5
