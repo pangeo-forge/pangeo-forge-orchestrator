@@ -1,9 +1,9 @@
 # this is used by Heroku to install the environment
 # we should always be pinning specific versions for deployment
 aiohttp==3.8.1
-fastapi==0.71.0
+fastapi==0.86.0
 gidgethub==5.1.0
-sqlmodel==0.0.7  # https://github.com/tiangolo/sqlmodel/issues/315#issuecomment-1229239354
+sqlmodel>=0.0.8
 alembic==1.7.5
 PyYAML==6.0
 cffi
