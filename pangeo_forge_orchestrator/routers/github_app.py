@@ -180,6 +180,21 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
     return f"{prefix}/{recipe_run.recipe_id}.{recipe_run.dataset_type}"
 
 
+def get_recipe_run_from_db(
+    *, db_session: Session, head_sha: str, recipe_id: str, bakery_id: str, feedstock_id: str
+):
+    """Check if a recipe with the given head_sha and feedstock_id exists in the database."""
+
+    statement = select(MODELS["recipe_run"].table).where(
+        MODELS["recipe_run"].table.head_sha == head_sha,
+        MODELS["recipe_run"].table.recipe_id == recipe_id,
+        MODELS["recipe_run"].table.bakery_id == bakery_id,
+        MODELS["recipe_run"].table.feedstock_id == feedstock_id,
+    )
+
+    return db_session.exec(statement).all()[0]  # TODO: set this to one() before merging
+
+
 def get_bakery_from_db(*, db_session, meta):
     bakery_statement = select(MODELS["bakery"].table).where(
         MODELS["bakery"].table.name == meta["bakery"]["id"]
@@ -881,36 +896,16 @@ async def synchronize(
 
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
 
-    key = "**The latest updates on recipe(s) in this PR:**"
-    status_ = ":inbox_tray: Received and waiting to process"
-
-    title = """\
-
-| ID | Sync status | Conclusion | URL | Updated |
-|:------:|:------:|:---:|:---:|:-------:|"""
-
-    message = dedent(
-        f"""\
-{key}
-{title}
-| - | {status_} | - | - | {get_last_update_time()} |
-"""
-    )
-    await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
-
-    create_request = dict(
-        name="synchronize",
+    data = dict(
         head_sha=head_sha,
+        name="synchronize",
+        title="Syncing recipe(s)",
+        summary="Syncing latest commit to Pangeo Forge Cloud",
         status="in_progress",
-        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(
-            title="Syncing latest commit to Pangeo Forge Cloud",
-            summary="",
-        ),
-        details_url="https://pangeo-forge.org/",
-    )  # required
+    )
 
-    checks_response = await gh.post(f"{base_api_url}/check-runs", data=create_request, **gh_kws)
+    checks_response = await gh.post(f"{base_api_url}/check-runs", data=data, **gh_kws)
+
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
     # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
@@ -937,29 +932,9 @@ async def synchronize(
             if ("status" in p) and p["status"] == "failed":
                 tracelines = p["exc_info"].splitlines()
                 logger.debug(f"Synchronize errored with:\n {tracelines}")
-                update_request = dict(
-                    status="completed",
-                    conclusion="failure",
-                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                    output=dict(
-                        title="Synchronize error - click details for summary",
-                        summary=tracelines[-1],
-                    ),
-                )
 
-                await gh.patch(
-                    f"{base_api_url}/check-runs/{checks_response['id']}",
-                    data=update_request,
-                    **gh_kws,
-                )
-
-                status_ = "❌ Failed"
-                message = dedent(
+                summary = dedent(
                     f"""\
-{key}
-{title}
-| - | {status_} | - | - | {get_last_update_time()} |
-
 <details>
 <summary>Traceback: Click to expand</summary>
 
@@ -970,7 +945,23 @@ async def synchronize(
 </details>
 """
                 )
-                await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
+
+                updated_data = dict(
+                    status="completed",
+                    conclusion="failure",
+                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                    output=dict(
+                        title="Synchronize error - click details for summary",
+                        summary=summary,
+                    ),
+                )
+
+                await gh.patch(
+                    f"{base_api_url}/check-runs/{checks_response['id']}",
+                    data=updated_data,
+                    **gh_kws,
+                )
+
                 raise ValueError(tracelines[-1]) from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
         # case it doesn't, raise a NotImplementedError here to prevent moving forward.
@@ -1031,17 +1022,6 @@ async def synchronize(
             **gh_kws,
         )
 
-        status_ = "❌ Error"
-        message = dedent(
-            f"""\
-{key}
-{title}
-| - | {status_} | - | - | {get_last_update_time()} |
-
-{output}
-        """
-        )
-        await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
         # ok, this seems maybe like the wrong way to do this?
         # just want to raise the same error type but with a custom message
         raise type(e)(json.dumps(output)) from e
@@ -1063,6 +1043,26 @@ async def synchronize(
     summary = ""
     for recipe in meta["recipes"]:
 
+        # check if recipe already exists in db
+        try:
+            recipe_run = get_recipe_run_from_db(
+                db_session=db_session,
+                head_sha=head_sha,
+                recipe_id=recipe["id"],
+                feedstock_id=feedstock.id,
+                bakery_id=bakery.id,
+            )
+
+            logger.debug(f"Recipe {recipe_run.recipe_id} already exists in database.")
+            url = f"{FRONTEND_DASHBOARD_URL}/recipe-run/{recipe_run.id}?{query_param}"
+            summary += f"\n- {recipe_run.recipe_id}: {url}"
+            continue
+
+        except NoResultFound as e:
+            logger.error(e)
+            logger.debug(f"No recipe found for {recipe['id']} in database.")
+
+        # create recipe in db
         started_at = datetime.utcnow().replace(microsecond=0)
         nm = MODELS["recipe_run"].creation(
             recipe_id=recipe["id"],
@@ -1094,16 +1094,6 @@ async def synchronize(
     await gh.patch(
         f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
     )
-
-    message = dedent(
-        f"""\
-{key}
-{title}
-{table_rows}
-"""
-    )
-
-    await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
 
 
 async def run_recipe_test(
