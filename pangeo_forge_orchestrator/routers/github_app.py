@@ -827,17 +827,19 @@ async def run(
             db_session.refresh(recipe_run)
 
             # update check run
-            summary = f"""\
-Recipe run failed for {recipe_run.recipe_id} at {FRONTEND_DASHBOARD_URL}/recipe_runs/{recipe_run.id}?{query_params}
+            summary = dedent(
+                f"""\
+                Recipe run failed for {recipe_run.recipe_id} at {FRONTEND_DASHBOARD_URL}/recipe_runs/{recipe_run.id}?{query_params}
 
-<details>
-<summary>Traceback</summary>
+                <details>
+                <summary>Traceback</summary>
 
-{trace}
+                {trace}
 
-</details>
+                </details>
 
-"""
+                """
+            )
             update_request = dict(
                 status=recipe_run.status,
                 conclusion=recipe_run.conclusion,
@@ -915,15 +917,15 @@ async def synchronize(
 
                 summary = dedent(
                     f"""\
-<details>
-<summary>Traceback: Click to expand</summary>
+                    <details>
+                    <summary>Traceback: Click to expand</summary>
 
-```python
-{tracelines[-1]}
-```
+                    ```python
+                    {tracelines[-1]}
+                    ```
 
-</details>
-"""
+                    </details>
+                    """
                 )
 
                 updated_data = dict(
