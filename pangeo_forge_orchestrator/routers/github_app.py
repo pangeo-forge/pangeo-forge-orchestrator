@@ -190,18 +190,28 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
 
 
 def get_recipe_run_from_db(
-    *, db_session: Session, head_sha: str, recipe_id: str, bakery_id: str, feedstock_id: str
+    *,
+    db_session: Session,
+    bakery_id: Optional[str] = None,
+    feedstock_id: Optional[str] = None,
+    head_sha: Optional[str] = None,
+    recipe_id: Optional[str] = None,
+    id: Optional[int] = None,
 ):
     """Check if a recipe with the given head_sha and feedstock_id exists in the database."""
 
-    statement = select(MODELS["recipe_run"].table).where(
-        MODELS["recipe_run"].table.head_sha == head_sha,
-        MODELS["recipe_run"].table.recipe_id == recipe_id,
-        MODELS["recipe_run"].table.bakery_id == bakery_id,
-        MODELS["recipe_run"].table.feedstock_id == feedstock_id,
-    )
+    if id:
+        statement = select(MODELS["recipe_run"].table).where(MODELS["recipe_run"].table.id == id)
+    else:
+        statement = select(MODELS["recipe_run"].table).where(
+            MODELS["recipe_run"].table.head_sha == head_sha,
+            MODELS["recipe_run"].table.recipe_id == recipe_id,
+            # TODO: should we be checking the bakery_id  and feedstock_id here?
+            # MODELS["recipe_run"].table.bakery_id == bakery_id,
+            # MODELS["recipe_run"].table.feedstock_id == feedstock_id,
+        )
 
-    return db_session.exec(statement).all()[0]  # TODO: set this to one() before merging
+    return db_session.exec(statement).one()
 
 
 def get_bakery_from_db(*, db_session, meta):
@@ -382,12 +392,7 @@ async def handle_dataflow_event(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No handling implemented for {payload['conclusion'] = }.",
             )
-
-        recipe_run = db_session.exec(
-            select(MODELS["recipe_run"].table).where(
-                MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
-            )
-        ).one()
+        recipe_run = get_recipe_run_from_db(db_session=db_session, id=int(payload["recipe_run_id"]))
         feedstock = get_feedstock_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
         bakery = get_bakery_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
 
@@ -409,14 +414,15 @@ async def handle_dataflow_event(
         # https://github.com/python/mypy/issues/1174#issuecomment-175854832
         args: List[SQLModel] = [recipe_run]  # type: ignore
         if recipe_run.is_test:
-            args.append(feedstock.spec)  # type: ignore
             logger.info(f"Calling `triage_test_run_complete` with {args=}")
             background_tasks.add_task(
-                triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws, db_session=db_session
+                triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws, feedstock_spec=feedstock.spec
             )
         else:
             logger.info(f"Calling `triage_prod_run_complete` with {args=}")
-            background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+            background_tasks.add_task(
+                triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws, feedstock_spec=feedstock.spec
+            )
 
 
 async def handle_pr_comment_event(
@@ -451,6 +457,12 @@ async def handle_pr_comment_event(
     action = payload["action"]
     comment = payload["comment"]
     pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
+    base_api_url = pr["base"]["repo"]["url"]
+    check_runs_for_git_ref = await gh.getitem(
+        f"{base_api_url}/commits/{pr['head']['sha']}/check-runs", **gh_kws
+    )
+
+    check_run_id = None
 
     if action == "created":
 
@@ -479,22 +491,24 @@ async def handle_pr_comment_event(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
             # TODO: Maybe post a comment and/or emoji reaction explaining this error.
         recipe_id = cmd_args.pop(0)
-        statement = (
-            # https://sqlmodel.tiangolo.com/tutorial/where/#multiple-where
-            select(MODELS["recipe_run"].table)
-            .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
-            .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
-        )
 
         try:
-            # Handle the case where the payload was redelivered, and we end up with multile runs
-            # for the same recipe_id and head_sha.
-            matching_recipe_run = db_session.exec(statement).one()
-        except MultipleResultsFound as exc:
-            logger.error(exc)
-            logger.debug(f"Multiple runs found for {recipe_id=} and {pr['head']['sha']=}.")
-            logger.debug("Using the most recent run.")
-            matching_recipe_run = db_session.exec(statement).first()
+            recipe_run = get_recipe_run_from_db(
+                db_session=db_session, head_sha=pr["head"]["sha"], recipe_id=recipe_id
+            )
+            logger.debug(f"Found matching run {recipe_run=}")
+            check_run_id = get_check_run_id(
+                check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
+            )
+            args = (  # type: ignore
+                pr,
+                recipe_run,
+                reactions_url,
+            )
+            logger.info(f"Creating run_recipe_test task with args: {args}")
+            background_tasks.add_task(
+                run_recipe_test, *args, **session_kws, gh_kws=gh_kws, check_run_id=check_run_id
+            )
 
         except NoResultFound as exc:
             # handle error if there is no matching result. this would arise if the slash
@@ -502,39 +516,7 @@ async def handle_pr_comment_event(
             output = f"No run found for {recipe_id=} and {pr['head']['sha']=}."
             logger.debug(output)
             logger.error(exc)
-
-            matching_recipe_run = None
-
-        if matching_recipe_run is None:
-            # Post a comment and emoji reaction to confirm that the command was received.
-            key = "**The latest updates on recipe(s) in this PR:**"
-            title = """\
-
-| ID | Sync status | Conclusion | URL | Updated |
-|:------:|:------:|:---:|:---:|:-------:|"""
-
-            message = dedent(
-                f"""\
-{key}
-{title}
-| - | ❌ Failed | - | - | {get_last_update_time()} |
-
-{output}
-"""
-            )
-
-            await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
-
-            raise RuntimeError(output)
-
-        logger.debug(f"Found matching run {matching_recipe_run=}")
-        args = (  # type: ignore
-            pr,
-            matching_recipe_run,
-            reactions_url,
-        )
-        logger.info(f"Creating run_recipe_test task with args: {args}")
-        background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
+            raise exc
 
 
 async def handle_pr_event(
@@ -777,12 +759,15 @@ async def run(
     feedstock_subdir: Optional[str] = None,
     *,
     pr: dict,
+    check_run_id: str,
     gh: GitHubAPI,
     gh_kws: dict,
     db_session: Session,
 ):
 
     logger.info(f"Calling run with args: {html_url}, {ref}, {recipe_run}")
+    base_api_url = pr["base"]["repo"]["url"]
+    query_params = f"feedstock_id={recipe_run.feedstock_id}"
     bakery = get_bakery_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
     bakery_config = get_config().bakeries[bakery.name]
 
@@ -844,15 +829,22 @@ async def run(
                     db_session.add(recipe_run)
                     db_session.commit()
 
-            if pr:
-                await update_recipe_run_status_on_pr(
-                    pr=pr,
-                    key="**The latest updates on recipe(s) in this PR:**",
-                    gh=gh,
-                    gh_kws=gh_kws,
-                    recipe_run=recipe_run,
-                    db_session=db_session,
-                )
+                    # update check run
+                    update_request = dict(
+                        status=recipe_run.status,
+                        started_at=f"{recipe_run.started_at.isoformat()}Z",
+                        output=dict(
+                            title="Recipe run started",
+                            summary=f"Recipe run started for {recipe_run.recipe_id} at {FRONTEND_DASHBOARD_URL}/recipe_runs/{recipe_run.id}?{query_params}",
+                        ),
+                    )
+
+                    await gh.patch(
+                        f"{base_api_url}/check-runs/{check_run_id}",
+                        data=update_request,
+                        **gh_kws,
+                    )
+                    break
 
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
@@ -873,15 +865,32 @@ async def run(
             db_session.commit()
             db_session.refresh(recipe_run)
 
-            if pr:
-                update_recipe_run_status_on_pr(
-                    pr=pr,
-                    key="**The latest updates on recipe(s) in this PR:**",
-                    gh=gh,
-                    gh_kws=gh_kws,
-                    recipe_run=recipe_run,
-                    db_session=db_session,
-                )
+            # update check run
+            summary = f"""\
+Recipe run failed for {recipe_run.recipe_id} at {FRONTEND_DASHBOARD_URL}/recipe_runs/{recipe_run.id}?{query_params}
+
+<details>
+<summary>Traceback</summary>
+
+{trace}
+
+</details>
+
+"""
+            update_request = dict(
+                status=recipe_run.status,
+                conclusion=recipe_run.conclusion,
+                output=dict(
+                    title="Recipe run failed - click details for summary",
+                    summary=summary,
+                ),
+            )
+
+            await gh.patch(
+                f"{base_api_url}/check-runs/{check_run_id}",
+                data=update_request,
+                **gh_kws,
+            )
 
             raise e  # raise the error, so that the calling function knows what happened
 
@@ -1047,9 +1056,7 @@ async def synchronize(
     if backend_netloc != DEFAULT_BACKEND_NETLOC:
         query_param += f"&orchestratorEndpoint={backend_netloc}"
 
-    recipe_checks_responses = {}
     created = []
-    table_rows = ""
     summary = ""
 
     check_runs_for_git_ref = await gh.getitem(
@@ -1077,10 +1084,9 @@ async def synchronize(
                 logger.debug(
                     f"Check run {check_run_id} already exists for recipe {recipe_run.recipe_id}."
                 )
+
                 update_request = dict(
                     status=recipe_run.status,
-                    conclusion=recipe_run.conclusion or "neutral",
-                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
                     output=dict(
                         title="Recipe run already exists",
                         summary=f"Recipe run already exists at {url}",
@@ -1095,14 +1101,12 @@ async def synchronize(
 
             else:
                 logger.debug(f"Check run does not exist for recipe {recipe_run.recipe_id}.")
-                check_run = await gh.post(
+                await gh.post(
                     f"{base_api_url}/check-runs",
                     data=dict(
                         name=recipe_run.recipe_id,
                         head_sha=head_sha,
                         status=recipe_run.status,
-                        conclusion=recipe_run.conclusion or "neutral",
-                        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
                         output=dict(
                             title="Recipe run already exists",
                             summary=f"Recipe run already exists at {url}",
@@ -1110,7 +1114,6 @@ async def synchronize(
                     ),
                     **gh_kws,
                 )
-                recipe_checks_responses[recipe_run.recipe_id] = check_run
 
             continue
 
@@ -1138,16 +1141,14 @@ async def synchronize(
         created.append(db_model)
         url = f"{FRONTEND_DASHBOARD_URL}/recipe-run/{db_model.id}?{query_param}"
         summary += f"\n- {url}"
-        table_rows += f"| {db_model.recipe_id} | {db_model.status} | {db_model.conclusion} | [dashboard]({url})| {get_last_update_time()} |\n"
 
         # create check run
-        check_run = await gh.post(
+        await gh.post(
             f"{base_api_url}/check-runs",
             data=dict(
                 name=recipe["id"],
                 head_sha=head_sha,
                 status=db_model.status,
-                conclusion=db_model.conclusion or "neutral",
                 started_at=f"{started_at.isoformat()}Z",
                 output=dict(
                     title="Recipe run created",
@@ -1174,6 +1175,7 @@ async def run_recipe_test(
     recipe_run: SQLModel,
     reactions_url: str,
     *,
+    check_run_id: str,
     gh: GitHubAPI,
     db_session: Session,
     gh_kws: dict,
@@ -1197,7 +1199,15 @@ async def run_recipe_test(
     # TODO: create a check run on the head_sha this was deployed from to give
     # a point of user engagement & a details link to recipe run page on pangeo-forge.org
     try:
-        await run(*args, **kws, pr=pr, gh_kws=gh_kws, gh=gh, db_session=db_session)
+        await run(
+            *args,
+            **kws,
+            pr=pr,
+            gh_kws=gh_kws,
+            gh=gh,
+            db_session=db_session,
+            check_run_id=check_run_id,
+        )
     except subprocess.CalledProcessError:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
         # We don't need to update the recipe_run in the database or handle the trace here,
@@ -1206,31 +1216,30 @@ async def run_recipe_test(
 
 async def triage_test_run_complete(
     recipe_run: SQLModel,
-    feedstock_spec: str,
     *,
+    feedstock_spec: str,
     gh: GitHubAPI,
     gh_kws: dict,
-    db_session: Session,
 ):
-    async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls", **gh_kws):
+    """Triage a test run that has completed."""
+
+    async for pr in gh.iter(f"/repos/{feedstock_spec}/pulls"):
         if pr["head"]["sha"] == recipe_run.head_sha:
             comments_url = pr["comments_url"]
             break
 
-    if comments_url:
-        await update_recipe_run_status_on_pr(
-            pr=pr,
-            key="**The latest updates on recipe(s) in this PR:**",
-            gh=gh,
-            gh_kws=gh_kws,
-            recipe_run=recipe_run,
-            db_session=db_session,
-        )
+    base_api_url = f"https://api.github.com/repos/{feedstock_spec}"
+    check_runs_for_git_ref = await gh.getitem(
+        f"{base_api_url}/commits/{recipe_run.head_sha}/check-runs", **gh_kws
+    )
+    check_run_id = get_check_run_id(
+        check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
+    )
 
     if recipe_run.conclusion == "failure":
         comment = dedent(
             f"""\
-            The test for {recipe_run.recipe_id} failed, but I'm sure we can find out why!
+            The test for {recipe_run.recipe_id} at {recipe_run.head_sha} failed, but I'm sure we can find out why!
 
             Pangeo Forge maintainers are working diligently to provide public logs for contributors.
             That feature is not quite ready yet, however, so please reach out on this thread to a
@@ -1255,28 +1264,52 @@ async def triage_test_run_complete(
                 """
             )
         comment = dedent(
-            """\
-            :tada: The test run of `{recipe_id}` at {sha} succeeded!
+            f"""\
+            :tada: The test run of `{recipe_run.recipe_id}` at {recipe_run.head_sha} succeeded!
 
             ```python
             {to_open}
             ```
             """
-        ).format(recipe_id=recipe_run.recipe_id, sha=recipe_run.head_sha, to_open=to_open)
+        )
 
     _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
+
+    if check_run_id:
+        await gh.patch(
+            f"{base_api_url}/check-runs/{check_run_id}",
+            data=dict(
+                conclusion=recipe_run.conclusion,
+                output=dict(
+                    title=f"Recipe run {recipe_run.conclusion}",
+                    summary=comment,
+                ),
+            ),
+            **gh_kws,
+        )
 
 
 async def triage_prod_run_complete(
     recipe_run: SQLModel,
     *,
+    feedstock_spec: str,
     gh: GitHubAPI,
     gh_kws: dict,
 ):
+    """Triage a prod run that has completed."""
+
+    base_api_url = f"https://api.github.com/repos/{feedstock_spec}"
+    check_runs_for_git_ref = await gh.getitem(
+        f"{base_api_url}/commits/{recipe_run.head_sha}/check-runs", **gh_kws
+    )
+    check_run_id = get_check_run_id(
+        check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
+    )
+
     deployment_id = json.loads(recipe_run.message)["deployment_id"]
     environment_url = json.loads(recipe_run.message)["environment_url"]
     await gh.post(
-        f"/repos/{recipe_run.feedstock.spec}/deployments/{deployment_id}/statuses",
+        f"/repos/{feedstock_spec}/deployments/{deployment_id}/statuses",
         # Here's a fun thing we can do because our recipe run model fields are modeled on the
         # GitHub API: pass the recipe_run.conclusion directly through to deployment state.
         data=dict(
@@ -1287,6 +1320,18 @@ async def triage_prod_run_complete(
     )
     # Don't need to link deployment to recipe run page here; that was already done when the
     # recipe run was moved to "in_progress" (either by `recipe_run_test` or `deploy_prod_run`).
+
+    await gh.patch(
+        f"{base_api_url}/check-runs/{check_run_id}",
+        data=dict(
+            conclusion=recipe_run.conclusion,
+            output=dict(
+                title=f"Recipe run {recipe_run.conclusion}",
+                summary=f"Recipe run {recipe_run.conclusion}",
+            ),
+        ),
+        **gh_kws,
+    )
 
 
 async def create_feedstock_repo(
