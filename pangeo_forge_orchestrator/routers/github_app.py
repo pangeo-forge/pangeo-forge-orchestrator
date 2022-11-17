@@ -43,6 +43,15 @@ def get_check_run_id(*, check_runs: list[dict], name: str):
             return check_run["id"]
 
 
+async def get_check_runs_for_git_ref(
+    *, gh: GitHubAPI, gh_kws: dict, feedstock_spec: str, commit_sha: str
+):
+    return await gh.getitem(
+        f"/repos/{feedstock_spec}/commits/{commit_sha}/check-runs",
+        **gh_kws,
+    )
+
+
 def ignore_repo(repo: str) -> bool:
     """Return True if the repo should be ignored."""
 
@@ -284,12 +293,10 @@ async def get_feedstock_check_runs(
     _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
 
     token = await get_access_token(gh)
-    check_runs = await gh.getitem(
-        f"/repos/{feedstock_spec}/commits/{commit_sha}/check-runs",
-        accept=ACCEPT,
-        oauth_token=token,
+    gh_kws = {"oauth_token": token, "accept": ACCEPT}
+    return await get_check_runs_for_git_ref(
+        gh=gh, feedstock_spec=feedstock_spec, commit_sha=commit_sha, gh_kws=gh_kws
     )
-    return check_runs
 
 
 @github_app_router.post(
@@ -457,9 +464,12 @@ async def handle_pr_comment_event(
     action = payload["action"]
     comment = payload["comment"]
     pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
-    base_api_url = pr["base"]["repo"]["url"]
-    check_runs_for_git_ref = await gh.getitem(
-        f"{base_api_url}/commits/{pr['head']['sha']}/check-runs", **gh_kws
+
+    check_runs_for_git_ref = await get_check_runs_for_git_ref(
+        gh=gh,
+        gh_kws=gh_kws,
+        feedstock_spec=pr["base"]["repo"]["full_name"],
+        commit_sha=pr["head"]["sha"],
     )
 
     check_run_id = None
@@ -593,51 +603,6 @@ async def handle_pr_event(
             # conditional block it's defined within
             args = (pr,)  # type: ignore
             background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
-
-
-async def post_comment(*, gh_kws, gh, pr, key, message):
-    """Post comment to PR with the status of the run"""
-    # Update existing comment if it exists and contains message starting with "Starting CI"
-    # This is to avoid spamming the PR with comments
-
-    if pr is None or not pr.get("comments_url"):
-        logger.info("No comments_url found in PR payload. Skipping comment.")
-        return
-    comments = gh.getiter(pr["comments_url"], **gh_kws)
-    async for comment in comments:
-        if key in comment["body"]:
-            await gh.patch(comment["url"], data={"body": message}, **gh_kws)
-            break
-
-    else:
-        await gh.post(
-            pr["comments_url"],
-            data={"body": message},
-            **gh_kws,
-        )
-
-
-async def update_recipe_run_status_on_pr(*, pr, key, gh, gh_kws, recipe_run, db_session):
-    """Update the status of the recipe run on the PR"""
-
-    feedstock = get_feedstock_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
-    query_params = f"feedstock_id={feedstock.id}"
-
-    comments = gh.getiter(pr["comments_url"], **gh_kws)
-    async for comment in comments:
-        body = comment["body"]
-        if key in body:
-            body_lines = body.splitlines()
-            for idx, line in enumerate(body_lines):
-                if recipe_run.recipe_id in line:
-                    url = f"{FRONTEND_DASHBOARD_URL}/recipe-runs/{recipe_run.id}?{query_params}"
-                    body_lines[
-                        idx
-                    ] = f"| {recipe_run.recipe_id} | {recipe_run.status} | {recipe_run.conclusion} | [dashboard]({url}) | {get_last_update_time()} |"
-                    break
-        message = "\n".join(body_lines)
-        await post_comment(gh_kws=gh_kws, gh=gh, key=key, pr=pr, message=message)
-        break
 
 
 async def parse_payload(request, payload_bytes, event):
@@ -1059,8 +1024,8 @@ async def synchronize(
     created = []
     summary = ""
 
-    check_runs_for_git_ref = await gh.getitem(
-        f"{base_api_url}/commits/{head_sha}/check-runs", **gh_kws
+    check_runs_for_git_ref = await get_check_runs_for_git_ref(
+        gh=gh, gh_kws=gh_kws, feedstock_spec=feedstock.spec, commit_sha=head_sha
     )
 
     for recipe in meta["recipes"]:
@@ -1228,10 +1193,10 @@ async def triage_test_run_complete(
             comments_url = pr["comments_url"]
             break
 
-    base_api_url = f"https://api.github.com/repos/{feedstock_spec}"
-    check_runs_for_git_ref = await gh.getitem(
-        f"{base_api_url}/commits/{recipe_run.head_sha}/check-runs", **gh_kws
+    check_runs_for_git_ref = await get_check_runs_for_git_ref(
+        gh=gh, gh_kws=gh_kws, feedstock_spec=feedstock_spec, commit_sha=recipe_run.head_sha
     )
+
     check_run_id = get_check_run_id(
         check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
     )
@@ -1277,7 +1242,7 @@ async def triage_test_run_complete(
 
     if check_run_id:
         await gh.patch(
-            f"{base_api_url}/check-runs/{check_run_id}",
+            f"repos/{feedstock_spec}/check-runs/{check_run_id}",
             data=dict(
                 conclusion=recipe_run.conclusion,
                 output=dict(
@@ -1298,10 +1263,10 @@ async def triage_prod_run_complete(
 ):
     """Triage a prod run that has completed."""
 
-    base_api_url = f"https://api.github.com/repos/{feedstock_spec}"
-    check_runs_for_git_ref = await gh.getitem(
-        f"{base_api_url}/commits/{recipe_run.head_sha}/check-runs", **gh_kws
+    check_runs_for_git_ref = await get_check_runs_for_git_ref(
+        gh=gh, gh_kws=gh_kws, feedstock_spec=feedstock_spec, commit_sha=recipe_run.head_sha
     )
+
     check_run_id = get_check_run_id(
         check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
     )
@@ -1322,7 +1287,7 @@ async def triage_prod_run_complete(
     # recipe run was moved to "in_progress" (either by `recipe_run_test` or `deploy_prod_run`).
 
     await gh.patch(
-        f"{base_api_url}/check-runs/{check_run_id}",
+        f"repos/{feedstock_spec}/check-runs/{check_run_id}",
         data=dict(
             conclusion=recipe_run.conclusion,
             output=dict(
