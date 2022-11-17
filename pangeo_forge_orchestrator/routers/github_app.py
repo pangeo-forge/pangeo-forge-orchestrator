@@ -34,6 +34,15 @@ github_app_router = APIRouter()
 # Helpers -----------------------------------------------------------------------------------------
 
 
+def get_check_run_id(*, check_runs: list[dict], name: str):
+
+    # search for existing check runs for this git ref
+    for check_run in check_runs:
+        if check_run["name"] == name:
+            # if we find one
+            return check_run["id"]
+
+
 def ignore_repo(repo: str) -> bool:
     """Return True if the repo should be ignored."""
 
@@ -1038,9 +1047,15 @@ async def synchronize(
     if backend_netloc != DEFAULT_BACKEND_NETLOC:
         query_param += f"&orchestratorEndpoint={backend_netloc}"
 
+    recipe_checks_responses = {}
     created = []
     table_rows = ""
     summary = ""
+
+    check_runs_for_git_ref = await gh.getitem(
+        f"{base_api_url}/commits/{head_sha}/check-runs", **gh_kws
+    )
+
     for recipe in meta["recipes"]:
 
         # check if recipe already exists in db
@@ -1056,6 +1071,47 @@ async def synchronize(
             logger.debug(f"Recipe {recipe_run.recipe_id} already exists in database.")
             url = f"{FRONTEND_DASHBOARD_URL}/recipe-run/{recipe_run.id}?{query_param}"
             summary += f"\n- {recipe_run.recipe_id}: {url}"
+            if check_run_id := get_check_run_id(
+                check_runs=check_runs_for_git_ref["check_runs"], name=recipe_run.recipe_id
+            ):
+                logger.debug(
+                    f"Check run {check_run_id} already exists for recipe {recipe_run.recipe_id}."
+                )
+                update_request = dict(
+                    status=recipe_run.status,
+                    conclusion=recipe_run.conclusion or "neutral",
+                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                    output=dict(
+                        title="Recipe run already exists",
+                        summary=f"Recipe run already exists at {url}",
+                    ),
+                )
+
+                await gh.patch(
+                    f"{base_api_url}/check-runs/{check_run_id}",
+                    data=update_request,
+                    **gh_kws,
+                )
+
+            else:
+                logger.debug(f"Check run does not exist for recipe {recipe_run.recipe_id}.")
+                check_run = await gh.post(
+                    f"{base_api_url}/check-runs",
+                    data=dict(
+                        name=recipe_run.recipe_id,
+                        head_sha=head_sha,
+                        status=recipe_run.status,
+                        conclusion=recipe_run.conclusion or "neutral",
+                        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
+                        output=dict(
+                            title="Recipe run already exists",
+                            summary=f"Recipe run already exists at {url}",
+                        ),
+                    ),
+                    **gh_kws,
+                )
+                recipe_checks_responses[recipe_run.recipe_id] = check_run
+
             continue
 
         except NoResultFound as e:
@@ -1083,6 +1139,23 @@ async def synchronize(
         url = f"{FRONTEND_DASHBOARD_URL}/recipe-run/{db_model.id}?{query_param}"
         summary += f"\n- {url}"
         table_rows += f"| {db_model.recipe_id} | {db_model.status} | {db_model.conclusion} | [dashboard]({url})| {get_last_update_time()} |\n"
+
+        # create check run
+        check_run = await gh.post(
+            f"{base_api_url}/check-runs",
+            data=dict(
+                name=recipe["id"],
+                head_sha=head_sha,
+                status=db_model.status,
+                conclusion=db_model.conclusion or "neutral",
+                started_at=f"{started_at.isoformat()}Z",
+                output=dict(
+                    title="Recipe run created",
+                    summary=f"Recipe run created at {url}",
+                ),
+            ),
+            **gh_kws,
+        )
 
     update_request = dict(
         status="completed",
