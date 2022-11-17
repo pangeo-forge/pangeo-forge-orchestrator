@@ -552,9 +552,6 @@ async def handle_pr_event(
         if pr["title"].lower().startswith("cleanup"):
             return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
         args = (pr,)
-        # Post comment to PR with the status of the run
-        # Update existing comment if it exists and contains message starting with "Starting CI"
-        # This is to avoid spamming the PR with comments
 
         background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
@@ -731,7 +728,6 @@ async def run(
 ):
 
     logger.info(f"Calling run with args: {html_url}, {ref}, {recipe_run}")
-    base_api_url = pr["base"]["repo"]["url"]
     query_params = f"feedstock_id={recipe_run.feedstock_id}"
     bakery = get_bakery_from_recipe_run(db_session=db_session, recipe_run=recipe_run)
     bakery_config = get_config().bakeries[bakery.name]
@@ -805,7 +801,7 @@ async def run(
                     )
 
                     await gh.patch(
-                        f"{base_api_url}/check-runs/{check_run_id}",
+                        f"/repos/{feedstock_spec}/check-runs/{check_run_id}",
                         data=update_request,
                         **gh_kws,
                     )
@@ -852,7 +848,7 @@ Recipe run failed for {recipe_run.recipe_id} at {FRONTEND_DASHBOARD_URL}/recipe_
             )
 
             await gh.patch(
-                f"{base_api_url}/check-runs/{check_run_id}",
+                f"/repos/{feedstock_spec}/check-runs/{check_run_id}",
                 data=update_request,
                 **gh_kws,
             )
@@ -876,6 +872,7 @@ async def synchronize(
     pr_number = pr["number"]
     base_api_url = pr["base"]["repo"]["url"]
     base_full_name = pr["base"]["repo"]["full_name"]
+    feedstock_spec = base_full_name
 
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
 
@@ -887,7 +884,7 @@ async def synchronize(
         status="in_progress",
     )
 
-    checks_response = await gh.post(f"{base_api_url}/check-runs", data=data, **gh_kws)
+    checks_response = await gh.post(f"/repos/{feedstock_spec}/check-runs", data=data, **gh_kws)
 
     # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
     # image from meta.yaml, without importing the recipe. this will be used when we replace
@@ -940,7 +937,7 @@ async def synchronize(
                 )
 
                 await gh.patch(
-                    f"{base_api_url}/check-runs/{checks_response['id']}",
+                    f"/repos/{feedstock_spec}/check-runs/{checks_response['id']}",
                     data=updated_data,
                     **gh_kws,
                 )
@@ -1000,7 +997,7 @@ async def synchronize(
         )
 
         await gh.patch(
-            f"{base_api_url}/check-runs/{checks_response['id']}",
+            f"/repos/{feedstock_spec}/check-runs/{checks_response['id']}",
             data=update_request,
             **gh_kws,
         )
@@ -1059,7 +1056,7 @@ async def synchronize(
                 )
 
                 await gh.patch(
-                    f"{base_api_url}/check-runs/{check_run_id}",
+                    f"/repos/{feedstock_spec}/check-runs/{check_run_id}",
                     data=update_request,
                     **gh_kws,
                 )
@@ -1067,7 +1064,7 @@ async def synchronize(
             else:
                 logger.debug(f"Check run does not exist for recipe {recipe_run.recipe_id}.")
                 await gh.post(
-                    f"{base_api_url}/check-runs",
+                    f"/repos/{feedstock_spec}/check-runs",
                     data=dict(
                         name=recipe_run.recipe_id,
                         head_sha=head_sha,
@@ -1109,7 +1106,7 @@ async def synchronize(
 
         # create check run
         await gh.post(
-            f"{base_api_url}/check-runs",
+            f"/repos/{feedstock_spec}/check-runs",
             data=dict(
                 name=recipe["id"],
                 head_sha=head_sha,
@@ -1131,7 +1128,7 @@ async def synchronize(
     )
 
     await gh.patch(
-        f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
+        f"/repos/{feedstock_spec}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
     )
 
 
@@ -1160,9 +1157,7 @@ async def run_recipe_test(
     feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
     args = (head_html_url, head_sha, recipe_run, feedstock_spec)
     kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
-    # logger.info(f"Calling run with args, kws: {args}, {kws}")
-    # TODO: create a check run on the head_sha this was deployed from to give
-    # a point of user engagement & a details link to recipe run page on pangeo-forge.org
+    logger.info(f"Calling run with args, kws: {args}, {kws}")
     try:
         await run(
             *args,
