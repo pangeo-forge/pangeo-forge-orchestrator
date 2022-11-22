@@ -23,10 +23,11 @@ class BaseCommand(Application):
     log_level = logging.INFO
 
     config_file = Unicode(
-        "pangeo_forge_orchestrator_config.py",
+        "./config/local/deployment.py",
         config=True,
         help="""
-        Load traitlet config from this file if it exists
+        Load traitlets config from this file if it exists.
+        Multiple config files can be passed at once (and typically are).
         """,
     )
 
