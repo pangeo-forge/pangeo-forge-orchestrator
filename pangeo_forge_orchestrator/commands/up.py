@@ -13,3 +13,5 @@ class Up(BaseCommand):
 
         deployment = Deployment(parent=self)
         self.log.info(deployment.name)
+        self.log.info(deployment.spawner)
+        self.log.info(deployment.registered_runner_configs)
