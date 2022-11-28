@@ -1,8 +1,28 @@
-from traitlets import Dict, Type, Unicode
+from traitlets import Dict, List, Type, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
 from ..spawners.base import BaseSpawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
+
+
+class SecretStr(str):
+    """A string, except it's hard to accidentally print or log it."""
+
+    def __str__(self) -> str:
+        return "*****"
+
+    def __repr__(self) -> str:
+        return "*****"
+
+
+class SecretList(list):
+    """A list, except it's hard to accidentally print or log it."""
+
+    def __str__(self) -> str:
+        return "[***, ***, ***]"
+
+    def __repr__(self) -> str:
+        return "[***, ***, ***]"
 
 
 class Deployment(LoggingConfigurable):
@@ -22,6 +42,15 @@ class Deployment(LoggingConfigurable):
         config=True,
         help="""
         The spawner subclass to use for spawning recipe parsing processes.
+        """,
+    )
+
+    dont_leak = List(
+        allow_none=False,
+        config=True,
+        help="""
+        A list of secret values which the application needs to run, but which
+        we want to avoid accidentally leaking to logs or in print statements.
         """,
     )
 
@@ -49,3 +78,41 @@ class Deployment(LoggingConfigurable):
         The specified runner config (i.e. "bakery id") must be a key in this dict.
         """,
     )
+
+    @validate("dont_leak")
+    def _valid_dont_leak(self, proposal):
+        """Cast the list of strings passed to ``self.dont_leak`` to a ``SecretList`` of
+        ``SecretStr``s, to minimize the possibility that they will be accidentally leaked
+        in logs or by print statements.
+        """
+        return SecretList([SecretStr(v) for v in proposal["value"]])
+
+    def hide_secrets(self, d: dict) -> dict:
+        """If the input dict contains any values which are members of ``self.dont_leak``,
+        hide them as ``SecretStr``s. This prevents these values from being accidentally
+        logged or printed, but they can still be accessed via ``json.dump`` as shown here:
+
+            >>> import json
+
+            >>> d = {"a": 1, "b": {"c": "secret"}}
+            >>> protected = hide_secrets(["secret"], d)
+            >>> print(protected)
+            {'a': 1, 'b': {'c': *****}}
+            >>> json.dumps(protected)
+            '{"a": 1, "b": {"c": "secret"}}'
+        """
+        return {
+            k: (v if v not in self.dont_leak else SecretStr(v))
+            if not isinstance(v, dict)
+            else self.hide_secrets(v)
+            for k, v in d.items()
+        }
+
+    @validate("registered_runner_configs")
+    def _valid_registered_runner_configs(self, proposal):
+        """For all registered runner configs, cast any secret values to ``SecretStr``s, to
+        minimize the possibility that they will be accidentally leaked in logs or by print
+        statements.
+        """
+        # https://traitlets.readthedocs.io/en/stable/using_traitlets.html#custom-cross-validation
+        return self.hide_secrets(proposal["value"])

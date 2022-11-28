@@ -7,6 +7,8 @@ with open(this_dir / "secrets/osn.json") as f:
     key = creds["key"]
     secret = creds["secret"]
 
+    c.Deployment.dont_leak = [key, secret]  # type: ignore # noqa: F821
+
 c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
 c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
     "pangeo-ldeo-nsf-earthcube": {
