@@ -25,6 +25,10 @@ class Deployment(LoggingConfigurable):
         """,
     )
 
+    fastapi = Dict()
+
+    github_app = Dict()
+
     # TODO: Naming clarity can be improved here. This traitlet uses the name `runner config`,
     # because that's what it actually is: config for `pangeo-forge-runner`. From a user
     # perspective, though, the keys of this dict are specified as the `bakery id` in meta.yaml.

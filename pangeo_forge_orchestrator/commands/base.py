@@ -1,6 +1,6 @@
 import logging
 
-from traitlets import Unicode
+from traitlets import List, Unicode
 from traitlets.config import Application
 
 # Common aliases we want to support in *all* commands
@@ -22,11 +22,12 @@ class BaseCommand(Application):
 
     log_level = logging.INFO
 
-    config_file = Unicode(
-        "./config/local/deployment.py",
+    config_file = List(
+        Unicode,
+        ["./config/local/deployment.py"],
         config=True,
         help="""
-        Load traitlets config from this file if it exists.
+        Load traitlets config from these files if they exist.
         Multiple config files can be passed at once (and typically are).
         """,
     )
@@ -34,4 +35,6 @@ class BaseCommand(Application):
     def initialize(self, argv=None):
         super().initialize(argv)
         # Load traitlets config from a config file if present
-        self.load_config_file(self.config_file)
+        for f in self.config_file:
+            self.log.info(f)
+            self.load_config_file(f)

@@ -1,3 +1,12 @@
+import json
+from pathlib import Path
+
+this_dir = Path(__file__).parent.resolve()
+with open(this_dir / "secrets/osn.json") as f:
+    creds = json.load(f)
+    key = creds["key"]
+    secret = creds["secret"]
+
 c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
 c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
     "pangeo-ldeo-nsf-earthcube": {
@@ -14,6 +23,8 @@ c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
                 "default_cache_type": "none",
                 "default_fill_cache": False,
                 "use_listings_cache": False,
+                "key": key,
+                "secret": secret,
             },
             "root_path": "Pangeo/{subpath}",
             "public_url": "https://ncsa.osn.xsede.org/{root_path}",
