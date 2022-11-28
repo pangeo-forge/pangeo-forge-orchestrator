@@ -1,15 +1,25 @@
-import json
 from pathlib import Path
 
-this_dir = Path(__file__).parent.resolve()
-with open(this_dir / "secrets/osn.json") as f:
-    creds = json.load(f)
-    key = creds["key"]
-    secret = creds["secret"]
+import yaml  # type: ignore
 
-    c.Deployment.dont_leak = [key, secret]  # type: ignore # noqa: F821
+this_dir = Path(__file__).parent.resolve()
+secrets_dir = this_dir / "secrets"
+
+with open(secrets_dir / "github-app.yaml") as f:
+    github_app = yaml.safe_load(f)
+
+with open(secrets_dir / "osn.yaml") as f:
+    osn_creds = yaml.safe_load(f)
+
+c.Deployment.dont_leak = [  # type: ignore # noqa: F821
+    github_app["private_key"],
+    github_app["webhook_secret"],
+    osn_creds["key"],
+    osn_creds["secret"],
+]
 
 c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
+c.Deployment.github_app = github_app  # type: ignore # noqa: F821
 c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
@@ -25,8 +35,8 @@ c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
                 "default_cache_type": "none",
                 "default_fill_cache": False,
                 "use_listings_cache": False,
-                "key": key,
-                "secret": secret,
+                "key": osn_creds["key"],
+                "secret": osn_creds["secret"],
             },
             "root_path": "Pangeo/{subpath}",
             "public_url": "https://ncsa.osn.xsede.org/{root_path}",

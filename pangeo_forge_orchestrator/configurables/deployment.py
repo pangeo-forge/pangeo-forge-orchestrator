@@ -54,9 +54,20 @@ class Deployment(LoggingConfigurable):
         """,
     )
 
-    fastapi = Dict()
+    fastapi = Dict(
+        allow_none=False,
+        config=True,
+    )
 
-    github_app = Dict()
+    github_app = Dict(
+        str,
+        allow_none=False,
+        config=True,
+        help="""
+        Config for the GitHub App instance which serves as
+        the GitHub integration point for this application.
+        """,
+    )
 
     # TODO: Naming clarity can be improved here. This traitlet uses the name `runner config`,
     # because that's what it actually is: config for `pangeo-forge-runner`. From a user
@@ -108,11 +119,20 @@ class Deployment(LoggingConfigurable):
             for k, v in d.items()
         }
 
+    # For cross-validation approach used in the following methods, see:
+    # https://traitlets.readthedocs.io/en/stable/using_traitlets.html#custom-cross-validation
+
     @validate("registered_runner_configs")
     def _valid_registered_runner_configs(self, proposal):
         """For all registered runner configs, cast any secret values to ``SecretStr``s, to
         minimize the possibility that they will be accidentally leaked in logs or by print
         statements.
         """
-        # https://traitlets.readthedocs.io/en/stable/using_traitlets.html#custom-cross-validation
+        return self.hide_secrets(proposal["value"])
+
+    @validate("github_app")
+    def _valid_github_app(self, proposal):
+        """For github app config, cast secret values to ``SecretStr``s, to minimize possibility
+        that they will be accidentally leaked in logs or by print statements.
+        """
         return self.hide_secrets(proposal["value"])
