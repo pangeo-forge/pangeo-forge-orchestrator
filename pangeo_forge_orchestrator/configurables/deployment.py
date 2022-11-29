@@ -1,6 +1,7 @@
 from traitlets import Dict, List, Type, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
+from ..commands.base import BaseCommand
 from ..spawners.base import BaseSpawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
 
@@ -78,7 +79,7 @@ class Deployment(LoggingConfigurable):
     # the naming confusion with Beam Runners also complicates this, but that point is covered in
     # the linked `pangeo-forge-runner` issue.
     registered_runner_configs = Dict(
-        Dict,
+        Dict(),
         allow_none=False,
         config=True,
         help="""
@@ -135,3 +136,16 @@ class Deployment(LoggingConfigurable):
     def _valid_fastapi(self, proposal):
         """For fastapi config, cast secret values to ``SecretStr``s."""
         return self.hide_secrets(proposal["value"])
+
+
+class _GetDeployment(BaseCommand):
+    def resolve(self):
+        # if not self.initialized():
+        self.initialize()
+        return Deployment(parent=self)
+
+
+def get_deployment() -> Deployment:
+    """Convenience function to resolve global app config outside of ``traitlets`` object."""
+
+    return _GetDeployment().resolve()

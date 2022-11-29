@@ -23,7 +23,7 @@ class BaseCommand(Application):
     log_level = logging.INFO
 
     config_file = List(
-        Unicode,
+        Unicode(),
         ["./config/local/deployment.py"],
         config=True,
         help="""

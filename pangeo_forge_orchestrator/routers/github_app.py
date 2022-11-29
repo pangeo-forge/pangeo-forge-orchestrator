@@ -18,7 +18,7 @@ from gidgethub.apps import get_installation_access_token
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
-from ..config import get_config
+from ..configurables.deployment import get_deployment as get_config
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
@@ -59,9 +59,9 @@ def get_jwt() -> str:
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
-        "iss": github_app.id,
+        "iss": github_app["id"],
     }
-    return jwt.encode(payload, github_app.private_key, algorithm="RS256")
+    return jwt.encode(payload, github_app["private_key"], algorithm="RS256")
 
 
 async def get_access_token(gh: GitHubAPI) -> str:

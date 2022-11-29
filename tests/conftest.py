@@ -1,10 +1,10 @@
 import os
 import secrets
 import uuid
+from textwrap import dedent
 
 import pytest
 import pytest_asyncio
-import yaml  # type: ignore
 from asgi_lifespan import LifespanManager
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 from cryptography.hazmat.primitives import serialization as crypto_serialization
@@ -16,6 +16,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.configurables.deployment import _GetDeployment
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
@@ -26,9 +27,7 @@ from .interfaces import FastAPITestClientCRUD
 @pytest.fixture(autouse=True, scope="session")
 def setup_and_teardown(
     session_mocker,
-    mock_app_config_path,
-    mock_secrets_dir,
-    mock_bakeries_dir,
+    mock_config_path,
 ):
     # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
@@ -46,30 +45,16 @@ def setup_and_teardown(
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
-    def get_mock_app_config_path():
-        return mock_app_config_path
-
-    def get_mock_secrets_dir():
-        return mock_secrets_dir
-
-    def get_mock_bakeries_dir():
-        return mock_bakeries_dir
+    def get_mock_deployment():
+        kw = {"config_file": [mock_config_path]}
+        return _GetDeployment(**kw).resolve()
 
     session_mocker.patch.object(
-        pangeo_forge_orchestrator.config,
-        "get_app_config_path",
-        get_mock_app_config_path,
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_config",
+        get_mock_deployment,
     )
-    session_mocker.patch.object(
-        pangeo_forge_orchestrator.config,
-        "get_secrets_dir",
-        get_mock_secrets_dir,
-    )
-    session_mocker.patch.object(
-        pangeo_forge_orchestrator.config,
-        "get_bakeries_dir",
-        get_mock_bakeries_dir,
-    )
+
     session_mocker.patch.dict(
         os.environ,
         {"PANGEO_FORGE_DEPLOYMENT": "pytest-deployment"},
@@ -113,81 +98,63 @@ def webhook_secret():
 
 
 @pytest.fixture(scope="session")
-def mock_config_kwargs(webhook_secret, private_key, api_key):
-    return {
-        "fastapi": {
-            "PANGEO_FORGE_API_KEY": api_key,
-        },
-        "github_app": {
-            "id": 1234567,
-            "app_name": "pytest-mock-github-app",
-            "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
-            "webhook_secret": webhook_secret,
-            "private_key": private_key,
-        },
+def mock_config_content(webhook_secret, private_key, api_key):
+
+    fastapi = {"PANGEO_FORGE_API_KEY": api_key}
+    github_app = {
+        "id": 1234567,
+        "app_name": "pytest-mock-github-app",
+        "webhook_url": "https://api.pangeo-forge.org/github/hooks",  # TODO: fixturize
+        "webhook_secret": webhook_secret,
+        "private_key": private_key,
+    }
+    runner_configs = {
+        "pangeo-ldeo-nsf-earthcube": dict(
+            Bake=dict(
+                bakery_class="foo",
+            ),
+            TargetStorage=dict(
+                fsspec_class="bar",
+                fsspec_args={},
+                root_path="baz",
+                public_url="https://public-endpoint.org/bucket-name/",
+            ),
+            InputCacheStorage=dict(
+                fsspec_class="bar",
+                fsspec_args={},
+                root_path="baz",
+            ),
+            MetadataCacheStorage=dict(
+                fsspec_class="bar",
+                fsspec_args={},
+                root_path="baz",
+            ),
+        )
     }
 
+    return dedent(
+        f"""\
+        # pytest_deployment.py
 
-@pytest.fixture(scope="session")
-def mock_secrets_dir(tmp_path_factory):
-    return tmp_path_factory.mktemp("secrets")
-
-
-@pytest.fixture(scope="session")
-def mock_app_config_path(mock_config_kwargs, mock_secrets_dir):
-    """ """
-    path = mock_secrets_dir / "config.pytest-deployment.yaml"
-    with open(path, "w") as f:
-        yaml.dump(mock_config_kwargs, f)
-
-    return path
-
-
-@pytest.fixture(scope="session")
-def mock_bakeries_dir(tmp_path_factory):
-    return tmp_path_factory.mktemp("bakeries")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def mock_bakeries_config_paths(mock_bakeries_dir):
-    """ """
-    path = mock_bakeries_dir / "pangeo-ldeo-nsf-earthcube.pytest-deployment.yaml"
-    kws = dict(
-        Bake=dict(
-            bakery_class="foo",
-        ),
-        TargetStorage=dict(
-            fsspec_class="bar",
-            fsspec_args={},
-            root_path="baz",
-            public_url="https://public-endpoint.org/bucket-name/",
-        ),
-        InputCacheStorage=dict(
-            fsspec_class="bar",
-            fsspec_args={},
-            root_path="baz",
-        ),
-        MetadataCacheStorage=dict(
-            fsspec_class="bar",
-            fsspec_args={},
-            root_path="baz",
-        ),
+        c.Deployment.name = "pangeo-forge"
+        c.Deployment.github_app = {github_app}
+        c.Deployment.fastapi = {fastapi}
+        c.Deployment.registered_runner_configs = {runner_configs}
+        """
     )
-    with open(path, "w") as f:
-        yaml.dump(kws, f)
-
-    return [str(path)]  # TODO: test with > 1 bakery
 
 
 @pytest.fixture(scope="session")
-def mock_secret_bakery_args_paths(mock_secrets_dir):
-    """ """
-    path = mock_secrets_dir / "bakery-args.pangeo-ldeo-nsf-earthcube.yaml"
-    kws = dict()  # TODO: actually pass some values
-    with open(path, "w") as f:
-        yaml.dump(kws, f)
+def mock_config_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("config")
 
-    return [str(path)]  # TODO: test with > 1 bakery env
+
+@pytest.fixture(scope="session")
+def mock_config_path(mock_config_content, mock_config_dir) -> str:
+    path = mock_config_dir / "pytest_deployment.py"
+    with open(path, "w") as f:
+        f.write(mock_config_content)
+    return str(path)
 
 
 # For this general pattern, see
