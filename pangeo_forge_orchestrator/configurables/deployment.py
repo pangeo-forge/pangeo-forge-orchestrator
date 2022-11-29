@@ -123,15 +123,15 @@ class Deployment(LoggingConfigurable):
 
     @validate("registered_runner_configs")
     def _valid_registered_runner_configs(self, proposal):
-        """For all registered runner configs, cast any secret values to ``SecretStr``s, to
-        minimize the possibility that they will be accidentally leaked in logs or by print
-        statements.
-        """
+        """For all registered runner configs, cast any secret values to ``SecretStr``s."""
         return self.hide_secrets(proposal["value"])
 
     @validate("github_app")
     def _valid_github_app(self, proposal):
-        """For github app config, cast secret values to ``SecretStr``s, to minimize possibility
-        that they will be accidentally leaked in logs or by print statements.
-        """
+        """For github app config, cast secret values to ``SecretStr``s."""
+        return self.hide_secrets(proposal["value"])
+
+    @validate("fastapi")
+    def _valid_fastapi(self, proposal):
+        """For fastapi config, cast secret values to ``SecretStr``s."""
         return self.hide_secrets(proposal["value"])

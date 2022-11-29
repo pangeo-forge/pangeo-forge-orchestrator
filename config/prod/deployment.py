@@ -5,21 +5,27 @@ import yaml  # type: ignore
 this_dir = Path(__file__).parent.resolve()
 secrets_dir = this_dir / "secrets"
 
-with open(secrets_dir / "github-app.yaml") as f:
-    github_app = yaml.safe_load(f)
 
-with open(secrets_dir / "osn.yaml") as f:
-    osn_creds = yaml.safe_load(f)
+def open_secrets(fname: str) -> dict:
+    with open(secrets_dir / fname) as f:
+        return yaml.safe_load(f)
+
+
+fastapi = open_secrets("fastapi.yaml")
+github_app = open_secrets("github-app.yaml")
+osn_creds = open_secrets("osn.yaml")
 
 c.Deployment.dont_leak = [  # type: ignore # noqa: F821
     github_app["private_key"],
     github_app["webhook_secret"],
+    fastapi["PANGEO_FORGE_API_KEY"],
     osn_creds["key"],
     osn_creds["secret"],
 ]
 
 c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
 c.Deployment.github_app = github_app  # type: ignore # noqa: F821
+c.Deployment.fastapi = fastapi  # type: ignore # noqa: F821
 c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
