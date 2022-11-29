@@ -60,7 +60,6 @@ class Deployment(LoggingConfigurable):
     )
 
     github_app = Dict(
-        str,
         allow_none=False,
         config=True,
         help="""
