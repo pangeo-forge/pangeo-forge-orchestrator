@@ -2,6 +2,9 @@ from pathlib import Path
 
 import yaml  # type: ignore
 
+GCP_PROJECT = "pangeo-forge-4967"
+
+root_dir = Path(__file__).parent.parent.resolve()
 this_dir = Path(__file__).parent.resolve()
 secrets_dir = this_dir / "secrets"
 
@@ -23,6 +26,9 @@ c.Deployment.dont_leak = [  # type: ignore # noqa: F821
     osn_creds["secret"],
 ]
 
+with open(root_dir / "dataflow-container-image.txt") as img_tag:
+    container_image = f"gcr.io/{GCP_PROJECT}/{img_tag.read().strip()}"
+
 c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
 c.Deployment.github_app = github_app  # type: ignore # noqa: F821
 c.Deployment.fastapi = fastapi  # type: ignore # noqa: F821
@@ -30,6 +36,7 @@ c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
             "bakery_class": "pangeo_forge_runner.bakery.dataflow.DataflowBakery",
+            "container_image": container_image,
         },
         "DataflowBakery": {
             "temp_gcs_location": "gs://pangeo-forge-prod-dataflow/temp",

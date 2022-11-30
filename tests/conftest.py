@@ -115,6 +115,7 @@ def mock_config_content(webhook_secret, private_key, api_key):
         "pangeo-ldeo-nsf-earthcube": dict(
             Bake=dict(
                 bakery_class="foo",
+                container_image="gcr.io/pangeo-forge-4967/pangeo/forge:abcdefg",
             ),
             TargetStorage=dict(
                 fsspec_class="bar",
