@@ -16,7 +16,6 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.configurables.deployment import _GetDeployment
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
@@ -27,7 +26,7 @@ from .interfaces import FastAPITestClientCRUD
 @pytest.fixture(autouse=True, scope="session")
 def setup_and_teardown(
     session_mocker,
-    mock_config_path,
+    get_mock_config_file_path,
 ):
     # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
@@ -45,14 +44,10 @@ def setup_and_teardown(
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
-    def get_mock_deployment():
-        kw = {"config_file": [mock_config_path]}
-        return _GetDeployment(**kw).resolve()
-
     session_mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_config",
-        get_mock_deployment,
+        pangeo_forge_orchestrator.configurables.deployment,
+        "get_config_file_path",
+        get_mock_config_file_path,
     )
 
     session_mocker.patch.dict(
@@ -155,6 +150,14 @@ def mock_config_path(mock_config_content, mock_config_dir) -> str:
     with open(path, "w") as f:
         f.write(mock_config_content)
     return str(path)
+
+
+@pytest.fixture(scope="session")
+def get_mock_config_file_path(mock_config_path):
+    def _get_mock_config_file_path():
+        return mock_config_path
+
+    return _get_mock_config_file_path
 
 
 # For this general pattern, see

@@ -347,8 +347,8 @@ async def handle_dataflow_event(
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
             subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
-            root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
-            recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
+            root_path = bakery_config["TargetStorage"]["root_path"].format(subpath=subpath)
+            recipe_run.dataset_public_url = bakery_config["TargetStorage"]["public_url"].format(  # type: ignore
                 root_path=root_path
             )
         db_session.add(recipe_run)
@@ -669,19 +669,19 @@ async def run(
     # initialized when we get them, but we need to complete them here.
     # NOTE: redundant with {job_name} formatting feature in pangeo-forge-runner, but we want to
     # use job_name for identifying the webhook url so we're rolling our own solution for this.
-    bakery_config.TargetStorage.root_path = bakery_config.TargetStorage.root_path.format(
-        subpath=subpath
-    )
-    bakery_config.MetadataCacheStorage.root_path = (
-        bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
-    )
-    if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
-        bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
+    bakery_config["TargetStorage"]["root_path"] = bakery_config["TargetStorage"][
+        "root_path"
+    ].format(subpath=subpath)
+    bakery_config["MetadataCacheStorage"]["root_path"] = bakery_config["MetadataCacheStorage"][
+        "root_path"
+    ].format(subpath=subpath)
+    if bakery_config["Bake"]["bakery_class"].endswith("DataflowBakery"):
+        bakery_config["Bake"]["job_name"] = await make_dataflow_job_name(recipe_run, gh)
 
-    logger.debug(f"Dumping bakery config to json: {bakery_config.dict(exclude_none=True)}")
+    logger.debug(f"Dumping bakery config to json: {bakery_config}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
     with tempfile.NamedTemporaryFile("w", suffix=".json") as f:
-        json.dump(bakery_config.export_with_secrets(), f)
+        json.dump(bakery_config, f)
         f.flush()
         cmd = [
             "pangeo-forge-runner",

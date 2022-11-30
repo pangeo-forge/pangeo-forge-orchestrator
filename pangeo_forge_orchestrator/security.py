@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
 from starlette import status
 
-from .config import get_fastapi_config
+from .configurables.deployment import get_deployment as get_config
 
 X_API_KEY = APIKeyHeader(name="X-API-Key")
 
@@ -12,7 +12,7 @@ X_API_KEY = APIKeyHeader(name="X-API-Key")
 def check_authentication_header(x_api_key: str = Depends(X_API_KEY)) -> bool:
     """Takes the X-API-Key header and securely compares it to the current api key."""
 
-    if hmac.compare_digest(x_api_key, get_fastapi_config().PANGEO_FORGE_API_KEY):
+    if hmac.compare_digest(x_api_key, get_config().fastapi.PANGEO_FORGE_API_KEY):
         return True
 
     raise HTTPException(

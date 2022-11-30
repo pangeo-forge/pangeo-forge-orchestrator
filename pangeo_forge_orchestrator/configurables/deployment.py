@@ -26,16 +26,25 @@ class SecretList(list):
         return "[***, ***, ***]"
 
 
-class GitHubApp(dict):
-    # This is a (possibly temporary) patch/hack to accomodate the fact that, pre-traitlets,
-    # there is a lot of dot-accessing of github app config in the github app router. For now,
-    # I wanted to change as little as possible in the existing code, and just swap in traitlets
-    # to handle deployment config. To do this, we need the github app object to have __getattr__.
-    # Other than this, though, a dict is fine, so I've just wired __getattr__ to __getitem__ for
-    # now. I also tried to make GitHubApp a subclass of traitlets.HasTraits, but couldn't seem to
-    # make that work for setting GitHubApp as a trait of the configurable Deployment, below.
+class DotAccessibleDict(dict):
+    """A dict, but all keys are also accessible as dotted attributes."""
+
+    # This is a (possibly temporary) patch/hack to accomodate the fact that, pre-traitlets, config
+    # is commonly dot-accessed. In migrating to traitlets, I want to touch as little of the existing
+    # code as possible for now. To do this, we need nested config objects in Deployment to support
+    # __getattr__. Other than this, though, a dict is fine, so I've just wired __getattr__ to
+    # __getitem__ for now. I previously tried to make these objects subclasses of traitlets.HasTraits,
+    # but couldn't make that work when setting them as traits of the configurable Deployment, below.
     def __getattr__(self, attr):
         return self.get(attr)
+
+
+class FastAPIConfig(DotAccessibleDict):
+    pass
+
+
+class GitHubAppConfig(DotAccessibleDict):
+    pass
 
 
 class Deployment(LoggingConfigurable):
@@ -101,6 +110,8 @@ class Deployment(LoggingConfigurable):
         The specified runner config (i.e. "bakery id") must be a key in this dict.
         """,
     )
+    # see note about naming clarity above
+    bakeries = registered_runner_configs
 
     @validate("dont_leak")
     def _valid_dont_leak(self, proposal):
@@ -141,13 +152,13 @@ class Deployment(LoggingConfigurable):
 
     @validate("github_app")
     def _valid_github_app(self, proposal):
-        """Cast input dict to ``GitHubApp`` (and secret vals to ``SecretStr``s)."""
-        return GitHubApp(**self.hide_secrets(proposal["value"]))
+        """Cast input dict to ``GitHubAppConfig`` (and secret vals to ``SecretStr``s)."""
+        return GitHubAppConfig(**self.hide_secrets(proposal["value"]))
 
     @validate("fastapi")
     def _valid_fastapi(self, proposal):
-        """For fastapi config, cast secret values to ``SecretStr``s."""
-        return self.hide_secrets(proposal["value"])
+        """Cast input dict to ``FastAPIConfig`` (and secret vals to ``SecretStr``s)."""
+        return FastAPIConfig(**self.hide_secrets(proposal["value"]))
 
 
 class _GetDeployment(BaseCommand):
@@ -157,7 +168,12 @@ class _GetDeployment(BaseCommand):
         return Deployment(parent=self)
 
 
+def get_config_file_path():
+    return None
+
+
 def get_deployment() -> Deployment:
     """Convenience function to resolve global app config outside of ``traitlets`` object."""
-
-    return _GetDeployment().resolve()
+    config_file_path = get_config_file_path()
+    kw = {} if not config_file_path else {"config_file": [config_file_path]}
+    return _GetDeployment(**kw).resolve()
