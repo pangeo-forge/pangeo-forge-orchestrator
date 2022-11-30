@@ -168,12 +168,6 @@ class _GetDeployment(BaseCommand):
         return Deployment(parent=self)
 
 
-def get_config_file_path():
-    return None
-
-
 def get_deployment() -> Deployment:
     """Convenience function to resolve global app config outside of ``traitlets`` object."""
-    config_file_path = get_config_file_path()
-    kw = {} if not config_file_path else {"config_file": [config_file_path]}
-    return _GetDeployment(**kw).resolve()
+    return _GetDeployment().resolve()

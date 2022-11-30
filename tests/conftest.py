@@ -16,6 +16,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.configurables.deployment import _GetDeployment
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
@@ -26,7 +27,7 @@ from .interfaces import FastAPITestClientCRUD
 @pytest.fixture(autouse=True, scope="session")
 def setup_and_teardown(
     session_mocker,
-    get_mock_config_file_path,
+    mock_config_path,
 ):
     # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
@@ -44,10 +45,17 @@ def setup_and_teardown(
     maybe_create_db_and_tables()
 
     # (2) github app test session setup
+
+    class _GetMockDeployment(_GetDeployment):
+        # In a real runtime, this config path will have been set at the command line on startup.
+        # In the mock context, we inject it here, to facilitate unit testing, for which the
+        # global config won't have been set, because there won't have been a startup event.
+        config_file = [mock_config_path]
+
     session_mocker.patch.object(
         pangeo_forge_orchestrator.configurables.deployment,
-        "get_config_file_path",
-        get_mock_config_file_path,
+        "_GetDeployment",
+        _GetMockDeployment,
     )
 
     session_mocker.patch.dict(
@@ -150,14 +158,6 @@ def mock_config_path(mock_config_content, mock_config_dir) -> str:
     with open(path, "w") as f:
         f.write(mock_config_content)
     return str(path)
-
-
-@pytest.fixture(scope="session")
-def get_mock_config_file_path(mock_config_path):
-    def _get_mock_config_file_path():
-        return mock_config_path
-
-    return _get_mock_config_file_path
 
 
 # For this general pattern, see
