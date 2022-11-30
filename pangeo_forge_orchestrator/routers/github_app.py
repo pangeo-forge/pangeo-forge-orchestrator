@@ -59,9 +59,9 @@ def get_jwt() -> str:
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
-        "iss": github_app["id"],
+        "iss": github_app.id,
     }
-    return jwt.encode(payload, github_app["private_key"], algorithm="RS256")
+    return jwt.encode(payload, github_app.private_key, algorithm="RS256")
 
 
 async def get_access_token(gh: GitHubAPI) -> str:

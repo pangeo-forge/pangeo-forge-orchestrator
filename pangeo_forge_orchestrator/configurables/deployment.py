@@ -26,6 +26,18 @@ class SecretList(list):
         return "[***, ***, ***]"
 
 
+class GitHubApp(dict):
+    # This is a (possibly temporary) patch/hack to accomodate the fact that, pre-traitlets,
+    # there is a lot of dot-accessing of github app config in the github app router. For now,
+    # I wanted to change as little as possible in the existing code, and just swap in traitlets
+    # to handle deployment config. To do this, we need the github app object to have __getattr__.
+    # Other than this, though, a dict is fine, so I've just wired __getattr__ to __getitem__ for
+    # now. I also tried to make GitHubApp a subclass of traitlets.HasTraits, but couldn't seem to
+    # make that work for setting GitHubApp as a trait of the configurable Deployment, below.
+    def __getattr__(self, attr):
+        return self.get(attr)
+
+
 class Deployment(LoggingConfigurable):
 
     name = Unicode(
@@ -129,8 +141,8 @@ class Deployment(LoggingConfigurable):
 
     @validate("github_app")
     def _valid_github_app(self, proposal):
-        """For github app config, cast secret values to ``SecretStr``s."""
-        return self.hide_secrets(proposal["value"])
+        """Cast input dict to ``GitHubApp`` (and secret vals to ``SecretStr``s)."""
+        return GitHubApp(**self.hide_secrets(proposal["value"]))
 
     @validate("fastapi")
     def _valid_fastapi(self, proposal):
