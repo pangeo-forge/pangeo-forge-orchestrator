@@ -1,7 +1,6 @@
 from traitlets import Dict, List, Type, Unicode, validate
-from traitlets.config import Configurable, LoggingConfigurable
+from traitlets.config import LoggingConfigurable
 
-from ..commands.base import BaseCommand
 from ..spawners.base import BaseSpawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
 
@@ -142,22 +141,3 @@ class Deployment(LoggingConfigurable):
     def _valid_fastapi(self, proposal):
         """Cast input dict to ``FastAPIConfig`` (and secret vals to ``SecretStr``s)."""
         return FastAPIConfig(**self.hide_secrets(proposal["value"]))
-
-
-class _GetDeployment(BaseCommand):  # TODO: generalize name
-
-    configurable = Type(
-        default_value=Deployment,
-        klass=Configurable,
-        allow_none=False,
-    )
-
-    def resolve(self):
-        # if not self.initialized():
-        self.initialize()
-        return self.configurable(parent=self)
-
-
-def get_deployment(configurable: Configurable = Deployment) -> Configurable:
-    """Convenience function to resolve global app config outside of ``traitlets`` object."""
-    return _GetDeployment(configurable=configurable).resolve()

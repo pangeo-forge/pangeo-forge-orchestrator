@@ -1,9 +1,8 @@
-from pangeo_forge_orchestrator.configurables.deployment import get_deployment
-from pangeo_forge_orchestrator.configurables.github_app import GitHubApp
+from pangeo_forge_orchestrator.configurables import Deployment, GitHubApp, get_configurable
 
 
 def test_get_config():
-    c = get_deployment()
+    c = get_configurable(configurable=Deployment)
     for attr in [
         "name",
         "spawner",
@@ -17,6 +16,6 @@ def test_get_config():
     for attr in ["PANGEO_FORGE_API_KEY"]:
         assert hasattr(c.fastapi, attr)
 
-    github_app = get_deployment(configurable=GitHubApp)
+    github_app = get_configurable(configurable=GitHubApp)
     for attr in ["app_name", "id", "private_key", "webhook_secret"]:
         assert hasattr(github_app, attr)

@@ -15,7 +15,7 @@ from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.configurables.deployment import _GetDeployment
+from pangeo_forge_orchestrator.configurables import _GetConfigurable
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
@@ -45,16 +45,16 @@ def setup_and_teardown(
 
     # (2) github app test session setup
 
-    class _GetMockDeployment(_GetDeployment):
+    class _MockGetConfigurable(_GetConfigurable):
         # In a real runtime, this config path will have been set at the command line on startup.
         # In the mock context, we inject it here, to facilitate unit testing, for which the
         # global config won't have been set, because there won't have been a startup event.
         config_file = [mock_config_path]
 
     session_mocker.patch.object(
-        pangeo_forge_orchestrator.configurables.deployment,
-        "_GetDeployment",
-        _GetMockDeployment,
+        pangeo_forge_orchestrator.configurables,
+        "_GetConfigurable",
+        _MockGetConfigurable,
     )
 
     session_mocker.patch.dict(
