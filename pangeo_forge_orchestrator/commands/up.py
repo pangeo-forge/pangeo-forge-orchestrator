@@ -1,4 +1,4 @@
-from ..configurables.deployment import Deployment
+from ..configurables.github_app import GitHubApp
 from .base import BaseCommand, common_aliases
 
 
@@ -11,11 +11,7 @@ class Up(BaseCommand):
 
         self.log.info("Going up!")
 
-        deployment = Deployment(parent=self)
-        self.log.info(deployment.name)
-        self.log.info(deployment.spawner)
-        self.log.info(deployment.github_app)
-        self.log.info(deployment.fastapi)
-        self.log.info(deployment.registered_runner_configs)
-        self.log.info(deployment.dont_leak)
-        self.log.info(deployment.dont_leak[0])
+        github_app = GitHubApp(parent=self)
+        self.log.info(github_app)
+        self.log.info(github_app.app_name)
+        self.log.info(github_app.id)

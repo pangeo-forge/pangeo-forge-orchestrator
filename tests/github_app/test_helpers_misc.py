@@ -6,6 +6,7 @@ import pytest
 from gidgethub.aiohttp import GitHubAPI
 
 from pangeo_forge_orchestrator.configurables.deployment import get_deployment as get_config
+from pangeo_forge_orchestrator.configurables.github_app import GitHubApp
 from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.models import MODELS
 from pangeo_forge_orchestrator.routers.github_app import (
@@ -60,7 +61,7 @@ def test_get_storage_subpath_identifier(is_test, dataset_type, feedstock_spec):
     recipe_run = MODELS["recipe_run"].table(**recipe_run_kws)
     subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
 
-    gh_app_name = get_config().github_app.app_name
+    gh_app_name = get_config(configurable=GitHubApp).app_name
 
     prefix = f"{gh_app_name}/"
     suffix = f"{recipe_run_kws['recipe_id']}.{dataset_type}"

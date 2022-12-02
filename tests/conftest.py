@@ -1,7 +1,6 @@
 import os
 import secrets
 import uuid
-from textwrap import dedent
 
 import pytest
 import pytest_asyncio
@@ -136,16 +135,16 @@ def mock_config_content(webhook_secret, private_key, api_key):
         )
     }
 
-    return dedent(
-        f"""\
-        # pytest_deployment.py
-
-        c.Deployment.name = "pangeo-forge"
-        c.Deployment.github_app = {github_app}
-        c.Deployment.fastapi = {fastapi}
-        c.Deployment.registered_runner_configs = {runner_configs}
-        """
-    )
+    return f"""\
+# pytest_deployment.py
+c.Deployment.name = "pangeo-forge"
+c.GitHubApp.app_name = '{github_app['app_name']}'
+c.GitHubApp.id = {github_app['id']}
+c.GitHubApp.private_key = '''{github_app['private_key']}'''
+c.GitHubApp.webhook_secret = '{github_app['webhook_secret']}'
+c.Deployment.fastapi = {fastapi}
+c.Deployment.registered_runner_configs = {runner_configs}
+"""
 
 
 @pytest.fixture(scope="session")

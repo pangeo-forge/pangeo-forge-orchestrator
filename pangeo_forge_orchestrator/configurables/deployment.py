@@ -1,5 +1,5 @@
 from traitlets import Dict, List, Type, Unicode, validate
-from traitlets.config import LoggingConfigurable
+from traitlets.config import Configurable, LoggingConfigurable
 
 from ..commands.base import BaseCommand
 from ..spawners.base import BaseSpawner
@@ -43,11 +43,8 @@ class FastAPIConfig(DotAccessibleDict):
     pass
 
 
-class GitHubAppConfig(DotAccessibleDict):
-    pass
-
-
 class Deployment(LoggingConfigurable):
+    """Global config for the deployment instance."""
 
     name = Unicode(
         allow_none=False,
@@ -79,15 +76,6 @@ class Deployment(LoggingConfigurable):
     fastapi = Dict(
         allow_none=False,
         config=True,
-    )
-
-    github_app = Dict(
-        allow_none=False,
-        config=True,
-        help="""
-        Config for the GitHub App instance which serves as
-        the GitHub integration point for this application.
-        """,
     )
 
     # TODO: Naming clarity can be improved here. This traitlet uses the name `runner config`,
@@ -150,24 +138,26 @@ class Deployment(LoggingConfigurable):
         """For all registered runner configs, cast any secret values to ``SecretStr``s."""
         return self.hide_secrets(proposal["value"])
 
-    @validate("github_app")
-    def _valid_github_app(self, proposal):
-        """Cast input dict to ``GitHubAppConfig`` (and secret vals to ``SecretStr``s)."""
-        return GitHubAppConfig(**self.hide_secrets(proposal["value"]))
-
     @validate("fastapi")
     def _valid_fastapi(self, proposal):
         """Cast input dict to ``FastAPIConfig`` (and secret vals to ``SecretStr``s)."""
         return FastAPIConfig(**self.hide_secrets(proposal["value"]))
 
 
-class _GetDeployment(BaseCommand):
+class _GetDeployment(BaseCommand):  # TODO: generalize name
+
+    configurable = Type(
+        default_value=Deployment,
+        klass=Configurable,
+        allow_none=False,
+    )
+
     def resolve(self):
         # if not self.initialized():
         self.initialize()
-        return Deployment(parent=self)
+        return self.configurable(parent=self)
 
 
-def get_deployment() -> Deployment:
+def get_deployment(configurable: Configurable = Deployment) -> Configurable:
     """Convenience function to resolve global app config outside of ``traitlets`` object."""
-    return _GetDeployment().resolve()
+    return _GetDeployment(configurable=configurable).resolve()

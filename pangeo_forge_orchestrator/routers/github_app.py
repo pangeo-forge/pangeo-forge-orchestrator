@@ -19,6 +19,7 @@ from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
 from ..configurables.deployment import get_deployment as get_config
+from ..configurables.github_app import GitHubApp
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
@@ -55,7 +56,7 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 def get_jwt() -> str:
     """Adapted from https://github.com/Mariatta/gh_app_demo"""
 
-    github_app = get_config().github_app
+    github_app = get_config(configurable=GitHubApp)
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
@@ -65,7 +66,7 @@ def get_jwt() -> str:
 
 
 async def get_access_token(gh: GitHubAPI) -> str:
-    github_app = get_config().github_app
+    github_app = get_config(configurable=GitHubApp)
     async for installation in gh.getiter("/app/installations", jwt=get_jwt(), accept=ACCEPT):
         installation_id = installation["id"]
         # Even if installed on multiple repos within the account, I believe installations are
@@ -171,7 +172,7 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
     # The traitlets config doesn't offer this much configurability in `root_path` right now,
     # so just doing this here for the moment.
 
-    app_name = get_config().github_app.app_name
+    app_name = get_config(configurable=GitHubApp).app_name
     if recipe_run.is_test:
         prefix = f"{app_name}/test/{feedstock_spec}/recipe-run-{recipe_run.id}"
     else:
@@ -553,7 +554,7 @@ async def parse_payload(request, payload_bytes, event):
 async def verify_hash_signature(request: Request, payload_bytes: bytes) -> None:
     if hash_signature := request.headers.get("X-Hub-Signature-256", None):
 
-        github_app = get_config().github_app
+        github_app = get_config(configurable=GitHubApp)
         webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
         h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
         if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):

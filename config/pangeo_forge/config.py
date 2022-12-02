@@ -1,10 +1,11 @@
 from pathlib import Path
 
 import yaml  # type: ignore
+from traitlets.config import get_config
 
 GCP_PROJECT = "pangeo-forge-4967"
 
-root_dir = Path(__file__).parent.parent.resolve()
+root_dir = Path(__file__).parent.parent.parent.resolve()
 this_dir = Path(__file__).parent.resolve()
 secrets_dir = this_dir / "secrets"
 
@@ -18,7 +19,9 @@ fastapi = open_secrets("fastapi.yaml")
 github_app = open_secrets("github-app.yaml")
 osn_creds = open_secrets("osn.yaml")
 
-c.Deployment.dont_leak = [  # type: ignore # noqa: F821
+c = get_config()
+
+c.Deployment.dont_leak = [
     github_app["private_key"],
     github_app["webhook_secret"],
     fastapi["PANGEO_FORGE_API_KEY"],
@@ -29,10 +32,15 @@ c.Deployment.dont_leak = [  # type: ignore # noqa: F821
 with open(root_dir / "dataflow-container-image.txt") as img_tag:
     container_image = f"gcr.io/{GCP_PROJECT}/{img_tag.read().strip()}"
 
-c.Deployment.name = "pangeo-forge"  # type: ignore # noqa: F821
-c.Deployment.github_app = github_app  # type: ignore # noqa: F821
-c.Deployment.fastapi = fastapi  # type: ignore # noqa: F821
-c.Deployment.registered_runner_configs = {  # type: ignore # noqa: F821
+c.Deployment.name = "pangeo-forge"
+
+c.GitHubApp.app_name = github_app["app_name"]
+c.GitHubApp.id = github_app["id"]
+c.GitHubApp.private_key = github_app["private_key"]
+c.GitHubApp.webhook_secret = github_app["webhook_secret"]
+
+c.Deployment.fastapi = fastapi
+c.Deployment.registered_runner_configs = {
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
             "bakery_class": "pangeo_forge_runner.bakery.dataflow.DataflowBakery",
