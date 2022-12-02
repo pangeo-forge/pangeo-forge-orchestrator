@@ -25,23 +25,6 @@ class SecretList(list):
         return "[***, ***, ***]"
 
 
-class DotAccessibleDict(dict):
-    """A dict, but all keys are also accessible as dotted attributes."""
-
-    # This is a (possibly temporary) patch/hack to accomodate the fact that, pre-traitlets, config
-    # is commonly dot-accessed. In migrating to traitlets, I want to touch as little of the existing
-    # code as possible for now. To do this, we need nested config objects in Deployment to support
-    # __getattr__. Other than this, though, a dict is fine, so I've just wired __getattr__ to
-    # __getitem__ for now. I previously tried to make these objects subclasses of traitlets.HasTraits,
-    # but couldn't make that work when setting them as traits of the configurable Deployment, below.
-    def __getattr__(self, attr):
-        return self.get(attr)
-
-
-class FastAPIConfig(DotAccessibleDict):
-    pass
-
-
 class Deployment(LoggingConfigurable):
     """Global config for the deployment instance."""
 
@@ -70,11 +53,6 @@ class Deployment(LoggingConfigurable):
         A list of secret values which the application needs to run, but which
         we want to avoid accidentally leaking to logs or in print statements.
         """,
-    )
-
-    fastapi = Dict(
-        allow_none=False,
-        config=True,
     )
 
     # TODO: Naming clarity can be improved here. This traitlet uses the name `runner config`,
@@ -136,8 +114,3 @@ class Deployment(LoggingConfigurable):
     def _valid_registered_runner_configs(self, proposal):
         """For all registered runner configs, cast any secret values to ``SecretStr``s."""
         return self.hide_secrets(proposal["value"])
-
-    @validate("fastapi")
-    def _valid_fastapi(self, proposal):
-        """Cast input dict to ``FastAPIConfig`` (and secret vals to ``SecretStr``s)."""
-        return FastAPIConfig(**self.hide_secrets(proposal["value"]))

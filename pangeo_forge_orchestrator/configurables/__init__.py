@@ -3,6 +3,7 @@ from traitlets.config import Configurable
 
 from ..commands.base import BaseCommand
 from .deployment import Deployment  # noqa: F401
+from .fastapi import FastAPI  # noqa: F401
 from .github_app import GitHubApp  # noqa: F401
 
 

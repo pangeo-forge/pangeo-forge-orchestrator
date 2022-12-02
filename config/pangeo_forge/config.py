@@ -34,12 +34,13 @@ with open(root_dir / "dataflow-container-image.txt") as img_tag:
 
 c.Deployment.name = "pangeo-forge"
 
+c.FastAPI.key = fastapi["PANGEO_FORGE_API_KEY"]
+
 c.GitHubApp.app_name = github_app["app_name"]
 c.GitHubApp.id = github_app["id"]
 c.GitHubApp.private_key = github_app["private_key"]
 c.GitHubApp.webhook_secret = github_app["webhook_secret"]
 
-c.Deployment.fastapi = fastapi
 c.Deployment.registered_runner_configs = {
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
