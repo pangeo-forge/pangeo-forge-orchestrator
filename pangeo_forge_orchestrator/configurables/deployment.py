@@ -3,26 +3,7 @@ from traitlets.config import LoggingConfigurable
 
 from ..spawners.base import BaseSpawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
-
-
-class SecretStr(str):
-    """A string, except it's hard to accidentally print or log it."""
-
-    def __str__(self) -> str:
-        return "*****"
-
-    def __repr__(self) -> str:
-        return "*****"
-
-
-class SecretList(list):
-    """A list, except it's hard to accidentally print or log it."""
-
-    def __str__(self) -> str:
-        return "[***, ***, ***]"
-
-    def __repr__(self) -> str:
-        return "[***, ***, ***]"
+from .types import SecretList, SecretStr
 
 
 class Deployment(LoggingConfigurable):

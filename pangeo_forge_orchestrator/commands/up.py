@@ -15,3 +15,5 @@ class Up(BaseCommand):
         self.log.info(github_app)
         self.log.info(github_app.app_name)
         self.log.info(github_app.id)
+        self.log.info(github_app.private_key)
+        self.log.info(github_app.webhook_secret)

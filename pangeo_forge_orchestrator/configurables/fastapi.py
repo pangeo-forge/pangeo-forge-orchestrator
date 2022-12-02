@@ -1,5 +1,7 @@
-from traitlets import Unicode
+from traitlets import Unicode, validate
 from traitlets.config import LoggingConfigurable
+
+from .types import SecretStr
 
 
 class FastAPI(LoggingConfigurable):
@@ -12,3 +14,8 @@ class FastAPI(LoggingConfigurable):
 
         """,
     )
+
+    @validate("key")
+    def _cast_secrets(self, proposal):
+        """Cast secret values to ``SecretStr``s."""
+        return SecretStr(proposal["value"])

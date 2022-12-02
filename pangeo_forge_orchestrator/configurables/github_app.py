@@ -1,5 +1,7 @@
-from traitlets import Int, Unicode
+from traitlets import Int, Unicode, validate
 from traitlets.config import LoggingConfigurable
+
+from .types import SecretStr
 
 
 class GitHubApp(LoggingConfigurable):
@@ -38,3 +40,8 @@ class GitHubApp(LoggingConfigurable):
 
         """,
     )
+
+    @validate("private_key", "webhook_secret")
+    def _cast_secrets(self, proposal):
+        """Cast secret values to ``SecretStr``s."""
+        return SecretStr(proposal["value"])
