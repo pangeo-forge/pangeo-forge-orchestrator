@@ -11,5 +11,6 @@ class Up(BaseCommand):
 
         self.log.info("Going up!")
 
+        self.decrypt()
         fastapi = FastAPI(parent=self)
         fastapi.server.start()
