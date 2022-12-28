@@ -61,3 +61,4 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
 RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0 pip install . --no-deps
 
 RUN chmod +x scripts.deploy/release.sh
+RUN chmod +x scripts.deploy/run.sh
