@@ -19,6 +19,7 @@ for k, v in github_app.items():
 c.Deployment.dont_leak = [v for v in (fastapi | github_app).values()]
 assert len(c.Deployment.dont_leak) == len(fastapi) + len(github_app)
 
+c.SpawnerConfig.cls = "pangeo_forge_orchestrator.configurables.spawner.LocalSubprocessSpawner"
 c.Deployment.registered_runner_configs = {
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
