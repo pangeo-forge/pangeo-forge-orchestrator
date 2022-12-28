@@ -1,11 +1,17 @@
-from pangeo_forge_orchestrator.configurables import Deployment, FastAPI, GitHubApp, get_configurable
+from pangeo_forge_orchestrator.configurables import (
+    Deployment,
+    FastAPI,
+    GitHubApp,
+    SpawnerABC,
+    get_configurable,
+    get_spawner,
+)
 
 
 def test_get_config(api_key):
     c = get_configurable(configurable=Deployment)
     for attr in [
         "name",
-        "spawner",
         "dont_leak",
         "registered_runner_configs",
         "bakeries",
@@ -24,3 +30,8 @@ def test_get_config(api_key):
     for sv in secret_vals:
         assert repr(sv) == "*****"
         assert str(sv) == "*****"
+
+
+def test_get_spawner():
+    s = get_spawner()
+    assert isinstance(s, SpawnerABC)

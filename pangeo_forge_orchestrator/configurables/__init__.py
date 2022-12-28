@@ -6,6 +6,7 @@ from traitlets.config import Application, Configurable
 from .deployment import Deployment  # noqa: F401
 from .fastapi import FastAPI  # noqa: F401
 from .github_app import GitHubApp  # noqa: F401
+from .spawner import SpawnerABC, SpawnerConfig  # noqa: F401
 
 
 class _GetConfigurable(Application):
@@ -35,3 +36,8 @@ class _GetConfigurable(Application):
 def get_configurable(configurable: Configurable) -> Configurable:
     """Convenience function to resolve global app config outside of ``traitlets`` object."""
     return _GetConfigurable(configurable=configurable).resolve()
+
+
+def get_spawner() -> SpawnerABC:
+    s: SpawnerConfig = _GetConfigurable(configurable=SpawnerConfig).resolve()
+    return s.cls(**s.kwargs)

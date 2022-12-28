@@ -18,7 +18,7 @@ from gidgethub.apps import get_installation_access_token
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
 from sqlmodel import Session, SQLModel, select
 
-from ..configurables import Deployment, GitHubApp, get_configurable
+from ..configurables import Deployment, GitHubApp, get_configurable, get_spawner
 from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
@@ -708,7 +708,7 @@ async def run(
         db_session.add(recipe_run)
         db_session.commit()
         try:
-            out = get_configurable(configurable=Deployment).spawner().check_output(cmd)
+            out = get_spawner().check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
             for line in out.splitlines():
                 p = json.loads(line)
@@ -787,7 +787,7 @@ async def synchronize(
     if feedstock_subdir:
         cmd.append(f"--feedstock-subdir={feedstock_subdir}")
     try:
-        out = get_configurable(configurable=Deployment).spawner().check_output(cmd)
+        out = get_spawner().check_output(cmd)
     except subprocess.CalledProcessError as e:
         for line in e.output.splitlines():
             p = json.loads(line)
@@ -1165,7 +1165,7 @@ async def deploy_prod_run(
     ]
     logger.info(f"Calling subprocess {cmd}")
     try:
-        out = get_configurable(configurable=Deployment).spawner().check_output(cmd)
+        out = get_spawner().check_output(cmd)
     except subprocess.CalledProcessError as e:
         # TODO: report this error to users somehow
         raise e

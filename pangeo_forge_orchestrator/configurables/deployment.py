@@ -1,8 +1,6 @@
-from traitlets import Dict, List, Type, Unicode, validate
+from traitlets import Dict, List, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
-from ..spawners.base import Spawner
-from ..spawners.local_subprocess import LocalSubprocessSpawner
 from ._types import SecretList, SecretStr
 
 
@@ -14,16 +12,6 @@ class Deployment(LoggingConfigurable):
         config=True,
         help="""
         The name of the deployment.
-        """,
-    )
-
-    spawner = Type(
-        default_value=LocalSubprocessSpawner,
-        klass=Spawner,
-        allow_none=False,
-        config=True,
-        help="""
-        The spawner subclass to use for spawning recipe parsing processes.
         """,
     )
 
