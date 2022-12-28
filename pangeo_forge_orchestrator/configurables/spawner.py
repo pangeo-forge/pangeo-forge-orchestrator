@@ -29,7 +29,6 @@ class SpawnerConfig(LoggingConfigurable):
     """Spawner config."""
 
     cls = Type(
-        default_value=LocalSubprocessSpawner,
         klass=SpawnerABC,
         allow_none=False,
         config=True,

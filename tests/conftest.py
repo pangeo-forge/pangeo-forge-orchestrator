@@ -131,6 +131,8 @@ c.GitHubApp.private_key = '''{github_app['private_key']}'''
 c.GitHubApp.webhook_secret = '{github_app['webhook_secret']}'
 
 c.Deployment.registered_runner_configs = {runner_configs}
+
+c.SpawnerConfig.cls = "pangeo_forge_orchestrator.configurables.spawner.LocalSubprocessSpawner"
 """
 
 

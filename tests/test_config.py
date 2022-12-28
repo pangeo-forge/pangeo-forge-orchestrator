@@ -2,10 +2,10 @@ from pangeo_forge_orchestrator.configurables import (
     Deployment,
     FastAPI,
     GitHubApp,
-    SpawnerABC,
     get_configurable,
     get_spawner,
 )
+from pangeo_forge_orchestrator.configurables.spawner import LocalSubprocessSpawner
 
 
 def test_get_config(api_key):
@@ -34,4 +34,4 @@ def test_get_config(api_key):
 
 def test_get_spawner():
     s = get_spawner()
-    assert isinstance(s, SpawnerABC)
+    assert isinstance(s, LocalSubprocessSpawner)
