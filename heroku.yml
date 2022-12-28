@@ -10,5 +10,4 @@ release:
     - ./scripts.deploy/release.sh
   image: web
 run:
-  command: ./scripts.deploy/run.sh
-  image: web
+  web: ./scripts.deploy/run.sh
