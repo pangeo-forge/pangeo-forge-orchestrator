@@ -1,7 +1,7 @@
 from traitlets import Int, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
-from .types import SecretStr
+from ._types import SecretStr
 
 
 class GitHubApp(LoggingConfigurable):

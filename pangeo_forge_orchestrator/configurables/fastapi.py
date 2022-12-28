@@ -4,7 +4,7 @@ from pathlib import Path
 from traitlets import Int, TraitType, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
-from .types import SecretStr
+from ._types import SecretStr
 
 root_dir = Path(__file__).parent.parent.parent.resolve()
 

@@ -3,7 +3,7 @@ from traitlets.config import LoggingConfigurable
 
 from ..spawners.base import BaseSpawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
-from .types import SecretList, SecretStr
+from ._types import SecretList, SecretStr
 
 
 class Deployment(LoggingConfigurable):
