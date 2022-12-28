@@ -1,7 +1,7 @@
 from traitlets import Dict, List, Type, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
-from ..spawners.base import BaseSpawner
+from ..spawners.base import Spawner
 from ..spawners.local_subprocess import LocalSubprocessSpawner
 from ._types import SecretList, SecretStr
 
@@ -19,7 +19,7 @@ class Deployment(LoggingConfigurable):
 
     spawner = Type(
         default_value=LocalSubprocessSpawner,
-        klass=BaseSpawner,
+        klass=Spawner,
         allow_none=False,
         config=True,
         help="""
