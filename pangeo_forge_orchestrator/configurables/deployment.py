@@ -1,6 +1,4 @@
-import os
-
-from traitlets import Dict, List, Type, Unicode, default, validate
+from traitlets import Dict, List, Type, Unicode, validate
 from traitlets.config import LoggingConfigurable
 
 from ..spawners.base import BaseSpawner
@@ -17,11 +15,6 @@ class Deployment(LoggingConfigurable):
         help="""
         The name of the deployment.
         """,
-    )
-
-    database_url = Unicode(
-        allow_none=False,
-        config=True,
     )
 
     spawner = Type(
@@ -65,21 +58,6 @@ class Deployment(LoggingConfigurable):
     )
     # see note about naming clarity above
     bakeries = registered_runner_configs
-
-    @default("database_url")
-    def _database_url_from_env(self):
-        try:
-            database_url = os.environ["DATABASE_URL"]
-        except KeyError as e:  # pragma: no cover
-            raise ValueError(
-                "Application can't run unless DATABASE_URL environment variable is set"
-            ) from e
-
-        if database_url.startswith("postgres://"):  # pragma: no cover
-            # Fix Heroku's incompatible postgres database uri
-            # https://stackoverflow.com/a/67754795/3266235
-            database_url = database_url.replace("postgres://", "postgresql://", 1)
-        return database_url
 
     @validate("dont_leak")
     def _valid_dont_leak(self, proposal):

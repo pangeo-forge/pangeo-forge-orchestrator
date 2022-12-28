@@ -1,18 +1,30 @@
-from traitlets import Type
-from traitlets.config import Configurable
+import os
 
-from ..commands.base import BaseCommand
+from traitlets import Type
+from traitlets.config import Application, Configurable
+
 from .deployment import Deployment  # noqa: F401
 from .fastapi import FastAPI  # noqa: F401
 from .github_app import GitHubApp  # noqa: F401
 
 
-class _GetConfigurable(BaseCommand):
+class _GetConfigurable(Application):
 
     configurable = Type(
         klass=Configurable,
         allow_none=False,
     )
+
+    def initialize(self, argv=None):
+        super().initialize(argv)
+        try:
+            config_file = os.environ["ORCHESTRATOR_CONFIG_FILE"]
+        except KeyError as e:  # pragma: no cover
+            raise ValueError(
+                "Application can't run unless ORCHESTRATOR_CONFIG_FILE "
+                "environment variable is set"
+            ) from e
+        self.load_config_file(config_file)
 
     def resolve(self):
         # if not self.initialized():

@@ -13,9 +13,7 @@ from httpx import AsyncClient
 from pytest_lazyfixture import lazy_fixture
 from sqlmodel import Session, SQLModel
 
-import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.configurables import _GetConfigurable
 from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
 from pangeo_forge_orchestrator.models import MODELS
 
@@ -28,13 +26,13 @@ def setup_and_teardown(
     session_mocker,
     mock_config_path,
 ):
-    # (1) database test session setup
     db_path = os.environ["DATABASE_URL"]
     if db_path.startswith("sqlite") and os.path.exists(db_path.replace("sqlite:///", "")):
         raise ValueError(
             f"Preexisting `{db_path}` may cause test failures. Please remove this file "
             "then restart test session."
         )
+
     # TODO: remove this call to `maybe_create_db_and_tables`. This function is called on app
     # start-up, so we really shouldn't need to call it manually. However, given how we are handling
     # keeping the tables empty via the ``session`` fixture below, if we do not call this function
@@ -43,23 +41,9 @@ def setup_and_teardown(
     # this called twice (once now and once at app start-up), because it should be idempotent.
     maybe_create_db_and_tables()
 
-    # (2) github app test session setup
-
-    class _MockGetConfigurable(_GetConfigurable):
-        # In a real runtime, this config path will have been set at the command line on startup.
-        # In the mock context, we inject it here, to facilitate unit testing, for which the
-        # global config won't have been set, because there won't have been a startup event.
-        config_file = [mock_config_path]
-
-    session_mocker.patch.object(
-        pangeo_forge_orchestrator.configurables,
-        "_GetConfigurable",
-        _MockGetConfigurable,
-    )
-
     session_mocker.patch.dict(
         os.environ,
-        {"PANGEO_FORGE_DEPLOYMENT": "pytest-deployment"},
+        {"ORCHESTRATOR_CONFIG_FILE": mock_config_path},
     )
     yield
     # teardown here (none for now)

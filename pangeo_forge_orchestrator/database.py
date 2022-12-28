@@ -1,10 +1,26 @@
+import os
+
 from sqlalchemy.pool import NullPool
 from sqlmodel import Session, SQLModel, create_engine  # noqa: F401
 
-from .configurables import Deployment, get_configurable
+
+def get_database_url_from_env():
+    try:
+        database_url = os.environ["DATABASE_URL"]
+    except KeyError as e:  # pragma: no cover
+        raise ValueError(
+            "Application can't run unless DATABASE_URL environment variable is set"
+        ) from e
+
+    if database_url.startswith("postgres://"):  # pragma: no cover
+        # Fix Heroku's incompatible postgres database uri
+        # https://stackoverflow.com/a/67754795/3266235
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
+
 
 connect_args = {}  # type: dict
-database_url = get_configurable(configurable=Deployment).database_url
+database_url = get_database_url_from_env()
 if database_url.startswith("sqlite:"):
     connect_args = {"check_same_thread": False}
 if database_url.startswith("postgresql:"):
