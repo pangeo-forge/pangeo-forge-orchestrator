@@ -27,8 +27,8 @@ class _GetConfigurable(Application):
         self.load_config_file(config_file)
 
     def resolve(self):
-        # if not self.initialized():
-        self.initialize()
+        if not self.initialized():
+            self.initialize()
         return self.configurable(parent=self)
 
 
