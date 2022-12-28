@@ -1,13 +1,6 @@
 #!/bin/bash
 
 set -e
-export TF_IN_AUTOMATION=true
-export TF_CREDS="secrets/dataflow-status-monitoring.json"
-export GOOGLE_APPLICATION_CREDENTIALS="`pwd`/${TF_CREDS}"
-export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
-
-echo "running database migration..."
-python3.9 -m alembic upgrade head
 
 if [[ -z "${PANGEO_FORGE_DEPLOYMENT}" ]]; then
   echo "PANGEO_FORGE_DEPLOYMENT undefined, so this must be a review app..."
@@ -15,6 +8,17 @@ if [[ -z "${PANGEO_FORGE_DEPLOYMENT}" ]]; then
   echo "Setting PANGEO_FORGE_DEPLOYMENT=\$HEROKU_APP_NAME..."
   export PANGEO_FORGE_DEPLOYMENT=$HEROKU_APP_NAME
 fi
+
+export TF_IN_AUTOMATION=true
+# TODO: think about if all released deployments will maintain their own
+# distinct dataflow-status-monitoring creds. For now, assuming they will.
+# NOTE: we are replace all dashes in deployment name with underscores
+export TF_CREDS="config/${PANGEO_FORGE_DEPLOYMENT//-/_}/secrets/dataflow-status-monitoring.json"
+export GOOGLE_APPLICATION_CREDENTIALS="`pwd`/${TF_CREDS}"
+export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
+
+echo "running database migration..."
+python3.9 -m alembic upgrade head
 
 echo "setting terraform env..."
 # PANGEO_FORGE_DEPLOYMENT is the exact name of the GitHub App to release.
@@ -49,16 +53,24 @@ aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
 echo "decrypting app secrets..."
 # For the persistent deployments 'pangeo-forge' & 'pangeo-forge-staging', APP_NAMES will always
 # be a single-element array, in which the sole value is identical to TF_ENV.
-# For dev deployments, APP_NAMES will be an n-dimensional array containing as many review and/or
-# local proxy configurations as are currently present in the secrets directory.
+# For dev deployments, APP_NAMES will be an n-element array containing as many review and/or
+# local proxy configurations as are currently present.
 export PARSE_APP_NAMES="
 import os;
 tf_env = os.environ['TF_ENV'];
 if tf_env in ('pangeo-forge', 'pangeo-forge-staging'):
-    apps = [tf_env]
+    apps = [tf_env.replace('-', '_')]
 else:
-    apps = [f.split('.')[1] for f in os.listdir('secrets') if f.startswith('config')];
-    apps = [a for a in apps if a not in ('pangeo-forge', 'pangeo-forge-staging')]
+    apps = [
+        a
+        for a in os.listdir('config')
+        if (
+            os.path.isdir(f'config/{a}')
+            and 'secrets' in os.listdir(f'config/{a}')
+            and 'github-app.yaml' in os.listdir(f'config/{a}/secrets')
+        )
+    ];
+    apps = [a for a in apps if a not in ('pangeo_forge', 'pangeo_forge_staging')];
 apps = ' '.join(apps);
 print(apps)
 "
@@ -69,7 +81,7 @@ export APP_NAMES=$(python3.9 -c "${PARSE_APP_NAMES}")
 app_array=$APP_NAMES
 for app in ${app_array[@]}; do
   echo "decrypting secrets for ${app}..."
-  sops -d -i "./secrets/config.${app}.yaml"
+  sops -d -i "./config/${app}/secrets/github-app.yaml"
 done
 
 echo "dynamically setting webhook secrets from app config..."
@@ -77,8 +89,8 @@ export GET_APPS_WITH_SECRETS="
 import json, os, yaml;
 apps_with_secrets = {};
 for a in os.environ['APP_NAMES'].split():
-    with open(f'secrets/config.{a}.yaml') as f:
-        secret = yaml.safe_load(f)['github_app']['webhook_secret'].strip()
+    with open(f'./config/{a}/secrets/github-app.yaml') as f:
+        secret = yaml.safe_load(f)['webhook_secret'].strip()
         apps_with_secrets.update({a: secret})
 print(json.dumps(apps_with_secrets))
 "
@@ -101,7 +113,7 @@ echo "re-encrypting terraform secrets..."
 sops -e -i "./${TF_CREDS}"
 for app in ${app_array[@]}; do
   echo "re-encrypting secrets for ${app}..."
-  sops -e -i "./secrets/config.${app}.yaml"
+  sops -e -i "./config/${app}/secrets/github-app.yaml"
 done
 
 echo "release complete!"
