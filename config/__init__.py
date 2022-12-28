@@ -16,7 +16,10 @@ def open_secret(fname: str) -> dict:
         / "secrets"
         / fname
     ) as f:
-        return yaml.safe_load(f)
+        s = yaml.safe_load(f)
+        if "sops" in s:
+            raise ValueError(f"File {s} is encrypted. Decrypt then retry.")
+        return s
 
 
 def get_default_container_image():

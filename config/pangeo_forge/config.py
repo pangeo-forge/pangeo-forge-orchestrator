@@ -15,7 +15,9 @@ for k, v in github_app.items():
 osn_creds = open_secret("osn.yaml")
 
 # some of this is actually not secret, but this is most concise
+# (and make sure there were no overlapping keys resulting in dropped values)
 c.Deployment.dont_leak = [v for v in (fastapi | github_app | osn_creds).values()]
+assert len(c.Deployment.dont_leak) == len(fastapi) + len(github_app) + len(osn_creds)
 
 c.Deployment.registered_runner_configs = {
     "pangeo-ldeo-nsf-earthcube": {
