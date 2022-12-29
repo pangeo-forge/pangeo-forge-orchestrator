@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml  # type: ignore
 
-root_dir = Path(__file__).parent.parent.resolve()
+root_dir = Path(__file__).parent.parent.parent.resolve()
 
 DEFAULT_GCP_PROJECT = "pangeo-forge-4967"
 
