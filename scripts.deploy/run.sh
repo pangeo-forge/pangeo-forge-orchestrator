@@ -23,4 +23,9 @@ cat ${DATAFLOW_CREDS} \
 
 export GOOGLE_APPLICATION_CREDENTIALS=${DATAFLOW_CREDS}
 
+# while deterministic from PANGEO_FORGE_DEPLOYMENT in this context, this is its own distinct
+# variable (rather than being derived from PANGEO_FORGE_DEPLOYMENT in the application) to
+# provide greater flexibility in other contexts, including testing.
+export ORCHESTRATOR_CONFIG_FILE="./config/${PANGEO_FORGE_DEPLOYMENT//-/_}/config.py"
+
 gunicorn -w 2 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app
