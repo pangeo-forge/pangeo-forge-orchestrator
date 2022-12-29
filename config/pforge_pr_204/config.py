@@ -44,8 +44,10 @@ fastapi = open_secret("fastapi.yaml")
 c.FastAPI.key = fastapi["PANGEO_FORGE_API_KEY"]
 
 github_app = open_secret("github-app.yaml")
-for k, v in github_app.items():
-    setattr(c, "GitHubApp", v)
+c.GitHubApp.app_name = github_app["app_name"]
+c.GitHubApp.id = github_app["id"]
+c.GitHubApp.private_key = github_app["private_key"]
+c.GitHubApp.webhook_secret = github_app["webhook_secret"]
 
 # some of this is actually not secret, but this is most concise
 # (and make sure there were no overlapping keys resulting in dropped values)
