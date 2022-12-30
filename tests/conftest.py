@@ -24,7 +24,7 @@ from .interfaces import FastAPITestClientCRUD
 @pytest.fixture(autouse=True, scope="session")
 def setup_and_teardown(
     session_mocker,
-    mock_config_path,
+    mock_config_dir,
 ):
     db_path = os.environ["DATABASE_URL"]
     if db_path.startswith("sqlite") and os.path.exists(db_path.replace("sqlite:///", "")):
@@ -43,7 +43,7 @@ def setup_and_teardown(
 
     session_mocker.patch.dict(
         os.environ,
-        {"ORCHESTRATOR_CONFIG_FILE": mock_config_path},
+        {"ORCHESTRATOR_CONFIG_DIR": mock_config_dir},
     )
     yield
     # teardown here (none for now)
@@ -137,16 +137,12 @@ c.SpawnerConfig.cls = "pangeo_forge_orchestrator.configurables.spawner.LocalSubp
 
 
 @pytest.fixture(scope="session")
-def mock_config_dir(tmp_path_factory):
-    return tmp_path_factory.mktemp("config")
-
-
-@pytest.fixture(scope="session")
-def mock_config_path(mock_config_content, mock_config_dir) -> str:
-    path = mock_config_dir / "pytest_deployment.py"
+def mock_config_dir(tmp_path_factory, mock_config_content):
+    mock_config_dir = tmp_path_factory.mktemp("pytest_deployment_config_dir")
+    path = mock_config_dir / "config.py"
     with open(path, "w") as f:
         f.write(mock_config_content)
-    return str(path)
+    return str(mock_config_dir)
 
 
 # For this general pattern, see

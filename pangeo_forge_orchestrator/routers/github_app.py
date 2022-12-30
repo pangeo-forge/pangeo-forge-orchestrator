@@ -240,7 +240,6 @@ async def receive_github_hook(  # noqa: C901
 ):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
-
     payload_bytes = await request.body()
     await verify_hash_signature(request, payload_bytes)
 
@@ -552,7 +551,6 @@ async def parse_payload(request, payload_bytes, event):
 
 async def verify_hash_signature(request: Request, payload_bytes: bytes) -> None:
     if hash_signature := request.headers.get("X-Hub-Signature-256", None):
-
         github_app = get_configurable(configurable=GitHubApp)
         webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
         h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
@@ -1240,7 +1238,6 @@ async def deploy_prod_run(
         # Don't update recipe_run as "failed" here, that's handled inside `run`.
         # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
         # (4.5) Update deployment with link to recipe run page
-        logger.debug("HEREEEEEEEEEEEEEEEEEe")
         logger.debug(recipe_run.message)
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
         environment_url = (

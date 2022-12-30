@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 
+from .configurables import check_secrets_decrypted, get_config_file
 from .database import maybe_create_db_and_tables
 from .http import http_session
 from .metadata import app_metadata
@@ -30,6 +31,8 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
+    assert get_config_file()  # don't need config_file here, but it must exist
+    check_secrets_decrypted()  # if we've forgetten to decrypt secrets, bail early
     maybe_create_db_and_tables()
     http_session.start()
 

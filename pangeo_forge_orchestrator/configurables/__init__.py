@@ -1,5 +1,8 @@
+import json
 import os
+from pathlib import Path
 
+import yaml  # type: ignore
 from traitlets import Type
 from traitlets.config import Application, Configurable
 
@@ -7,6 +10,70 @@ from .deployment import Deployment  # noqa: F401
 from .fastapi import FastAPI  # noqa: F401
 from .github_app import GitHubApp  # noqa: F401
 from .spawner import SpawnerABC, SpawnerConfig  # noqa: F401
+
+ROOT = Path(__file__).parent.parent.parent.resolve()
+
+
+def get_default_container_image(gcp_project):
+    with open(ROOT / "dataflow-container-image.txt") as img_tag:
+        return f"gcr.io/{gcp_project}/{img_tag.read().strip()}"
+
+
+def get_config_dir() -> Path:
+    passed_explicitly = os.environ.get("ORCHESTRATOR_CONFIG_DIR", None)
+    if not passed_explicitly:
+        deployment_name = os.environ.get("PANGEO_FORGE_DEPLOYMENT", None)
+        if not deployment_name:
+            raise ValueError(
+                "Either ORCHESTRATOR_CONFIG_DIR or PANGEO_FORGE_DEPLOYMENT env var must be set. "
+                "Use ORCHESTRATOR_CONFIG_DIR to pass an absolute path to a config dir. Or use "
+                "PANGEO_FORGE_DEPLOYMENT to indicate that a config file exists at the relative "
+                "path './{REPO_ROOT}/config/{PANGEO_FORGE_DEPLOYMENT.replace('-', '_')}/config.py'."
+            )
+        generated = ROOT / "config" / deployment_name.replace("-", "_")
+    return Path(passed_explicitly) if passed_explicitly else generated
+
+
+def get_config_file() -> Path:
+    config_file = get_config_dir() / "config.py"
+    if not os.path.exists(config_file):
+        raise ValueError(f"{config_file = } does not exist.")
+    return config_file
+
+
+def get_secrets_dir() -> Path:
+    return get_config_dir() / "secrets"
+
+
+class EncryptedSecretError(ValueError):
+    pass
+
+
+def open_secret(fname: str) -> dict:
+    with open(get_secrets_dir() / fname) as f:
+        _, ext = os.path.splitext(fname)
+        if ext in (".yaml", ".yml"):
+            s = yaml.safe_load(f)
+        elif ext == ".json":
+            s = json.load(f)
+        else:
+            raise ValueError(f"{fname} extension {ext} not in ['.yaml', '.yml', '.json']")
+        if "sops" in s:
+            raise EncryptedSecretError(f"File '{fname}' is encrypted. Decrypt then retry.")
+        return s
+
+
+def check_secrets_decrypted() -> None:
+    sd = get_secrets_dir()
+    if os.path.exists(sd):
+        errors = []
+        for fname in os.listdir(sd):
+            try:
+                _ = open_secret(fname)
+            except EncryptedSecretError as e:
+                errors.append(e)
+        if errors:
+            raise EncryptedSecretError(errors)
 
 
 class _GetConfigurable(Application):
@@ -16,15 +83,8 @@ class _GetConfigurable(Application):
         allow_none=False,
     )
 
-    def initialize(self, argv=None):
-        super().initialize(argv)
-        try:
-            config_file = os.environ["ORCHESTRATOR_CONFIG_FILE"]
-        except KeyError as e:  # pragma: no cover
-            raise ValueError(
-                "Application can't run unless ORCHESTRATOR_CONFIG_FILE "
-                "environment variable is set"
-            ) from e
+    def initialize(self):
+        config_file = get_config_file()
         self.load_config_file(config_file)
 
     def resolve(self):

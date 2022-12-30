@@ -8,7 +8,7 @@ from pangeo_forge_orchestrator.configurables import (
 from pangeo_forge_orchestrator.configurables.spawner import LocalSubprocessSpawner
 
 
-def test_get_config(api_key):
+def test_get_config(webhook_secret, private_key, api_key):
     c = get_configurable(configurable=Deployment)
     for attr in [
         "name",
@@ -25,6 +25,8 @@ def test_get_config(api_key):
     github_app = get_configurable(configurable=GitHubApp)
     for attr in ["app_name", "id", "private_key", "webhook_secret"]:
         assert hasattr(github_app, attr)
+    assert github_app.private_key == private_key
+    assert github_app.webhook_secret == webhook_secret
 
     secret_vals = [fastapi.key, github_app.private_key, github_app.webhook_secret]
     for sv in secret_vals:

@@ -1,8 +1,6 @@
-from traitlets.config import get_config
+# type: ignore
 
-from .. import get_default_container_image
-
-c = get_config()
+from pangeo_forge_orchestrator.configurables import get_default_container_image  # , open_secret
 
 c.Deployment.name = "pangeo-forge-staging"
 
