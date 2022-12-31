@@ -26,7 +26,7 @@ class LocalSubprocessSpawner(SpawnerABC):
     # FIXME: GCPCloudRunSpawner.check_output is async, that means this needs to be async too,
     # so that the calling context can interact with spawner interface in a uniform way.
     def check_output(self, cmd: List[str]):
-        return subprocess.check_output(cmd)
+        return subprocess.check_output(["pangeo-forge-runner"] + cmd)
 
 
 def get_gcloud_auth_token():
@@ -62,7 +62,7 @@ class GCPCloudRunSpawner(SpawnerABC):
             ) as r:
                 r_json = await r.json()
                 if r.status == 202:
-                    return r_json
+                    return r_json["pangeo_forge_runner_result"]
                 else:
                     # FIXME: spawner-specific error class.
                     # using this for now because github_app.py expects it.

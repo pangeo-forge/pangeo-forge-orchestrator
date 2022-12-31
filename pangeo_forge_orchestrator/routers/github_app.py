@@ -682,7 +682,6 @@ async def run(
         json.dump(bakery_config, f)
         f.flush()
         cmd = [
-            "pangeo-forge-runner",
             "bake",
             f"--repo={html_url}",
             f"--ref={ref}",
@@ -775,7 +774,6 @@ async def synchronize(
     # TODO: Also have pangeo-forge-runner raise descriptive effor for structure errors in the PR
     # (i.e., incorrect directory structure), and translate that here to failed check run.
     cmd = [
-        "pangeo-forge-runner",
         "expand-meta",
         f"--repo={head_html_url}",
         f"--ref={head_sha}",
@@ -1155,7 +1153,6 @@ async def deploy_prod_run(
 ):
     # (1) expand meta
     cmd = [
-        "pangeo-forge-runner",
         "expand-meta",
         f"--repo={base_html_url}",
         f"--ref={merge_commit_sha}",
