@@ -1,10 +1,10 @@
 import subprocess
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 
 import aiohttp
-from traitlets import Dict, Type
+import traitlets
 from traitlets.config import LoggingConfigurable
 
 
@@ -23,6 +23,8 @@ class SpawnerABC(ABC):
 
 
 class LocalSubprocessSpawner(SpawnerABC):
+    # FIXME: GCPCloudRunSpawner.check_output is async, that means this needs to be async too,
+    # so that the calling context can interact with spawner interface in a uniform way.
     def check_output(self, cmd: List[str]):
         return subprocess.check_output(cmd)
 
@@ -36,7 +38,6 @@ def get_gcloud_auth_token():
 class GCPCloudRunSpawner(SpawnerABC):
 
     service_url: str
-    token: str = field(default_factory=get_gcloud_auth_token)
     env: str = "notebook"
 
     async def check_output(self, cmd: List[str]):
@@ -52,7 +53,10 @@ class GCPCloudRunSpawner(SpawnerABC):
                     "install": {"pkgs": pkgs, "env": self.env},
                 },
                 headers={
-                    "Authorization": f"Bearer {self.token}",
+                    # calling gcloud for the token on each request has a performance cost, but this
+                    # way we avoid ever holding the token in an instance attribute, which would
+                    # increase the risk of it accidentally leaking to logs, etc.
+                    "Authorization": f"Bearer {get_gcloud_auth_token()}",
                     "Content-Type": "application/json",
                 },
             ) as r:
@@ -68,7 +72,7 @@ class GCPCloudRunSpawner(SpawnerABC):
 class SpawnerConfig(LoggingConfigurable):
     """Spawner config."""
 
-    cls = Type(
+    cls = traitlets.Type(
         klass=SpawnerABC,
         allow_none=False,
         config=True,
@@ -77,8 +81,7 @@ class SpawnerConfig(LoggingConfigurable):
         """,
     )
 
-    kwargs = Dict(
-        Dict(),
+    kws = traitlets.Dict(
         allow_none=False,
         config=True,
         help="""

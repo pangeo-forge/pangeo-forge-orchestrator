@@ -77,6 +77,8 @@ def check_secrets_decrypted() -> None:
 
 
 class _GetConfigurable(Application):
+    # FIXME: We don't actually run a traitlets Application here. We just need this context to
+    # resolve traitlets config. Is there a more idiomatic way of doing this?
 
     configurable = Type(
         klass=Configurable,
@@ -88,8 +90,11 @@ class _GetConfigurable(Application):
         self.load_config_file(config_file)
 
     def resolve(self):
-        if not self.initialized():
-            self.initialize()
+        # FIXME: It seems like we should be able to avoid calling initialize every time by
+        # checking ``if not self.initialized():``. However, in certain contexts this causes
+        # problems by resulting in an empty config that still believes itself to be "intialized".
+        # So to avoid that problem for now, just calling initialize on every resolution works.
+        self.initialize()
         return self.configurable(parent=self)
 
 
@@ -100,4 +105,4 @@ def get_configurable(configurable: Configurable) -> Configurable:
 
 def get_spawner() -> SpawnerABC:
     s: SpawnerConfig = _GetConfigurable(configurable=SpawnerConfig).resolve()
-    return s.cls(**s.kwargs)
+    return s.cls(**s.kws)

@@ -19,7 +19,9 @@ c.GitHubApp.webhook_secret = github_app["webhook_secret"]
 c.Deployment.dont_leak = [v for v in (fastapi | github_app).values()]
 assert len(c.Deployment.dont_leak) == len(fastapi) + len(github_app)
 
-c.SpawnerConfig.cls = "pangeo_forge_orchestrator.configurables.spawner.LocalSubprocessSpawner"
+c.SpawnerConfig.cls = "pangeo_forge_orchestrator.configurables.spawner.GCPCloudRunSpawner"
+c.SpawnerConfig.kws = dict(service_url="https://pangeo-forge-runner-65kzdcigua-uc.a.run.app")
+
 c.Deployment.registered_runner_configs = {
     "pangeo-ldeo-nsf-earthcube": {
         "Bake": {
