@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -12,6 +13,15 @@ class RecipeCalledProcessResult:
     pass
 
 
+class RecipeCalledProcessError(subprocess.CalledProcessError):
+    pass
+
+
+def get_subprocess_executable():
+    # putting this in a function facilitates mocking in tests
+    return "pangeo-forge-runner"
+
+
 class SpawnerABC(ABC):
     @abstractmethod
     def check_output(self, cmd: List[str]):
@@ -23,14 +33,24 @@ class SpawnerABC(ABC):
 
 
 class LocalSubprocessSpawner(SpawnerABC):
-    # FIXME: GCPCloudRunSpawner.check_output is async, that means this needs to be async too,
-    # so that the calling context can interact with spawner interface in a uniform way.
-    def check_output(self, cmd: List[str]):
-        return subprocess.check_output(["pangeo-forge-runner"] + cmd)
+    async def check_output(self, cmd: List[str]):
+        # https://docs.python.org/3/library/asyncio-subprocess.html#asyncio-subprocess
+        proc = await asyncio.create_subprocess_shell(
+            get_subprocess_executable() + " " + " ".join(cmd),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if stdout:
+            return stdout.decode()
+        else:
+            returncode = proc.returncode if proc.returncode else 1
+            raise RecipeCalledProcessError(returncode, cmd, output=stderr.decode())
 
 
 def get_gcloud_auth_token():
     cmd = "gcloud auth print-identity-token".split()
+    # TODO: use asyncio subprocess
     return subprocess.check_output(cmd).decode("utf-8").strip()
 
 
@@ -64,9 +84,7 @@ class GCPCloudRunSpawner(SpawnerABC):
                 if r.status == 202:
                     return r_json["pangeo_forge_runner_result"]
                 else:
-                    # FIXME: spawner-specific error class.
-                    # using this for now because github_app.py expects it.
-                    raise subprocess.CalledProcessError(r.status, r_json)
+                    raise RecipeCalledProcessError(r.status, cmd, output=r_json)
 
 
 class SpawnerConfig(LoggingConfigurable):

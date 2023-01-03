@@ -1,4 +1,4 @@
-import subprocess
+import asyncio
 
 import pytest
 import pytest_asyncio
@@ -157,7 +157,7 @@ async def test_receive_issue_comment_request(
         "get_github_session",
         get_mock_github_session(gh_backend),
     )
-    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+    mocker.patch.object(asyncio, "create_subprocess_shell", mock_subprocess_check_output)
 
     recipe_run = await async_app_client.get("/recipe_runs/1")
     assert recipe_run.json()["status"] == "queued"
