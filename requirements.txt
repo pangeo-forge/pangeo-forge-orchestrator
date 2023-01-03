@@ -19,6 +19,11 @@ pangeo-forge-runner==0.7.0
 gcsfs==2022.8.2
 s3fs==2022.8.2
 google-auth-oauthlib==0.5.3 # remove this once https://github.com/fsspec/gcsfs/issues/505 has been addressed
+# override/upgrade recipes version brought in by pangeo-forge-runner
+# NOTE: once https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/204 goes in,
+# this install will be dropped from here, so not worrying about patching this in for now,
+# as it's a short-term fix to get newly released features into the GitHub integration.
+pangeo-forge-recipes==0.9.3
 
 # these will eventually be brought into the recipe parsing container dynamically
 # from requirements.txt, environment.yml, etc. For now, we are hardcoding so that
