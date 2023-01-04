@@ -25,14 +25,14 @@ jobs:
       GCP_PROJECT: pangeo-forge-4967
       GCP_ACCOUNT: google-container-registry@pangeo-forge-4967.iam.gserviceaccount.com
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - id: 'auth'
         name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v0'
+        uses: 'google-github-actions/auth@v1'
         with:
           credentials_json: '${{ secrets.GOOGLE_CONTAINER_REGISTRY_CREDS }}'
       - name: 'Setup gcloud'
-        uses: 'google-github-actions/setup-gcloud@v0'
+        uses: 'google-github-actions/setup-gcloud@v1'
       - name: push image to gcr
         run: >
           gcloud auth activate-service-account ${{ env.GCP_ACCOUNT }} --key-file='${{ steps.auth.outputs.credentials_file_path }}'

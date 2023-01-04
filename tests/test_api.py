@@ -27,7 +27,7 @@ create_params_incomplete = [
 def test_create_incomplete(path: str, create_opts: APIOpts, required_arg: str, client):
     create_kwargs = create_opts.copy()
     del create_kwargs[required_arg]
-    with pytest.raises(client.error_cls, match="422 Client Error: Unprocessable Entity"):
+    with pytest.raises(client.error_cls, match="Client error '422 Unprocessable Entity' for url"):
         with client.auth_required():
             _ = client.create(path, create_kwargs)
 
@@ -44,7 +44,7 @@ create_params_invalid = [
 def test_create_invalid(create_opts: APIOpts, invalid_arg, model_fixture, client):
     create_kwargs = create_opts.copy()
     create_kwargs.update(invalid_arg)
-    with pytest.raises(client.error_cls, match="422 Client Error: Unprocessable Entity"):
+    with pytest.raises(client.error_cls, match="Client error '422 Unprocessable Entity' for url"):
         with client.auth_required():
             _ = client.create(model_fixture.path, create_kwargs)
 
