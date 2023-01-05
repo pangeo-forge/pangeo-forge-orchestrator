@@ -8,6 +8,7 @@ import pytest
 import pytest_asyncio
 from sqlmodel import Session
 
+import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.database import engine
 from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.models import MODELS
@@ -16,7 +17,7 @@ from pangeo_forge_orchestrator.routers.github_app import run
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, get_mock_github_session
 from .mock_pangeo_forge_runner import (
-    mock_subprocess_check_output,
+    get_mock_subprocess_executable,
     mock_subprocess_check_output_raises_called_process_error,
 )
 
@@ -109,7 +110,11 @@ async def run_fixture(
 @pytest.mark.asyncio
 async def test_run(mocker, run_fixture):
     run_kws = run_fixture
-    mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.configurables.spawner,
+        "get_subprocess_executable",
+        get_mock_subprocess_executable,
+    )
     await run(**run_kws)
 
 

@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 import pytest_asyncio
 
@@ -7,7 +5,7 @@ import pangeo_forge_orchestrator
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
-from .mock_pangeo_forge_runner import mock_subprocess_check_output
+from .mock_pangeo_forge_runner import get_mock_subprocess_executable
 
 
 @pytest_asyncio.fixture
@@ -157,7 +155,11 @@ async def test_receive_issue_comment_request(
         "get_github_session",
         get_mock_github_session(gh_backend),
     )
-    mocker.patch.object(asyncio, "create_subprocess_shell", mock_subprocess_check_output)
+    mocker.patch.object(
+        pangeo_forge_orchestrator.configurables.spawner,
+        "get_subprocess_executable",
+        get_mock_subprocess_executable,
+    )
 
     recipe_run = await async_app_client.get("/recipe_runs/1")
     assert recipe_run.json()["status"] == "queued"

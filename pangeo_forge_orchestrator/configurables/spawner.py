@@ -42,7 +42,7 @@ class LocalSubprocessSpawner(SpawnerABC):
         )
         stdout, stderr = await proc.communicate()
         if stdout:
-            return stdout.decode()
+            return stdout
         else:
             returncode = proc.returncode if proc.returncode else 1
             raise RecipeCalledProcessError(returncode, cmd, output=stderr.decode())

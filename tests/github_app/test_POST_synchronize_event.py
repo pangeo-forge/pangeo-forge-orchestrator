@@ -11,7 +11,7 @@ from pangeo_forge_orchestrator.routers.github_app import DEFAULT_BACKEND_NETLOC
 
 from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
-from .mock_pangeo_forge_runner import mock_subprocess_check_output
+from .mock_pangeo_forge_runner import get_mock_subprocess_executable
 
 
 @pytest_asyncio.fixture
@@ -200,7 +200,11 @@ async def test_receive_synchronize_request(
                 headers=synchronize_request["headers"],
             )
     else:
-        mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
+        mocker.patch.object(
+            pangeo_forge_orchestrator.configurables.spawner,
+            "get_subprocess_executable",
+            get_mock_subprocess_executable,
+        )
         response = await async_app_client.post(
             "/github/hooks/",
             json=synchronize_request["payload"],
