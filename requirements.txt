@@ -23,7 +23,10 @@ google-auth-oauthlib==0.5.3 # remove this once https://github.com/fsspec/gcsfs/i
 # NOTE: once https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/204 goes in,
 # this install will be dropped from here, so not worrying about patching this in for now,
 # as it's a short-term fix to get newly released features into the GitHub integration.
-pangeo-forge-recipes==0.9.3
+pangeo-forge-recipes==0.9.4
+# required for netcdf3 recipes, again this will move out of the app container once recipe
+# parsing no longer runs in the same container as the FastAPI application. patching for now.
+kerchunk[netcdf3]==0.0.7
 
 # these will eventually be brought into the recipe parsing container dynamically
 # from requirements.txt, environment.yml, etc. For now, we are hardcoding so that
