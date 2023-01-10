@@ -17,9 +17,9 @@ RUN apt-get update \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update && apt-get -y install python3.9-dev python3.9-distutils
 RUN apt-get update && apt-get -y install curl wget unzip apt-transport-https ca-certificates
-# is this the best way to get pip for python 3.9? https://stackoverflow.com/a/65644846
+# is this the best way to get pip for python 3.10? https://stackoverflow.com/a/65644846
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
-    && python3.9 get-pip.py
+    && python3.10 get-pip.py
 
 # Install terraform, which we need for release (could be a separate build stage in the future)\
 ENV TF_VERSION 1.1.4
