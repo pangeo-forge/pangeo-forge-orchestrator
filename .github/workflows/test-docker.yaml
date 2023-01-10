@@ -32,7 +32,7 @@ jobs:
           docker-compose run
           -v ${PWD}/tests:/opt/app/tests
           --entrypoint="/bin/sh -c 'sleep 1
-          && python3.9 -m alembic upgrade head
+          && python3.10 -m alembic upgrade head
           && apt-get install -y git
           && pip install \".[dev]\"
           && pytest tests -vx'"
