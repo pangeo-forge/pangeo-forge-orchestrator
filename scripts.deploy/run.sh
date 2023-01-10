@@ -18,7 +18,7 @@ export DATAFLOW_CREDS="./config/${PANGEO_FORGE_DEPLOYMENT//-/_}/secrets/dataflow
 gcloud auth activate-service-account --key-file=${DATAFLOW_CREDS}
 
 cat ${DATAFLOW_CREDS} \
-| python3.9 -c "import sys, json; print(json.load(sys.stdin)['project_id'].strip())" \
+| python3.10 -c "import sys, json; print(json.load(sys.stdin)['project_id'].strip())" \
 | xargs -I{} gcloud config set project {}
 
 export GOOGLE_APPLICATION_CREDENTIALS=${DATAFLOW_CREDS}
