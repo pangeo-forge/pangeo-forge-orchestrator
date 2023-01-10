@@ -10,16 +10,15 @@ RUN make install
 
 FROM ubuntu:22.04
 COPY --from=0 /go/bin/sops /usr/local/bin/sops
-# we need python3.9 because apache beam is not supported on 3.10
-# is the best way to get 3.9 on ubuntu? https://askubuntu.com/a/682875
+# is the best way to get 3.10 on ubuntu? https://askubuntu.com/a/682875
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y install tzdata software-properties-common \
     && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get -y install python3.9-dev python3.9-distutils
+    && apt-get update && apt-get -y install python3.10-dev python3.10-distutils
 RUN apt-get update && apt-get -y install curl wget unzip apt-transport-https ca-certificates
 # is this the best way to get pip for python 3.10? https://stackoverflow.com/a/65644846
 RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
-    && python3.10 get-pip.py
+    && python3 get-pip.py
 
 # Install terraform, which we need for release (could be a separate build stage in the future)\
 ENV TF_VERSION 1.1.4
@@ -55,7 +54,7 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
 
 # pip installs after git install, in case we want to use upstream versions from github
 COPY requirements.txt ./
-RUN python3.9 -m pip install -r requirements.txt
+RUN python3.10 -m pip install -r requirements.txt
 
 # the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
 # `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
