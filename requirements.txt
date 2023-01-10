@@ -15,15 +15,15 @@ psycopg2-binary==2.9.3
 
 # these will eventually move out of the app container, and instead be
 # installed within the docker sibling container used for recipe handling
-pangeo-forge-runner==0.7.0
+
+# todo: pin to a release of pangeo-forge-runner, if we get one before
+# all of these deps move out of this container, which will happen after
+# https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/204 goes in
+git+https://github.com/pangeo-forge/pangeo-forge-runner.git@recipes-0.9.4
+
 gcsfs==2022.8.2
 s3fs==2022.8.2
 google-auth-oauthlib==0.5.3 # remove this once https://github.com/fsspec/gcsfs/issues/505 has been addressed
-# override/upgrade recipes version brought in by pangeo-forge-runner
-# NOTE: once https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/204 goes in,
-# this install will be dropped from here, so not worrying about patching this in for now,
-# as it's a short-term fix to get newly released features into the GitHub integration.
-pangeo-forge-recipes==0.9.4
 # required for netcdf3 recipes, again this will move out of the app container once recipe
 # parsing no longer runs in the same container as the FastAPI application. patching for now.
 kerchunk[netcdf3]==0.0.7
