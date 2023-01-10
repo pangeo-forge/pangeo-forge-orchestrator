@@ -39,9 +39,6 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | tee /usr/share/keyrings/cloud.google.gpg \
     && apt-get update && apt-get -y install google-cloud-cli
 
-COPY requirements.txt ./
-RUN python3.9 -m pip install -r requirements.txt
-
 COPY . /opt/app
 WORKDIR /opt/app
 
@@ -55,6 +52,10 @@ RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-s
     && cd dataflow-status-monitoring \
     && git reset --hard c72a594b2aea5db45d6295fadd801673bee9746f \
     && cd -
+
+# pip installs after git install, in case we want to use upstream versions from github
+COPY requirements.txt ./
+RUN python3.9 -m pip install -r requirements.txt
 
 # the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
 # `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
