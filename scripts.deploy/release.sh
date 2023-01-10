@@ -43,7 +43,7 @@ if deployment not in ('pangeo-forge', 'pangeo-forge-staging'):
 else:
     print(deployment)
 "
-export TF_ENV=$(python3.9 -c "${SET_TF_ENV}")
+export TF_ENV=$(python3.10 -c "${SET_TF_ENV}")
 echo "terraform env set to '${TF_ENV}'"
 
 echo "setting aws config for kms access..."
@@ -76,7 +76,7 @@ print(apps)
 "
 # set this as an env var (rather than assigning it directly to `app_array`),
 # because it is also used in the `GET_APPS_WITH_SECRETS` python command below.
-export APP_NAMES=$(python3.9 -c "${PARSE_APP_NAMES}")
+export APP_NAMES=$(python3.10 -c "${PARSE_APP_NAMES}")
 
 app_array=$APP_NAMES
 for app in ${app_array[@]}; do
@@ -94,11 +94,11 @@ for a in os.environ['APP_NAMES'].split():
         apps_with_secrets.update({a: secret})
 print(json.dumps(apps_with_secrets))
 "
-export APPS_WITH_SECRETS=$(python3.9 -c "${GET_APPS_WITH_SECRETS}")
+export APPS_WITH_SECRETS=$(python3.10 -c "${GET_APPS_WITH_SECRETS}")
 
 echo "dynamically setting gcp project from service account keyfile..."
 sops -d -i "./${TF_CREDS}"
-export GCP_PROJECT=$(cat ./${TF_CREDS} | python3.9 -c "${GET_GCP_PROJECT}")
+export GCP_PROJECT=$(cat ./${TF_CREDS} | python3.10 -c "${GET_GCP_PROJECT}")
 
 echo "running terraform for env '${TF_ENV}'..."
 terraform -chdir='./terraform/'${TF_ENV} init
