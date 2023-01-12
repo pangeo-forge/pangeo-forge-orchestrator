@@ -1,4 +1,4 @@
-name: CI
+name: Tests
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
       - prod
     paths-ignore:
       - 'docs/**'
+      - '.github/workflows/test-dataflow-integration.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +24,7 @@ env:
 
 jobs:
   test:
-    name: ${{ matrix.python-version }}-${{ matrix.database }}
+    name: local-${{ matrix.python-version }}-${{ matrix.database }}
     runs-on: ubuntu-latest
 
     # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
