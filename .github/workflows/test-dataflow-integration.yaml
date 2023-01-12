@@ -1,0 +1,36 @@
+name: Test Dataflow Integration
+on:
+  # run this test on all pushes to main and prod, to ensure that
+  # no changes made by the push break our dataflow integration
+  push:
+    branches:
+      - main
+      - prod
+    paths-ignore:
+      - 'docs/**'
+  # also allow for manually running this workflow using slash commands
+  # see below for conditional criteria assocaited with issue comment runs
+  issue_comment:
+    types: [created]
+
+jobs:
+  test-dataflow-integration:
+    runs-on: ubuntu-latest
+    steps:
+      # always run this job for push events.
+      # for issue_comment events, only run this job if:
+      #   (1) comment was made on a PR (not an issue)
+      #   (2) author of the comment was either a MEMBER or OWNER
+      #   (3) and comment body == '/test-dataflow-integration'
+      - if: |
+          github.event_name == 'push' ||
+          (
+            github.event_name == 'issue_comment' &&
+            github.event.issue.pull_request &&
+            (
+              github.event.issue.comment.author_association == MEMBER ||
+              github.event.issue.comment.author_association == OWNER
+            )
+            github.event.issue.comment.body == '/test-dataflow-integration'
+          )
+      - uses: actions/checkout@v3
