@@ -18,7 +18,7 @@ export GOOGLE_APPLICATION_CREDENTIALS="`pwd`/${TF_CREDS}"
 export GET_GCP_PROJECT="import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
 
 echo "running database migration..."
-python3.10 -m alembic upgrade head
+python3.9 -m alembic upgrade head
 
 echo "setting terraform env..."
 # PANGEO_FORGE_DEPLOYMENT is the exact name of the GitHub App to release.
