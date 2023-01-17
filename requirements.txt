@@ -16,6 +16,9 @@ psycopg2-binary==2.9.3
 # these will eventually move out of the app container, and instead be
 # installed within the docker sibling container used for recipe handling
 pangeo-forge-runner==0.7.0
+# pangeo-forge-runner 0.7.0 requires recipes >=0.9.2, so if we want 0.9.2 (which we do)
+# then we need to hard pin it here (otherwise a later release will be brought in on build)
+pangeo-forge-runner==0.9.2
 gcsfs==2022.8.2
 s3fs==2022.8.2
 google-auth-oauthlib==0.5.3 # remove this once https://github.com/fsspec/gcsfs/issues/505 has been addressed
