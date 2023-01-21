@@ -43,7 +43,7 @@ jobs:
           repository: pangeo-forge/pangeo-forge-runner
           path: './pangeo-forge-runner'
       - name: list
-        run: ls -la
+        run: ls -la ./pangeo-forge-runner
       - name: Print test file for reference
         run: |
           cat ./pangeo-forge-runner/tests/integration/dataflow_integration_test.py
