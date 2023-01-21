@@ -1,0 +1,57 @@
+# This test mirrors the one added to pangeo-forge-runner in
+# https://github.com/pangeo-forge/pangeo-forge-runner/pull/52,
+# with the only difference being that it's deployed from inside our production
+# container. Experience has shown that testing this does matter, given that
+# differences between the client (i.e. deploying/submitting) environment and the
+# Dataflow worker environment can result in serialization issues on Dataflow.
+
+# FIXME: Once https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/204
+# goes in, we'll need to change this test so that it is run from within the Cloud
+# Run container which will be used for recipe parsing in production. Perhaps this
+# means we'll want to just move this test to the repo which defines the Cloud Run
+# service. TBD.
+
+name: Dataflow Integration Test
+
+on:
+  push:
+    branches: ['main', 'prod']
+  pull_request:
+    branches: ['main']
+    types: [opened, reopened, synchronize, labeled]
+  schedule:
+    - cron: '0 4 * * *' # run once a day at 4 AM
+
+jobs:
+  build:
+    name: ${{ matrix.python-version }}
+    # run on:
+    #  - all pushes to main & prod
+    #  - schedule defined above
+    #  - a PR was just labeled 'test-dataflow'
+    #  - a PR with 'test-dataflow' label was opened, reopened, or synchronized
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'schedule' ||
+      github.event.label.name == 'test-dataflow' ||
+      contains( github.event.pull_request.labels.*.name, 'test-dataflow')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout -runner repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          repo: pangeo-forge/pangeo-forge-runner
+          ref: main
+      - name: Cache test file from runner to local disk
+        run: |
+          cp ./test/integration/dataflow_integration_test.py ~/
+      - name: Checkout -ochestrator repo
+        uses: actions/checkout@v3
+      - name: Print test file for reference
+        run: |
+          cat ~/dataflow_integration_test.py
+      - name: Build app container
+        run: |
+          docker build -t dataflow-integration . --platform=linux/amd64
+    # - name: Run test in app container
