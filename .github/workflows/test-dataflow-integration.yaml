@@ -44,7 +44,7 @@ jobs:
           ref: main
       - name: Cache test file from runner to local disk
         run: |
-          cp ./tests/integration/dataflow_integration_test.py ~/
+          cp /tests/integration/dataflow_integration_test.py ~/
       - name: Checkout -ochestrator repo
         uses: actions/checkout@v3
       - name: Print test file for reference
