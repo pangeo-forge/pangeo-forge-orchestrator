@@ -40,7 +40,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          repo: pangeo-forge/pangeo-forge-runner
+          repository: pangeo-forge/pangeo-forge-runner
           ref: main
       - name: Cache test file from runner to local disk
         run: |
