@@ -36,20 +36,15 @@ jobs:
       contains( github.event.pull_request.labels.*.name, 'test-dataflow')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
       - name: Checkout -runner repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
           repository: pangeo-forge/pangeo-forge-runner
-          ref: main
-      - name: Cache test file from runner to local disk
-        run: |
-          cp ${{ github.workspace }}/tests/integration/dataflow_integration_test.py ~/
-      - name: Checkout -ochestrator repo
-        uses: actions/checkout@v3
+          path: './pangeo-forge-runner'
       - name: Print test file for reference
         run: |
-          cat ~/dataflow_integration_test.py
+          cat ./pangeo-forge-runner/tests/integration/dataflow_integration_test.py
       - name: Build app container
         run: |
           docker build -t dataflow-integration . --platform=linux/amd64
