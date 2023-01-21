@@ -42,11 +42,9 @@ jobs:
         with:
           repository: pangeo-forge/pangeo-forge-runner
           path: './pangeo-forge-runner'
-      - name: list
-        run: ls -la ./pangeo-forge-runner
       - name: Print test file for reference
         run: |
-          cat ./pangeo-forge-runner/tests/integration/dataflow_integration_test.py
+          cat ./pangeo-forge-runner/tests/integration/test_dataflow_integration.py
       - name: Build app container
         run: |
           docker build -t dataflow-integration . --platform=linux/amd64
