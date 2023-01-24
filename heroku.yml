@@ -4,7 +4,7 @@ setup:
     - plan: papertrail:fixa
 build:
   docker:
-    web: Dockerfile
+    web: Dockerfile.heroku
 release:
   command:
     - ./scripts.deploy/release.sh
