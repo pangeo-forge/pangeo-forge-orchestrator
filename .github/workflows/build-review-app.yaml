@@ -1,0 +1,33 @@
+name: Build Review App
+
+on:
+  pull_request:
+    branches: ['main']
+    types: [opened, reopened, labeled]
+
+env:
+  PIPELINE: '17cc0239-494f-4a68-aa75-3da7c466709c'
+  REPO_URL: 'https://github.com/pangeo-forge/pangeo-forge-orchestrator'
+
+jobs:
+  build:
+    if: |
+      github.event.label.name == 'build-review-app' ||
+      contains( github.event.pull_request.labels.*.name, 'build-review-app')
+    runs-on: ubuntu-latest
+    steps:
+      # https://devcenter.heroku.com/articles/platform-api-reference#review-app-create
+      - run: |
+          curl -X POST https://api.heroku.com/review-apps \
+          -d '{
+            "branch": "${{ github.ref_name }}",
+            "pr_number": ${{ github.event.pull_request.number }},
+            "pipeline": "${{ env.PIPELINE }}",
+            "source_blob": {
+              "url": "${{ env.REPO_URL }}/tarball/${{ github.sha }}",
+              "version": "${{ github.sha }}"
+            }
+          }' \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/vnd.heroku+json; version=3" \
+          -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}"
