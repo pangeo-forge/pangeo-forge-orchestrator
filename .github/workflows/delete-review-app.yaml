@@ -1,0 +1,14 @@
+name: Delete Review App
+on: push
+
+pull_request:
+  branches: ['main']
+  types: [unlabeled]
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump GitHub context
+        id: github_context_step
+        run: echo '${{ toJSON(github) }}'
