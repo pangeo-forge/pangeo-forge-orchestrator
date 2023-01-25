@@ -22,7 +22,7 @@ jobs:
           | python3 -c "
           import sys, json;
           j = json.load(sys.stdin);
-          print('REVIEW_APP_ID=', [app['id'].strip() for app in j if app['pr_number'] == ${{ github.event.pull_request.number }}].pop(0))
+          print('REVIEW_APP_ID=' + [app['id'].strip() for app in j if app['pr_number'] == ${{ github.event.pull_request.number }}].pop(0))
           " >> $GITHUB_ENV
       - name: Delete review app
         run: |
