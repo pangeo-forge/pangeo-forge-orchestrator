@@ -20,16 +20,9 @@ jobs:
           -H "Accept: application/vnd.heroku+json; version=3" \
           -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}" \
           | python3 -c "
-            import sys, json;
-            j = json.load(sys.stdin);
-            print(
-              'REVIEW_APP_ID=',
-              [
-                app['id'].strip()
-                for app in j
-                if app['pr_number'] == ${{ github.event.pull_request.number }}
-              ].pop(0)
-            )
+          import sys, json;
+          j = json.load(sys.stdin);
+          print('REVIEW_APP_ID=', [app['id'].strip() for app in j if app['pr_number'] == ${{ github.event.pull_request.number }}].pop(0))
           " >> $GITHUB_ENV
       - name: Delete review app
         run: |
