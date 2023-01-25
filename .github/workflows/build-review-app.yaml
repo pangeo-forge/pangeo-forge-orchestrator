@@ -20,7 +20,7 @@ jobs:
       - run: |
           curl -X POST https://api.heroku.com/review-apps \
           -d '{
-            "branch": "${{ github.ref_name }}",
+            "branch": "${{ github.head_ref }}",
             "pr_number": ${{ github.event.pull_request.number }},
             "pipeline": "${{ env.PIPELINE }}",
             "source_blob": {
