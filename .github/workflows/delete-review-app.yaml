@@ -5,10 +5,35 @@ on:
     branches: ['main']
     types: [unlabeled]
 
+env:
+  PIPELINE: '17cc0239-494f-4a68-aa75-3da7c466709c'
+
 jobs:
   delete:
+    if: |
+      github.event.label.name == 'build-review-app'
     runs-on: ubuntu-latest
     steps:
-      - name: Dump GitHub context
-        id: github_context_step
-        run: echo '${{ toJSON(github) }}'
+      - name: Get review app id & export to env
+        run: |
+          curl -s https://api.heroku.com/pipelines/${{ env.PIPELINE }}/review-apps \
+          -H "Accept: application/vnd.heroku+json; version=3" \
+          -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}" \
+          | python3 -c "
+            import sys, json;
+            j = json.load(sys.stdin);
+            print(
+              'REVIEW_APP_ID=',
+              [
+                app['id'].strip()
+                for app in j
+                if app['pr_number'] == ${{ github.event.pull_request.number }}
+              ].pop(0)
+            )
+          " >> $GITHUB_ENV
+      - name: Delete review app
+        run: |
+          curl -X DELETE https://api.heroku.com/review-apps/${{ env.REVIEW_APP_ID }} \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/vnd.heroku+json; version=3" \
+          -H "Authorization: Bearer ${{ secrets.HEROKU_API_KEY }}"
