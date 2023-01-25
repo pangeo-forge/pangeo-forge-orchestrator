@@ -24,8 +24,8 @@ jobs:
             "pr_number": ${{ github.event.pull_request.number }},
             "pipeline": "${{ env.PIPELINE }}",
             "source_blob": {
-              "url": "${{ env.REPO_URL }}/tarball/${{ github.sha }}",
-              "version": "${{ github.sha }}"
+              "url": "${{ env.REPO_URL }}/tarball/${{ github.event.pull_request.head.sha }}",
+              "version": "${{ github.event.pull_request.head.sha }}"
             }
           }' \
           -H "Content-Type: application/json" \
