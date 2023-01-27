@@ -11,9 +11,8 @@ python3.9 -m alembic upgrade head
 
 if [[ -z "${PANGEO_FORGE_DEPLOYMENT}" ]]; then
   echo "PANGEO_FORGE_DEPLOYMENT undefined, so this must be a review app..."
-  echo "Review app injected env var \$HEROKU_APP_NAME=${HEROKU_APP_NAME}..."
-  echo "Setting PANGEO_FORGE_DEPLOYMENT=\$HEROKU_APP_NAME..."
-  export PANGEO_FORGE_DEPLOYMENT=$HEROKU_APP_NAME
+  echo "Setting PANGEO_FORGE_DEPLOYMENT=dev-app-proxy..."
+  export PANGEO_FORGE_DEPLOYMENT=dev-app-proxy
 fi
 
 echo "setting terraform env..."
