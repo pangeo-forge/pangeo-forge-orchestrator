@@ -39,25 +39,20 @@ RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.
     && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | tee /usr/share/keyrings/cloud.google.gpg \
     && apt-get update && apt-get -y install google-cloud-cli
 
+# Install git, for fetching submodule contents below
+RUN apt-get update && apt-get -y install git
+
+# Install pip requirements, a time-consuming step!
 COPY requirements.txt ./
 RUN python3.9 -m pip install -r requirements.txt
-
-COPY . /opt/app
-WORKDIR /opt/app
 
 # heroku can't fetch submodule contents from github:
 # https://devcenter.heroku.com/articles/github-integration#does-github-integration-work-with-git-submodules
 # so even though we have this in the repo (for development & testing convenience), we actually .dockerignore
 # it, and then clone it from github at build time (otherwise we don't actually get these contents on heroku)
 # After cloning, reset to a specific commit, so we don't end up with the wrong contents.
-RUN apt-get update && apt-get -y install git
-RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring \
-    && cd dataflow-status-monitoring \
+RUN git clone -b main --single-branch \
+    https://github.com/pangeo-forge/dataflow-status-monitoring /opt/app \
+    && cd /opt/app/dataflow-status-monitoring \
     && git reset --hard c72a594b2aea5db45d6295fadd801673bee9746f \
     && cd -
-
-# the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
-# `postdeploy/seed_review_app_data.py`, but this shouldn't interfere with anything else.
-RUN SETUPTOOLS_SCM_PRETEND_VERSION=0.0 pip install . --no-deps
-
-RUN chmod +x scripts.deploy/release.sh
