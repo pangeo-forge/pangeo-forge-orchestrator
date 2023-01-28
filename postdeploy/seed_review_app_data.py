@@ -14,8 +14,18 @@ from pangeo_forge_orchestrator.models import MODELS
 test_staged_recipes = MODELS["feedstock"].table.from_orm(
     MODELS["feedstock"].creation(spec="pforgetest/test-staged-recipes")
 )
+gpcp_from_gcs = MODELS["feedstock"].table.from_orm(
+    MODELS["feedstock"].creation(spec="pforgetest/gpcp-from-gcs-feedstock")
+)
+default_bakery = MODELS["bakery"].table.from_orm(
+    MODELS["bakery"].creation(
+        region="foo",
+        name="pangeo-ldeo-nsf-earthcube",
+        description="bar",
+    )
+)
 
-to_commit = [test_staged_recipes]
+to_commit = [test_staged_recipes, gpcp_from_gcs, default_bakery]
 with Session(engine) as db_session:
     for model in to_commit:
         db_session.add(model)
