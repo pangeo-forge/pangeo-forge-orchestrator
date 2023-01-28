@@ -87,8 +87,15 @@ async def get_access_token(gh: GitHubAPI) -> str:
 
 
 async def get_app_webhook_url(gh: GitHubAPI) -> str:
-    response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
-    return response["url"]
+    if heroku_app_name := os.environ.get("HEROKU_APP_NAME", None):
+        # This env var is only set on Heroku Review Apps, so if it's present, we know
+        # we need to generate the review app url here, because the GitHub App webhook
+        # url is a proxy url, and not the actual url for this review app instance.
+        return f"https://{heroku_app_name}.herokuapp.com/github/hooks/"
+    else:
+        # This is not a Review App, so we can query the GitHub App webhook url.
+        response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
+        return response["url"]
 
 
 async def get_repo_id(repo_full_name: str, gh: GitHubAPI) -> str:
