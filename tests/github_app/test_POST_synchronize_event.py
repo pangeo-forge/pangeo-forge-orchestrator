@@ -1,6 +1,5 @@
 import json
 import subprocess
-from typing import List
 from urllib.parse import urlparse
 
 import pytest
@@ -187,7 +186,7 @@ async def test_receive_synchronize_request(
     if title.startswith("Add ABC dataset, throws "):
         error_type = title.split()[-1]  # hacky way to get error types fixturized in pr title
 
-        def mock_subprocess_check_output_raises(cmd: List[str]):
+        def mock_subprocess_check_output_raises(cmd: list[str]):
             loglines = [{"status": "failed", "exc_info": f"Traceback\n{error_type}: error msg"}]
             output = "\n".join([json.dumps(line) for line in loglines])
             raise subprocess.CalledProcessError(1, cmd, output)

@@ -7,7 +7,7 @@ import tempfile
 import time
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -356,7 +356,7 @@ async def handle_dataflow_event(
 
         # Wow not every day you google a error and see a comment on it by Guido van Rossum
         # https://github.com/python/mypy/issues/1174#issuecomment-175854832
-        args: List[SQLModel] = [recipe_run]  # type: ignore
+        args: list[SQLModel] = [recipe_run]  # type: ignore
         if recipe_run.is_test:
             args.append(feedstock.spec)  # type: ignore
             logger.info(f"Calling `triage_test_run_complete` with {args=}")
@@ -451,10 +451,10 @@ async def handle_pr_comment_event(
 
 async def handle_pr_event(
     *,
-    payload: Dict,
-    gh_kws: Dict[str, Any],
+    payload: dict,
+    gh_kws: dict[str, Any],
     gh: GitHubAPI,
-    session_kws: Dict[str, Any],
+    session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
 ):
     """Process a PR event."""
@@ -618,7 +618,7 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
     # server, and so we do need to preseve that.
     to_encode = p.netloc if p.path == "/github/hooks/" else p.netloc + p.path
     to_encode += "%"  # control character to separate webhook url encoding from recipe run id
-    as_hex = "".join(["{:02x}".format(ord(x)) for x in to_encode])
+    as_hex = "".join([f"{ord(x):02x}" for x in to_encode])
     # decoding is easier if recipe_run id encoded with an even length, so zero-pad if odd.
     # note we are using ``f"0{recipe_run.id}"``, *not* ``f"{recipe_run_id:02}"`` to pad if odd,
     # because we want the *number of digits* to be even regardless of the length of the odd input.

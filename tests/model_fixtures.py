@@ -2,9 +2,9 @@
 This is where we put all the data about creating / updating models
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Sequence, Union
+from typing import Sequence, Union
 
-APIOpts = Dict[str, Union[int, str]]
+APIOpts = dict[str, Union[int, str]]
 
 
 @dataclass
@@ -14,8 +14,8 @@ class ModelFixture:
     create_opts: Sequence[APIOpts]  # valid ways to create the model
     invalid_opts: Sequence[APIOpts]  # setting these on creation or update should error
     update_opts: Sequence[APIOpts]  # setting these on update should be valid
-    dependencies: List["ModelRelationFixture"] = field(default_factory=list)  # req to create model
-    optional_relations: List["ModelRelationFixture"] = field(default_factory=list)  # not required
+    dependencies: list["ModelRelationFixture"] = field(default_factory=list)  # req to create model
+    optional_relations: list["ModelRelationFixture"] = field(default_factory=list)  # not required
 
     @property
     def all_relations(self):
