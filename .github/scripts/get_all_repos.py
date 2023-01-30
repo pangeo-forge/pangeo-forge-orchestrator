@@ -29,10 +29,7 @@ if __name__ == "__main__":
     }}
     """
 
-    headers = {
-        "Authorization": f"Bearer {GH_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {GH_API_TOKEN}", "Content-Type": "application/json"}
 
     all_repos = []
 
@@ -40,14 +37,18 @@ if __name__ == "__main__":
     cursor = None
 
     while has_next_page:
-        variables = { "cursor": cursor } if cursor else {}
-        response = requests.post("https://api.github.com/graphql", json={ "query": query, "variables": variables }, headers=headers)
+        variables = {"cursor": cursor} if cursor else {}
+        response = requests.post(
+            "https://api.github.com/graphql",
+            json={"query": query, "variables": variables},
+            headers=headers,
+        )
         data = response.json()
         repos = data["data"]["organization"]["repositories"]["edges"]
 
-        urls = [repo['node']['url'] for repo in repos]
+        urls = [repo["node"]["url"] for repo in repos]
         all_repos.extend(urls)
-       
+
         page_info = data["data"]["organization"]["repositories"]["pageInfo"]
         has_next_page = page_info["hasNextPage"]
         cursor = page_info["endCursor"]
@@ -55,5 +56,4 @@ if __name__ == "__main__":
     # write all_repos to a JSON string
     repos_json = json.dumps(all_repos)
     # set the output for GitHub Actions: https://github.com/orgs/community/discussions/28146
-    print(f'::set-output name=repos::{repos_json}')
-   
+    print(f"::set-output name=repos::{repos_json}")
