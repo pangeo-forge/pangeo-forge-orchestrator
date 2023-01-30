@@ -1,6 +1,6 @@
 import types
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -21,7 +21,7 @@ class RelationBuilder:
     """
 
     field: str
-    annotation: Union[SQLModel, List[str]]
+    annotation: Union[SQLModel, list[str]]
     back_populates: str
 
 
@@ -65,7 +65,7 @@ class MultipleModels:
     response: SQLModel
     descriptive_name: str
     extended_response: Optional[SQLModel] = None
-    relations: Optional[List[RelationBuilder]] = None
+    relations: Optional[list[RelationBuilder]] = None
 
     def __post_init__(self):
         self.creation: SQLModel = self.make_creator_cls()

@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_
@@ -116,7 +116,7 @@ for model_name, model in MODELS.items():
         model.path,
         make_read_range_endpoint(model),
         methods=["GET"],
-        response_model=List[model.response],  # type: ignore
+        response_model=list[model.response],  # type: ignore
         summary=f"Read a range of {model.descriptive_name} objects",
         tags=[model.descriptive_name, "public"],
     )
