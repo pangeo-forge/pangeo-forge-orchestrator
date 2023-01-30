@@ -40,6 +40,7 @@ repos:
       - id: mypy
         additional_dependencies:
           - 'pydantic'
+          - 'types-requests'
 
   - repo: https://github.com/rstcheck/rstcheck
     rev: v6.1.1

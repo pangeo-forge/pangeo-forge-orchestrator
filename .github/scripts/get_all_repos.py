@@ -37,7 +37,7 @@ if __name__ == "__main__":
     cursor = None
 
     while has_next_page:
-        variables = {"cursor": cursor} if cursor else {}
+        variables: dict[str, str | None] = {"cursor": cursor} if cursor else {}
         response = requests.post(
             "https://api.github.com/graphql",
             json={"query": query, "variables": variables},
