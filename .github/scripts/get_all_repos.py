@@ -44,7 +44,10 @@ if __name__ == "__main__":
         response = requests.post("https://api.github.com/graphql", json={ "query": query, "variables": variables }, headers=headers)
         data = response.json()
         repos = data["data"]["organization"]["repositories"]["edges"]
-        all_repos.extend(repos)
+
+        urls = [repo['node']['url'] for repo in repos]
+        all_repos.extend(urls)
+       
         page_info = data["data"]["organization"]["repositories"]["pageInfo"]
         has_next_page = page_info["hasNextPage"]
         cursor = page_info["endCursor"]
@@ -53,4 +56,4 @@ if __name__ == "__main__":
     repos_json = json.dumps(all_repos)
     # set the output for GitHub Actions: https://github.com/orgs/community/discussions/28146
     print(f'::set-output name=repos::{repos_json}')
-
+   
