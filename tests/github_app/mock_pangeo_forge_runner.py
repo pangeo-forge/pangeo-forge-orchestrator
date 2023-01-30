@@ -1,9 +1,8 @@
 import json
 from subprocess import CalledProcessError
-from typing import List
 
 
-def mock_subprocess_check_output_raises_called_process_error(cmd: List[str]):
+def mock_subprocess_check_output_raises_called_process_error(cmd: list[str]):
     subcmd = cmd[1]
     if subcmd == "bake":
         loglines = [
@@ -23,7 +22,7 @@ def mock_subprocess_check_output_raises_called_process_error(cmd: List[str]):
     raise CalledProcessError(1, cmd, output)
 
 
-def mock_subprocess_check_output(cmd: List[str]):
+def mock_subprocess_check_output(cmd: list[str]):
     """ """
 
     if cmd[0] == "pangeo-forge-runner":
@@ -42,9 +41,7 @@ def mock_subprocess_check_output(cmd: List[str]):
                 '{"message": "Expansion complete", "status": "completed", "meta": {"title": "Global Precipitation Climatology Project", "description": "Global Precipitation Climatology Project (GPCP) Daily Version 1.3 gridded, merged ty satellite/gauge precipitation Climate data Record (CDR) from 1996 to present.\\n", "pangeo_forge_version": "0.9.0", "pangeo_notebook_version": "2022.06.02", "recipes": [{"id": "gpcp", "object": "recipe:recipe"}], "provenance": {"providers": [{"name": "NOAA NCEI", "description": "National Oceanographic & Atmospheric Administration National Centers for Environmental Information", "roles": ["host", "licensor"], "url": "https://www.ncei.noaa.gov/products/global-precipitation-climatology-project"}, {"name": "University of Maryland", "description": "University of Maryland College Park Earth System Science Interdisciplinary Center (ESSIC) and Cooperative Institute for Climate and Satellites (CICS).\\n", "roles": ["producer"], "url": "http://gpcp.umd.edu/"}], "license": "No constraints on data access or use."}, "maintainers": [{"name": "Ryan Abernathey", "orcid": "0000-0001-5999-4917", "github": "rabernat"}], "bakery": {"id": "pangeo-ldeo-nsf-earthcube"}}}\n'
             )
         elif cmd[1] == "bake":
-            return '{"message": "Submitted job 2022-11-02_09_47_12-7631717319482580875 for recipe NASA-SMAP-SSS/RSS/monthly","recipe": "NASA-SMAP-SSS/RSS/monthly","job_name": "a6170692e70616e67656f2d666f7267652e6f7267251366","job_id": "2022-11-02_09_47_12-7631717319482580875","status": "submitted"}'.encode(
-                "utf-8"
-            )
+            return b'{"message": "Submitted job 2022-11-02_09_47_12-7631717319482580875 for recipe NASA-SMAP-SSS/RSS/monthly","recipe": "NASA-SMAP-SSS/RSS/monthly","job_name": "a6170692e70616e67656f2d666f7267652e6f7267251366","job_id": "2022-11-02_09_47_12-7631717319482580875","status": "submitted"}'
         else:
             raise NotImplementedError(f"Command {cmd} not implemented in tests.")
     else:
