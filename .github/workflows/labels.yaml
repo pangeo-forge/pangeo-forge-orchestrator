@@ -38,15 +38,11 @@ jobs:
   sync-labels:
     runs-on: ubuntu-latest
     needs: get-all-repos
-    strategy:
-      fail-fast: false
-      matrix:
-        repository: ${{ fromJson(needs.get-all-repos.outputs.repos) }}
     steps:
       - name: checkout repo
         uses: actions/checkout@v3
       - uses: micnncim/action-label-syncer@v1
         with:
           manifest: .github/labels-definition.yaml
-          repository: ${{ matrix.repository }}
+          repository: ${{ fromJson(needs.get-all-repos.outputs.repos) }}
           token: ${{ secrets.GH_API_TOKEN }}

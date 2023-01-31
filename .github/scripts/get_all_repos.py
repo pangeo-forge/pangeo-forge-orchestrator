@@ -46,8 +46,9 @@ if __name__ == "__main__":
         data = response.json()
         repos = data["data"]["organization"]["repositories"]["edges"]
 
-        urls = [repo["node"]["url"] for repo in repos]
-        all_repos.extend(urls)
+        # Replace the first occurrence of 'https://github.com/' with an empty string
+        repos = [repo["node"]["url"].replace("https://github.com/", "", 1) for repo in repos]
+        all_repos.extend(repos)
 
         page_info = data["data"]["organization"]["repositories"]["pageInfo"]
         has_next_page = page_info["hasNextPage"]
