@@ -1,0 +1,98 @@
+- name: CI
+  color: 5D36D6
+  description: Related to CI and GitHub workflows
+- name: LEAP
+  color: 75B308
+  description: ''
+- name: M2LInES
+  color: E3511F
+  description: Datasets for the M2LInES project
+- name: blocked:backend-release
+  color: fbca04
+  description: Requires a new release of the orchestrator backend.
+- name: blocked:credentials
+  color: EED0D6
+  description: Recipe requires credentials to access source data.
+- name: blocked:data-provider
+  color: 006b75
+  description:
+    The data provider may need to change something in how they are distributing
+    the data.
+- name: blocked:external-dependency
+  color: bfd4f2
+  description: Requires dependency not currently included in runner image.
+- name: blocked:github-app-feature
+  color: 6ADF13
+  description: Recipe requires new feature in GitHub App.
+- name: blocked:recipes-feature
+  color: EBB9EC
+  description: ''
+- name: blocked:recipes-release
+  color: fef2c0
+  description: Requires a pangeo-forge-recipes release to run.
+- name: blocked:requires-dind
+  color: B6D1C6
+  description:
+    Requires Docker in Docker on backend to deploy, due to some import
+    at recipe top level.
+- name: blocked:runner-image
+  color: e99695
+  description: No current version of runner image is available with the required dependencies.
+- name: blocked:runner-release
+  color: 3208F5
+  description: Requires a new release of pangeo-forge-runner.
+- name: debuggable
+  color: bfdadc
+  description:
+    This recipe is not blocked; it should be debuggable with some additional
+    effort.
+- name: dev
+  color: 7660EC
+  description: (dev use only) directs registrar calls to staging api
+- name: 'difficulty: easy'
+  color: 69D8C2
+  description: ''
+- name: 'difficulty: hard'
+  color: A1228A
+  description: ''
+- name: 'difficulty: moderate'
+  color: FCB664
+  description: ''
+- name: documentation
+  color: 0075ca
+  description: Improvements or additions to documentation
+- name: duplicate
+  color: cfd3d7
+  description: This issue or pull request already exists
+- name: github-app-dev
+  color: AF44EE
+  description: ''
+- name: kerchunk
+  color: C4A14B
+  description: ''
+- name: needs:contributor-action
+  color: 70B649
+  description: This PR is awaiting an action from the contributor.
+- name: not-enough-info
+  color: 12BE91
+  description: ''
+- name: not-recipe
+  color: fbca04
+  description:
+    This PR does not contain a recipe. It might be a configuration fix
+    for the `staged-recipes` repo.
+- name: possibly-out-of-scope
+  color: A65352
+  description: ''
+- name: proposed recipe
+  color: 007bff
+  description: ''
+- name: question
+  color: d876e3
+  description: Further information is requested
+- name: requires-java
+  color: 5F5B36
+  description: ''
+- name: swot-adac
+  color: DDF76A
+  description: SWOT Adopt-a-Crossover Dataset
