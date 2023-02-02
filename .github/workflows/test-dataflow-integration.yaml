@@ -44,7 +44,9 @@ jobs:
 
       # conditional step if triggering event is deployment_status
       - name: Maybe set REVIEW_APP_URL and DEPLOYMENT_STATE from deployment_status
-        if: github.event_name == 'deployment_status'
+        if: |
+          github.event_name == 'deployment_status'
+          && contains( github.event.pull_request.labels.*.name, 'test-dataflow')
         run: |
           echo 'REVIEW_APP_URL=${{ github.event.deployment_status.environment_url }}
           DEPLOYMENT_STATE=${{ github.event.deployment_status.state }}' \
@@ -54,10 +56,7 @@ jobs:
         # NOTE: Heroku updates deployment as 'success' when build succeedes, not when release succeedes.
         # So there is actually still a latency between setting this status, and when the review app is
         # ready to receive payloads. Hmm...
-        if: |
-          env.DEPLOYMENT_STATE == 'success'
-          && contains( github.event.pull_request.labels.*.name, 'test-dataflow')
-        # TODO: in this run block:
+        if: ${{ env.DEPLOYMENT_STATE == 'success' }}
         #   - check to see if app has been released (or if it's just been built)
         #   - if only built, then sleep until it's been released
         run: |
