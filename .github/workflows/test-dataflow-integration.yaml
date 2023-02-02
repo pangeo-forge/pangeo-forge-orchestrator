@@ -1,0 +1,62 @@
+name: Test Dataflow Integration
+
+on:
+  deployment_status:
+  # TODO: add on 'schedule' against staging deployment?
+  pull_request:
+    branches: ['main']
+    types: [labeled]
+
+jobs:
+  test:
+    # run when:
+    #  - a PR is labeled 'test-dataflow'
+    #    (assuming it is also labeled 'build-review-app'
+    #    *and* the deployment for the head sha is a success)
+    #  - heroku marks a deployment with 'state' == 'success'
+    #    (assuming PR also has 'test-dataflow' label)
+    runs-on: ubuntu-latest
+    steps:
+      # conditional step if triggering event is a pull_request
+      - name: Maybe get deployment state from pull request
+        if: |
+          github.event_name == 'pull_request'
+          && github.event.label.name == 'test-dataflow'
+          && contains( github.event.pull_request.labels.*.name, 'build-review-app')
+        # if we get here, this is a pull request, so we need to know the statuses url
+        # for the deployment associated with the head sha. we use the **base** repo
+        # deployments url, and look for deployments associated with pr's head sha.
+        # (the head repo deployments url would cause errors, if the pr is from a fork.)
+        run: |
+          export DEPLOYMENTS_URL=\
+          ${{ github.event.pull_request.base.repo.deployments_url }}\
+          \?environment\=pforge-pr-${{ github.event.pull_request.number }}\
+          \&sha\=${{ github.event.pull_request.head.sha }}
+          curl -s $DEPLOYMENTS_URL \
+          | python3 -c "
+          import sys, json; print(json.load(sys.stdin)[0]['statuses_url'])" \
+          | xargs -I{} curl -s {} \
+          | python3 -c "
+          import sys, json; print('DEPLOYMENT_STATE=' + json.load(sys.stdin)[-1]['state'])" \
+          >> $GITHUB_ENV
+
+      # conditional step if triggering event is deployment_status
+      - name: Maybe set DEPLOYMENT_STATE var from deployment_status event
+        if: github.event_name == 'deployment_status'
+        # TODO: set env.DEPLOYMENT_STATE in run block below
+        # Question: in the case of this trigger, will the check run created be associated with the
+        # PR? or will this be handled via the top level of GitHub Actions in the repo? If the latter,
+        # then we need to manually create a check run at the PR head sha, in this case.
+        run: echo '${{ toJSON(github) }}' # for now, just figure out what's in the github context here
+
+      - name: Run test
+        if: |
+          env.DEPLOYMENT_STATE == 'success'
+          && contains( github.event.pull_request.labels.*.name, 'test-dataflow')
+        # TODO: in this run block:
+        #   - programatically make a /run comment on an existing PR in pforgetest
+        #   - check to ensure a dataflow job was submitted within a plausible timeframe
+        #   - wait for the job to complete (5-6 mins)
+        #   - check to make sure the job was successful
+        run: |
+          echo foo
