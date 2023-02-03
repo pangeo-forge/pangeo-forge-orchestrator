@@ -87,7 +87,7 @@ jobs:
                   # releases shouldn't take > 10 mins; something's gone wrong, so exit.
                   sys.exit(1)
               contents = urlopen('${{ env.REVIEW_APP_URL }}').read().decode()
-              if contents == '{\"status\":\"ok\"}':
+              if contents == '{\"status\":\"ok"}':
                   # if we get this response from the review app, it's up and ready to go.
                   print('IS_UP=True')
                   break
@@ -105,5 +105,13 @@ jobs:
         #   - check to ensure a dataflow job was submitted within a plausible timeframe
         #   - wait for the job to complete (5-6 mins)
         #   - check to make sure the job was successful
+
+        # we need to checkout pangeo-forge-orchestrator:
+        # - install it (to get `get_jwt` function, etc)
+        # - get + decrypt dev-app-proxy creds
+        # - call github API as described in https://github.com/pangeo-forge/pangeo-forge-orchestrator/tree/main/docs#github-app-manual-api-calls
+        #   during the test (decrypt them here with sops -d -i ... && pytest -vx ...)
+        # - get the tests dir
+        uses: actions/checkout@v3
         run: |
           echo foo
