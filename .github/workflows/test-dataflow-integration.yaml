@@ -69,17 +69,30 @@ jobs:
           >> $GITHUB_ENV
 
       - name: Is app up?
-        # NOTE: Heroku updates deployment as 'success' when build succeedes, not when release succeedes.
-        # So there is actually still a latency between setting this status, and when the review app is
-        # ready to receive payloads. Hmm...
         if: ${{ env.DEPLOYMENT_STATE == 'success' }}
-        #   - check to see if app has been released (or if it's just been built)
-        #   - if only built, then sleep until it's been released
+        # Heroku updates deployment as 'success' when build succeedes, not when *release* succeedes.
+        # So there is actually still a latency between when this status is set, and when the review app
+        # is ready to receive requests. In general, the review apps take about 3 minutes to release.
+        # So here we wait 2 minutes, then start checking if the app is up, repeating every 30 seconds
+        # until it's either up, or if > 10 mins have elapsed, something's gone wrong, so we bail out.
         run: |
-          curl -s env.REVIEW_APP_URL \
-          | python3 -c "
-          import sys;
-          IS_UP = True if sys.stdin.read() == '{\"status\":\"ok\"}' else False; print(f'{IS_UP=}')" \
+          python3 -c "
+          import sys, time;
+          from urllib.request import urlopen;
+          start = time.time();
+          time.sleep(60 * 2);
+          while True:
+              elapsed = time.time() - start;
+              if elapsed > 60 * 10:
+                  # releases shouldn't take > 10 mins; something's gone wrong, so exit.
+                  sys.exit(1)
+              contents = urlopen(${{ env.REVIEW_APP_URL }}).read().decode()
+              if contents == '{"status":"ok"}':
+                  # if we get this response from the review app, it's up and ready to go.
+                  print('IS_UP=True')
+                  break
+              else:
+                  time.sleep(30)" \
           >> $GITHUB_ENV
 
       - name: Run test
