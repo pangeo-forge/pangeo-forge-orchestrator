@@ -39,17 +39,33 @@ jobs:
           | python3 -c "
           import sys, json;
           d = json.load(sys.stdin)[-1];
-          print('DEPLOYMENT_STATE=' + d['state'] + '\nREVIEW_APP_URL=' + d['environment_url']);" \
+          print('TEST_DATAFLOW=True');
+          print('DEPLOYMENT_STATE=' + d['state']);
+          print('REVIEW_APP_URL=' + d['environment_url']);" \
           >> $GITHUB_ENV
 
       # conditional step if triggering event is deployment_status
       - name: Maybe set REVIEW_APP_URL and DEPLOYMENT_STATE from deployment_status
         if: |
           github.event_name == 'deployment_status'
-          && contains( github.event.pull_request.labels.*.name, 'test-dataflow')
+        # if we're here, we know this is a deployment_status event, but we don't know whether or not
+        # the PR has the 'test-dataflow' label. (it's possible the PR *only* has the 'build-review-app'
+        # label, but not the 'test-dataflow' label, in which case we do not want to deploy a dataflow job.
+        # so before we do anything else, we need to make sure this PR is labeled 'test-dataflow'.
+        # note that the github deployment "environments" for our review apps are named according to the
+        # convention "pforge-pr-${NUMBER}". so our most direct path to get the PR number from the deployment
+        # status event is to parse the PR number out of this string.
         run: |
-          echo 'REVIEW_APP_URL=${{ github.event.deployment_status.environment_url }}
-          DEPLOYMENT_STATE=${{ github.event.deployment_status.state }}' \
+          export ENVIRONMENT=${{ github.event.deployment_status.environment }} \
+          && python3 -c "
+          import os; print(os.environ['ENVIRONMENT'].split('-')[-1])" \
+          | xargs -I{} curl -s ${{ github.event.deployment_status.repository_url }}/pulls/{} \
+          | python3 -c "
+          import json, sys;
+          labels = json.load(sys.stdin)['labels'];
+          print('TEST_DATAFLOW=' + (True if any([l['name'] == 'test-dataflow' for l in labels]) else False));
+          print('REVIEW_APP_URL=' + ${{ github.event.deployment_status.environment_url }});
+          print('DEPLOYMENT_STATE=' + ${{ github.event.deployment_status.state }});" \
           >> $GITHUB_ENV
 
       - name: Is app up?
@@ -69,8 +85,8 @@ jobs:
       - name: Run test
         if: |
           env.DEPLOYMENT_STATE == 'success'
-          && contains( github.event.pull_request.labels.*.name, 'test-dataflow')
           && env.IS_UP == 'True'
+          && env.TEST_DATAFLOW == 'True'
         # TODO:
         #   - programatically make a /run comment on an existing PR in pforgetest
         #   - check to ensure a dataflow job was submitted within a plausible timeframe
