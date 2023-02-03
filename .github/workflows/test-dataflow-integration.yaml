@@ -87,7 +87,7 @@ jobs:
                   # releases shouldn't take > 10 mins; something's gone wrong, so exit.
                   sys.exit(1)
               contents = urlopen('${{ env.REVIEW_APP_URL }}').read().decode()
-              if contents == '{"status":"ok"}':
+              if contents == '{\"status\":\"ok\"}':
                   # if we get this response from the review app, it's up and ready to go.
                   print('IS_UP=True')
                   break
