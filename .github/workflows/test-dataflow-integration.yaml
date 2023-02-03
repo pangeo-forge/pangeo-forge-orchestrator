@@ -63,7 +63,7 @@ jobs:
           | python3 -c "
           import json, sys;
           labels = json.load(sys.stdin)['labels'];
-          print('TEST_DATAFLOW=' + (True if any([l['name'] == 'test-dataflow' for l in labels]) else False));
+          print('TEST_DATAFLOW=' + str(True if any([l['name'] == 'test-dataflow' for l in labels]) else False));
           print('REVIEW_APP_URL=' + '${{ github.event.deployment_status.environment_url }}');
           print('DEPLOYMENT_STATE=' + '${{ github.event.deployment_status.state }}');" \
           >> $GITHUB_ENV
