@@ -1,5 +1,4 @@
 def test_xarray_repr(client):
-
     url = "https://ncsa.osn.xsede.org/Pangeo/pangeo-forge/HadISST-feedstock/hadisst.zarr"
     response = client.read_range(f"/repr/xarray/?url={url}")
     assert response["dataset"] == url

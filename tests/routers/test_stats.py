@@ -6,7 +6,6 @@ from ..model_fixtures import recipe_run_fixture
 
 @pytest.mark.parametrize("model_fixture", [recipe_run_fixture])
 def test_bakery_stats(client, authorized_client, model_fixture):
-
     _ = create_with_dependencies(model_fixture.create_opts[0], model_fixture, authorized_client)
 
     response = client.read_range("/stats/bakeries")
@@ -15,7 +14,6 @@ def test_bakery_stats(client, authorized_client, model_fixture):
 
 @pytest.mark.parametrize("model_fixture", [recipe_run_fixture])
 def test_recipe_run_stats(client, authorized_client, model_fixture):
-
     _ = create_with_dependencies(model_fixture.create_opts[0], model_fixture, authorized_client)
 
     response = client.read_range("/stats/recipe_runs")
@@ -25,7 +23,6 @@ def test_recipe_run_stats(client, authorized_client, model_fixture):
 @pytest.mark.parametrize("query", ["", "exclude_test_runs=true"])
 @pytest.mark.parametrize("model_fixture", [recipe_run_fixture])
 def test_dataset_stats(client, authorized_client, model_fixture, query):
-
     create_response = create_with_dependencies(
         model_fixture.create_opts[0], model_fixture, authorized_client
     )

@@ -313,13 +313,11 @@ async def handle_dataflow_event(
     gh: GitHubAPI,
     gh_kws: dict,
 ):
-
     logger.info(f"Received dataflow webhook with {payload = }")
 
     action = payload["action"]
 
     if action == "completed":
-
         if payload["conclusion"] not in ("success", "failure"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -400,7 +398,6 @@ async def handle_pr_comment_event(
     pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
 
     if action == "created":
-
         comment_body = comment["body"]
         if not comment_body.startswith("/"):
             # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
@@ -465,7 +462,6 @@ async def handle_pr_event(
     pr = payload["pull_request"]
 
     if action in ("synchronize", "opened"):
-
         base_repo_name = pr["base"]["repo"]["full_name"]
         if ignore_repo(base_repo_name):
             return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
@@ -552,7 +548,6 @@ async def parse_payload(request, payload_bytes, event):
 
 async def verify_hash_signature(request: Request, payload_bytes: bytes) -> None:
     if hash_signature := request.headers.get("X-Hub-Signature-256", None):
-
         github_app = get_config().github_app
         webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
         h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
