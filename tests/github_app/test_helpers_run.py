@@ -35,7 +35,6 @@ async def run_fixture(
     async_app_client,
     request,
 ):
-
     admin_headers = {"X-API-Key": api_key}
     bakery_create_response = await async_app_client.post(
         "/bakeries/",

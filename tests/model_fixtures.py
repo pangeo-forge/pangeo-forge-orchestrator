@@ -1,8 +1,9 @@
 """
 This is where we put all the data about creating / updating models
 """
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence, Union
+from typing import Union
 
 APIOpts = dict[str, Union[int, str]]
 

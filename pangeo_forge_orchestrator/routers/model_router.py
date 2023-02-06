@@ -158,7 +158,6 @@ def get_feedstock_datasets(
         "all", description="Filter by whether the dataset is a production or test dataset"
     ),
 ):
-
     model = MODELS["recipe_run"]
 
     statement = and_(
