@@ -1,31 +1,50 @@
 import os
 import random
+import subprocess
 from pathlib import Path
 
+import aiohttp
 import pytest
 import pytest_asyncio
 import yaml  # type: ignore
 from gidgethub.aiohttp import GitHubAPI
 
-from pangeo_forge_orchestrator.http import HttpSession
 from pangeo_forge_orchestrator.routers.github_app import get_access_token
 
+PANGEO_FORGE_DEPLOYMENT = "dev-app-proxy"
+os.environ["PANGEO_FORGE_DEPLOYMENT"] = PANGEO_FORGE_DEPLOYMENT
 
-@pytest_asyncio.fixture(scope="session")
+
+@pytest.fixture(scope="session", autouse=True)
+def decrypt_encrypt_secrets():
+    repo_root = Path(__file__).parent.parent
+
+    # FIXME: these paths will change (and i believe the bakery_secrets path will
+    # no longer be necessary) following completion of the traitlets refactor
+    dev_app_proxy_secrets = repo_root / "secrets" / "config.dev-app-proxy.yaml"
+    bakery_secrets = repo_root / "secrets" / "bakery-args.pangeo-ldeo-nsf-earthcube.yaml"
+    all_secrets = [dev_app_proxy_secrets, bakery_secrets]
+
+    for path in all_secrets:
+        # decrypt secrets on test setup
+        subprocess.run(f"sops -d -i {path}".split())
+
+    yield
+
+    # re-encrypt (restore) secrets on test teardown
+    subprocess.run("git restore secrets".split())
+
+
+@pytest_asyncio.fixture
 async def gh() -> GitHubAPI:
     """A global gidgethub session to use throughout the integration tests."""
 
-    http_session = HttpSession()
-    yield GitHubAPI(http_session)
-    await http_session.stop()
+    async with aiohttp.ClientSession() as session:
+        yield GitHubAPI(session, PANGEO_FORGE_DEPLOYMENT)
 
 
 @pytest_asyncio.fixture
 async def gh_kws(gh: GitHubAPI) -> dict:
-    # this entire test relies on the assumption that it is being called from the root of the
-    # pangeo-forge-orchestrator repo, and therefore has access to the `dev-app-proxy` github app
-    # creds. if these creds are not decrypted before this test is run, strange non-self-describing
-    # errors may occur, so before we run the test, let's just make sure the creds are decrypted.
     # NOTE: the path to these credentials will need to change after traitlets refactor goes in.
     with open(Path(__file__).parent.parent / "secrets/config.dev-app-proxy.yaml") as f:
         if "sops" in yaml.safe_load(f):
@@ -33,7 +52,6 @@ async def gh_kws(gh: GitHubAPI) -> dict:
                 "GitHub App `dev-app-proxy` credentials are encrypted. "
                 "Decrypt these credentials before running this test."
             )
-    # okay, the credentials are decrypted, so let's move along with the test.
     token = await get_access_token(gh)
     return dict(oauth_token=token, accept="application/vnd.github+json")
 
@@ -82,7 +100,7 @@ async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
             exists = True
             break
     if not exists:
-        label = gh.post(
+        label = await gh.post(
             f"/repos/{base}/labels",
             data=dict(
                 name=f"fwd:{app_url}/github/hooks/",
@@ -98,7 +116,7 @@ async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
     # errored out on the prior test attempt (before the label had been deleted).
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def staged_recipes_pr(
     gh: GitHubAPI,
     gh_kws: dict,
@@ -122,7 +140,7 @@ async def staged_recipes_pr(
     working_branch = await gh.post(  # noqa: F841
         f"/repos/{base}/git/refs",
         data=dict(
-            ref=f"refs/heads/{gh_workflow_run_id}",
+            ref=f"refs/heads/actions/runs/{gh_workflow_run_id}",
             sha=main["commit"]["sha"],
         ),
         **gh_kws,
@@ -130,7 +148,7 @@ async def staged_recipes_pr(
 
     # populate that branch with content files from the source pr
     src_files = await gh.getitem(
-        f"{source_pr['repo_full_name']}/pulls/{source_pr['pr_number']}/files",
+        f"repos/{source_pr['repo_full_name']}/pulls/{source_pr['pr_number']}/files",
         **gh_kws,
     )
     for f in src_files:
@@ -140,7 +158,7 @@ async def staged_recipes_pr(
             data=dict(
                 message=f"Adding {f['filename']}",
                 content=content["content"],
-                branch=gh_workflow_run_id,
+                branch=f"actions/runs/{gh_workflow_run_id}",
             ),
             **gh_kws,
         )
@@ -150,10 +168,11 @@ async def staged_recipes_pr(
         f"/repos/{base}/pulls",
         data=dict(
             title=f"[CI] Automated PR for workflow run {gh_workflow_run_id}",
-            head=gh_workflow_run_id,
+            head=f"actions/runs/{gh_workflow_run_id}",
             body=(
-                ":robot: Created by https://github.com/pangeo-forge/pangeo-forge-orchestrator"
-                f"/actions/runs/{gh_workflow_run_id}",
+                ":robot: Created for test run https://github.com/pangeo-forge/"
+                f"pangeo-forge-orchestrator/actions/runs/{gh_workflow_run_id}\n"
+                f":memo: Which is testing {pr_label.replace('fwd:', 'https://')}"
             ),
             base="main",
         ),
@@ -161,7 +180,9 @@ async def staged_recipes_pr(
     )
 
     # label the pr so the dev-app-proxy knows where to forward webhooks originating from this pr
-    gh.put(f"/repos/{base}/issues/{pr['number']}/labels", data=dict(labels=[pr_label]), **gh_kws)
+    await gh.put(
+        f"/repos/{base}/issues/{pr['number']}/labels", data=dict(labels=[pr_label]), **gh_kws
+    )
 
     yield pr
 
