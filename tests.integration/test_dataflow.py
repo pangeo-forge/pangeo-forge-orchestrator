@@ -1,4 +1,5 @@
 import os
+import random
 from pathlib import Path
 
 import pytest
@@ -58,13 +59,53 @@ def source_pr() -> dict[str, str]:
     )
 
 
+@pytest.fixture
+def base(source_pr):
+    if "staged-recipes" in source_pr["repo_full_name"]:
+        return "pforgetest/test-staged-recipes"
+    elif source_pr["repo_full_name"].endswith("-feedstock"):
+        # TODO: add a repo in `pforgetest` which can accept prs from any feedstock.
+        # this would essentially be just a blank repo containing an empty `feedstock/` directory.
+        raise NotImplementedError
+
+
+@pytest_asyncio.fixture
+async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
+    label_name_fmt = "fwd:{app_url}"
+    if "smee" not in app_url:
+        # smee proxy urls do not take the route path; heroku review apps do.
+        label_name_fmt += "/github/hooks/"
+
+    exists = False
+    async for label in gh.getiter(f"repos/{base}/labels", **gh_kws):
+        if label["name"] == label_name_fmt.format(app_url=app_url):
+            exists = True
+            break
+    if not exists:
+        label = gh.post(
+            f"/repos/{base}/labels",
+            data=dict(
+                name=f"fwd:{app_url}/github/hooks/",
+                color=f"{random.randint(0, 0xFFFFFF):06x}",
+                description="Tells dev-app-proxy GitHub App to forward webhooks to specified url.",
+            ),
+            **gh_kws,
+        )
+    yield label["name"]
+    # TODO: delete label after every test? it could certainly be reused multiple times if not.
+    # if we do delete the label here, then the check to see if it exists would only hit if the label
+    # had been manually created outside a test session, or if the test runner happened to to have
+    # errored out on the prior test attempt (before the label had been deleted).
+
+
 @pytest_asyncio.fixture(scope="session")
 async def staged_recipes_pr(
     gh: GitHubAPI,
     gh_kws: dict,
     gh_workflow_run_id: str,
     source_pr: dict[str, str],
-    app_url: str,
+    base: str,
+    pr_label: str,
 ):
     """Makes a PR to ``pforgetest/test-staged-recipes`` and labels it ``f"fwd:{app_url}{route}"``,
     where ``{route}`` is optionally the path at which the app running at ``app_url`` receives
@@ -73,18 +114,10 @@ async def staged_recipes_pr(
     information is yielded to the test function using this fixture. When control is returned to this
     fixture, the PR and its associated branch are closed & cleaned-up.
     """
-    # create a new branch on pforgetest/test-staged-recipes with a descriptive name.
-    # (in the typical contribution process, recipes are contributed from forks. the deviation from
-    # that process here may introduce some sublte differences with production. for now, we are
+    # create a new branch on the test repo with a descriptive name.
+    # (in the typical contribution process, contributions may likely be from forks. the deviation
+    # from that process here may introduce some sublte differences with production. for now, we are
     # accepting that as the cost for doing this more simply; i.e., all within a single repo.)
-
-    if "staged-recipes" in source_pr["repo_full_name"]:
-        base = "pforgetest/test-staged-recipes"
-    elif source_pr["repo_full_name"].endswith("-feedstock"):
-        # TODO: add a repo in `pforgetest` which can accept prs from any feedstock.
-        # this would essentially be just a blank repo containing an empty `feedstock/` directory.
-        raise NotImplementedError
-
     main = await gh.getitem(f"/repos/{base}/branches/main", **gh_kws)
     working_branch = await gh.post(  # noqa: F841
         f"/repos/{base}/git/refs",
@@ -128,6 +161,7 @@ async def staged_recipes_pr(
     )
 
     # label the pr so the dev-app-proxy knows where to forward webhooks originating from this pr
+    gh.put(f"/repos/{base}/issues/{pr['number']}/labels", data=dict(labels=[pr_label]), **gh_kws)
 
     yield pr
 
