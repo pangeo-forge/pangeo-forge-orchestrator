@@ -136,6 +136,5 @@ async def staged_recipes_pr(
 
 
 def test_dataflow(staged_recipes_pr):
-
     ...
     #
