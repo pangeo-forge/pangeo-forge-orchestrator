@@ -198,12 +198,12 @@ async def staged_recipes_pr(
     await gh.patch(
         pr["url"],
         data=dict(state="closed"),
-        # oauth_token=gh_token.get_secret_value(),
+        oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
     await gh.delete(
         working_branch["url"],
-        # oauth_token=gh_token.get_secret_value(),
+        oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
 
