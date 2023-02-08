@@ -6,8 +6,8 @@ from pathlib import Path
 import aiohttp
 import pytest
 import pytest_asyncio
-import yaml  # type: ignore
 from gidgethub.aiohttp import GitHubAPI
+from pydantic import SecretStr
 
 from pangeo_forge_orchestrator.routers.github_app import get_access_token
 
@@ -44,16 +44,16 @@ async def gh() -> GitHubAPI:
 
 
 @pytest_asyncio.fixture
-async def gh_kws(gh: GitHubAPI) -> dict:
-    # NOTE: the path to these credentials will need to change after traitlets refactor goes in.
-    with open(Path(__file__).parent.parent / "secrets/config.dev-app-proxy.yaml") as f:
-        if "sops" in yaml.safe_load(f):
-            raise ValueError(
-                "GitHub App `dev-app-proxy` credentials are encrypted. "
-                "Decrypt these credentials before running this test."
-            )
+async def gh_token(gh: GitHubAPI) -> SecretStr:
     token = await get_access_token(gh)
-    return dict(oauth_token=token, accept="application/vnd.github+json")
+    # wrap in SecretStr to avoid leaking in failed test logs,
+    # see https://github.com/pytest-dev/pytest/issues/8613
+    return SecretStr(token)
+
+
+@pytest.fixture
+def gh_kws() -> dict:
+    return {"accept": "application/vnd.github+json"}
 
 
 @pytest.fixture
@@ -64,7 +64,7 @@ def app_url() -> str:
 
 @pytest.fixture
 def gh_workflow_run_id() -> str:
-    """Identified the GitHub Workflow run which called this test."""
+    """Identifies the GitHub Workflow run which called this test."""
     return os.environ["GH_WORKFLOW_RUN_ID"]
 
 
@@ -88,7 +88,7 @@ def base(source_pr):
 
 
 @pytest_asyncio.fixture
-async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
+async def pr_label(gh: GitHubAPI, gh_token: SecretStr, gh_kws: dict, base: str, app_url: str):
     label_name_fmt = "fwd:{app_url}"
     if "smee" not in app_url:
         # smee proxy urls do not take the route path; heroku review apps do.
@@ -107,6 +107,7 @@ async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
                 color=f"{random.randint(0, 0xFFFFFF):06x}",
                 description="Tells dev-app-proxy GitHub App to forward webhooks to specified url.",
             ),
+            oauth_token=gh_token.get_secret_value(),
             **gh_kws,
         )
     yield label["name"]
@@ -119,6 +120,7 @@ async def pr_label(gh: GitHubAPI, gh_kws: dict, base: str, app_url: str):
 @pytest_asyncio.fixture
 async def staged_recipes_pr(
     gh: GitHubAPI,
+    gh_token: SecretStr,
     gh_kws: dict,
     gh_workflow_run_id: str,
     source_pr: dict[str, str],
@@ -137,12 +139,13 @@ async def staged_recipes_pr(
     # from that process here may introduce some sublte differences with production. for now, we are
     # accepting that as the cost for doing this more simply; i.e., all within a single repo.)
     main = await gh.getitem(f"/repos/{base}/branches/main", **gh_kws)
-    working_branch = await gh.post(  # noqa: F841
+    working_branch = await gh.post(
         f"/repos/{base}/git/refs",
         data=dict(
             ref=f"refs/heads/actions/runs/{gh_workflow_run_id}",
             sha=main["commit"]["sha"],
         ),
+        oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
 
@@ -160,6 +163,7 @@ async def staged_recipes_pr(
                 content=content["content"],
                 branch=f"actions/runs/{gh_workflow_run_id}",
             ),
+            oauth_token=gh_token.get_secret_value(),
             **gh_kws,
         )
 
@@ -176,18 +180,32 @@ async def staged_recipes_pr(
             ),
             base="main",
         ),
+        oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
 
     # label the pr so the dev-app-proxy knows where to forward webhooks originating from this pr
     await gh.put(
-        f"/repos/{base}/issues/{pr['number']}/labels", data=dict(labels=[pr_label]), **gh_kws
+        f"/repos/{base}/issues/{pr['number']}/labels",
+        data=dict(labels=[pr_label]),
+        oauth_token=gh_token.get_secret_value(),
+        **gh_kws,
     )
 
     yield pr
 
-    # close pr and cleanup branch
-    ...
+    # close pr and delete branch
+    await gh.patch(
+        pr["url"],
+        data=dict(state="closed"),
+        # oauth_token=gh_token.get_secret_value(),
+        **gh_kws,
+    )
+    await gh.delete(
+        working_branch["url"],
+        # oauth_token=gh_token.get_secret_value(),
+        **gh_kws,
+    )
 
 
 def test_dataflow(staged_recipes_pr):
