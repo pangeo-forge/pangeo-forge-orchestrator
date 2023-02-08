@@ -1,6 +1,7 @@
 import os
 import random
 import subprocess
+import time
 from pathlib import Path
 
 import aiohttp
@@ -154,7 +155,8 @@ async def staged_recipes_pr(
         f"repos/{source_pr['repo_full_name']}/pulls/{source_pr['pr_number']}/files",
         **gh_kws,
     )
-    for f in src_files:
+
+    async def add_file(f):
         content = await gh.getitem(f["contents_url"], **gh_kws)
         await gh.put(
             f"/repos/{base}/contents/{f['filename']}",
@@ -166,6 +168,10 @@ async def staged_recipes_pr(
             oauth_token=gh_token.get_secret_value(),
             **gh_kws,
         )
+
+    # add first source file to working branch. see commend above where `add_file` is
+    # called a second time, below, for why both files are not added at the same time.
+    await add_file(src_files[0])
 
     # open a pr against pforgetest/test-staged-recipes:main
     pr = await gh.post(
@@ -192,6 +198,11 @@ async def staged_recipes_pr(
         **gh_kws,
     )
 
+    # add the second source file (after labeling, so that the `synchronize` task will be forwarded)
+    # for explanation of why files are added one at a time (rather than at the same time) see:
+    # https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/226#issuecomment-1423337307
+    await add_file(src_files[1])
+
     yield pr
 
     # close pr and delete branch
@@ -209,5 +220,5 @@ async def staged_recipes_pr(
 
 
 def test_dataflow(staged_recipes_pr):
-    ...
+    time.sleep(10)
     #
