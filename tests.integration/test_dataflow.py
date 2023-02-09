@@ -219,6 +219,19 @@ async def staged_recipes_pr(
     )
 
 
-def test_dataflow(staged_recipes_pr):
+@pytest.mark.asyncio
+async def test_dataflow(
+    gh: GitHubAPI,
+    gh_token: SecretStr,
+    gh_kws: dict,
+    base: str,
+    staged_recipes_pr: dict,
+):
     time.sleep(10)
-    #
+
+    await gh.post(
+        f"/repos/{base}/issues/{staged_recipes_pr['number']}/comments",
+        data=dict(body="/run gpcp-from-gcs"),
+        oauth_token=gh_token.get_secret_value(),
+        **gh_kws,
+    )
