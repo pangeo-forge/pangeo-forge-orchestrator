@@ -95,23 +95,24 @@ jobs:
                   time.sleep(30)" \
           >> $GITHUB_ENV
 
+      - name: Checkout the repo
+        uses: actions/checkout@v3
+
       - name: Run test
         if: |
           env.DEPLOYMENT_STATE == 'success'
           && env.IS_UP == 'True'
           && env.TEST_DATAFLOW == 'True'
-        # TODO:
+        # So far here, we:
         #   - programatically make a /run comment on an existing PR in pforgetest
         #   - check to ensure a dataflow job was submitted within a plausible timeframe
+        # Remaining TODO:
+        #   - parametrize SOURCE_REPO_FULL_NAME and SOURCE_REPO_PR_NUMBER
         #   - wait for the job to complete (5-6 mins)
         #   - check to make sure the job was successful
-
-        # we need to checkout pangeo-forge-orchestrator:
-        # - install it (to get `get_jwt` function, etc)
-        # - get + decrypt dev-app-proxy creds
-        # - call github API as described in https://github.com/pangeo-forge/pangeo-forge-orchestrator/tree/main/docs#github-app-manual-api-calls
-        #   during the test (decrypt them here with sops -d -i ... && pytest -vx ...)
-        # - get the tests dir
-        uses: actions/checkout@v3
         run: |
-          echo foo
+          GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
+          SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
+          SOURCE_REPO_PR_NUMBER=22 \
+          REVIEW_APP_URL=${{ env.REVIEW_APP_URL }} \
+          pytest -vx tests.integration/test_dataflow.py

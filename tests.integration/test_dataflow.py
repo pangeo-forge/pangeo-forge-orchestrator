@@ -3,6 +3,7 @@ import random
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import aiohttp
 import pytest
@@ -58,9 +59,9 @@ def gh_kws() -> dict:
 
 
 @pytest.fixture
-def app_url() -> str:
+def app_netloc() -> str:
     """Url on the public internet at which the app to test against is currently running."""
-    return os.environ["REVIEW_APP_URL"]
+    return urlparse(os.environ["REVIEW_APP_URL"]).netloc
 
 
 @pytest.fixture
@@ -89,22 +90,22 @@ def base(source_pr):
 
 
 @pytest_asyncio.fixture
-async def pr_label(gh: GitHubAPI, gh_token: SecretStr, gh_kws: dict, base: str, app_url: str):
-    label_name_fmt = "fwd:{app_url}"
-    if "smee" not in app_url:
+async def pr_label(gh: GitHubAPI, gh_token: SecretStr, gh_kws: dict, base: str, app_netloc: str):
+    label_name_fmt = "fwd:{app_netloc}"
+    if "smee" not in app_netloc:
         # smee proxy urls do not take the route path; heroku review apps do.
         label_name_fmt += "/github/hooks/"
 
     exists = False
     async for label in gh.getiter(f"repos/{base}/labels", **gh_kws):
-        if label["name"] == label_name_fmt.format(app_url=app_url):
+        if label["name"] == label_name_fmt.format(app_netloc=app_netloc):
             exists = True
             break
     if not exists:
         label = await gh.post(
             f"/repos/{base}/labels",
             data=dict(
-                name=f"fwd:{app_url}/github/hooks/",
+                name=f"fwd:{app_netloc}/github/hooks/",
                 color=f"{random.randint(0, 0xFFFFFF):06x}",
                 description="Tells dev-app-proxy GitHub App to forward webhooks to specified url.",
             ),
@@ -128,10 +129,10 @@ async def staged_recipes_pr(
     base: str,
     pr_label: str,
 ):
-    """Makes a PR to ``pforgetest/test-staged-recipes`` and labels it ``f"fwd:{app_url}{route}"``,
-    where ``{route}`` is optionally the path at which the app running at ``app_url`` receives
-    GitHub Webhooks. The label ``f"fwd:{app_url}{route}"`` informs the ``dev-app-proxy`` GitHub App
-    where to forward webhooks originating from the PR. After the PR is created, its identifying
+    """Makes a PR to ``pforgetest/test-staged-recipes`` with labels ``f"fwd:{app_netloc}{route}"``,
+    where ``{route}`` is optionally the path at which the app running at ``app_netloc`` receives
+    GitHub Webhooks. The label ``f"fwd:{app_netloc}{route}"`` informs the ``dev-app-proxy`` GitHub
+    App where to forward webhooks originating from the PR. After the PR is created, its identifying
     information is yielded to the test function using this fixture. When control is returned to this
     fixture, the PR and its associated branch are closed & cleaned-up.
     """
