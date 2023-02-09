@@ -114,7 +114,12 @@ jobs:
         #   - parametrize SOURCE_REPO_FULL_NAME and SOURCE_REPO_PR_NUMBER
         #   - wait for the job to complete (5-6 mins)
         #   - check to make sure the job was successful
+        # FIXME:
+        #   - DATABASE_URL is actually not needed for the test itself. It is included because
+        #     currently pangeo_forge_orchestrator modules cannot be imported without it. This
+        #     will probably be fixed in traitlets refactor and then DATABASE_URL can be dropped.
         run: |
+          DATABASE_URL=sqlite:///`pwd`/pytest-database.sqlite \
           GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
           SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
           SOURCE_REPO_PR_NUMBER=22 \
