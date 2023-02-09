@@ -235,3 +235,5 @@ async def test_dataflow(
         oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
+
+    time.sleep(60)
