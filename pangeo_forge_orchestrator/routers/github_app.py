@@ -740,7 +740,7 @@ async def run(
             # Add the traceback for this deployment failure to the recipe run, otherwise it could
             # easily get buried in the server logs. TODO: Consider: is there anything of security
             # significance in the call stack captured in the trace?
-            message = json.loads(recipe_run.message)
+            message = json.loads(recipe_run.message or "{}")
             recipe_run.message = json.dumps(message | {"trace": trace})
             db_session.add(recipe_run)
             db_session.commit()
