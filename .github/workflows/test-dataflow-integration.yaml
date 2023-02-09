@@ -98,6 +98,10 @@ jobs:
       - name: Checkout the repo
         uses: actions/checkout@v3
 
+      - name: Install deps
+        run: |
+          python3 -m pip install '.[dev]'
+
       - name: Run test
         if: |
           env.DEPLOYMENT_STATE == 'success'
