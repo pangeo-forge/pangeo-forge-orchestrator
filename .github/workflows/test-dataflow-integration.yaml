@@ -98,9 +98,14 @@ jobs:
       - name: Checkout the repo
         uses: actions/checkout@v3
 
-      - name: Install deps
+      - name: Install orchestrator + deps
         run: |
           python3 -m pip install '.[dev]'
+
+      - name: Install sops binary
+        uses: mdgreenwald/mozilla-sops-action@v1.4.1
+        with:
+          version: '3.7.3'
 
       - name: Run test
         if: |
