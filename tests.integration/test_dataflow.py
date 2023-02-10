@@ -23,7 +23,18 @@ def github_app() -> GitHubApp:
     return GitHubApp(
         name="dev-app-proxy",
         id=238613,
-        private_key=os.environ["DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY"],
+        # the private key is passed to the env as a `\n`-delimited, single line string from github
+        # repository secrets. when passed to the env, single backslash `\n`s become double `\\n`s,
+        # so that needs to be reversed here. this is just one of many possible ways to manage
+        # multiline private keys in the env. and for our case, i believe the simplest option;
+        # see also: https://github.com/dwyl/learn-environment-variables/issues/17.
+        private_key=os.environ["DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY"].replace("\\n", "\n"),
+        # NOTE: ☝️ this ☝️ credential **must match** the latest version stored in the SOPS-encrypted
+        # private key for the `dev-app-proxy` app stored in pangeo-forge-orchestrator. When that key
+        # rotated, this corresponding credential in github repository secrets must also be updated.
+        # we are duplicating this credential in two places because, for ci testing, it's much simpler
+        # to source this from github repository secrets than it would be to SOPS-decrypt from disk.
+        # the cost of that simplicity, is this duplication.
     )
 
 
