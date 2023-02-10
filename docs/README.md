@@ -798,6 +798,60 @@ consider adding an alternate pathway to test against the live GitHub API and/or 
 `pangeo-forge-runner`. This comes with its own challenges, of course, including fixturization & managing
 rate limits, in the case of the GitHub API.
 
+## Integration testing
+
+### Dataflow integration testing
+
+```mermaid
+
+sequenceDiagram
+    autonumber
+    actor Developer
+    participant orchestrator PR
+    participant integration test
+    participant Heroku API
+    participant Heroku Review App
+    participant pforgetest GitHub org
+    participant dev app proxy
+    participant Google Dataflow
+
+
+    Developer->>orchestrator PR: adds 'build-review-app' label
+    orchestrator PR->>Heroku API: requests review app
+    Heroku API-->>Heroku API: builds review app
+    Heroku API-->>orchestrator PR: sets deployment_status == success
+    Heroku API-->>Heroku Review App: begins release (~3 min)
+
+    Developer->>orchestrator PR: adds 'test-dataflow' label
+
+
+    loop
+    orchestrator PR->>Heroku Review App: polls  release status
+    Heroku Review App-->>orchestrator PR: responds with status
+    end
+
+    orchestrator PR-->orchestrator PR: release status verified as 'ok'
+
+    orchestrator PR->>integration test: calls test
+
+    integration test->>pforgetest GitHub org: makes automated recipe PR
+    integration test->>pforgetest GitHub org: labels PR 'fwd:{review app url}'
+
+    pforgetest GitHub org->>dev app proxy: sends webhook
+
+    dev app proxy-->>Heroku Review App: forwards webhook
+
+    Heroku Review App-->Heroku Review App: syncs PR to database
+
+    integration test->>pforgetest GitHub org: adds `/run {recipe_id}` comment to recipe PR
+
+    pforgetest GitHub org->>dev app proxy: sends webhook
+
+    dev app proxy-->>Heroku Review App: forwards webhook
+
+    Heroku Review App->>Google Dataflow: submits job
+```
+
 # GitHub App: manual API calls
 
 Situations may arise in which you want to call the GitHup API directly, authenticated as a
