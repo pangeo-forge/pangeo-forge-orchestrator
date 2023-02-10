@@ -37,7 +37,6 @@ async def gh(github_app: GitHubApp) -> GitHubAPI:
 
 @pytest_asyncio.fixture
 async def gh_token(github_app: GitHubApp, gh: GitHubAPI, gh_kws: dict) -> SecretStr:
-
     payload = {
         "iat": int(time.time()),
         "exp": int(time.time()) + (10 * 60),
