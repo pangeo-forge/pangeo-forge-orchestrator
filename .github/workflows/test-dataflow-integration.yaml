@@ -115,7 +115,7 @@ jobs:
         #   - wait for the job to complete (5-6 mins)
         #   - check to make sure the job was successful
         run: |
-          DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY=${{ secrets.DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY }} \
+          DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY='${{ secrets.DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY }}' \
           GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
           SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
           SOURCE_REPO_PR_NUMBER=22 \
