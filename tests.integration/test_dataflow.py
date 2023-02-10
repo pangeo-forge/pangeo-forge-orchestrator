@@ -1,56 +1,64 @@
 import os
 import random
-import subprocess
 import time
-from pathlib import Path
 from urllib.parse import urlparse
 
 import aiohttp
+import jwt
 import pytest
 import pytest_asyncio
 from gidgethub.aiohttp import GitHubAPI
-from pydantic import SecretStr
-
-from pangeo_forge_orchestrator.routers.github_app import get_access_token
-
-PANGEO_FORGE_DEPLOYMENT = "dev-app-proxy"
-os.environ["PANGEO_FORGE_DEPLOYMENT"] = PANGEO_FORGE_DEPLOYMENT
+from gidgethub.apps import get_installation_access_token
+from pydantic import BaseModel, SecretStr
 
 
-@pytest.fixture(scope="session", autouse=True)
-def decrypt_encrypt_secrets():
-    repo_root = Path(__file__).parent.parent
+class GitHubApp(BaseModel):
+    name: str
+    id: int
+    private_key: SecretStr
 
-    # FIXME: these paths will change (and i believe the bakery_secrets path will
-    # no longer be necessary) following completion of the traitlets refactor
-    dev_app_proxy_secrets = repo_root / "secrets" / "config.dev-app-proxy.yaml"
-    bakery_secrets = repo_root / "secrets" / "bakery-args.pangeo-ldeo-nsf-earthcube.yaml"
-    all_secrets = [dev_app_proxy_secrets, bakery_secrets]
 
-    for path in all_secrets:
-        # decrypt secrets on test setup
-        subprocess.run(f"sops -d -i {path}".split())
-
-    yield
-
-    # re-encrypt (restore) secrets on test teardown
-    subprocess.run("git restore secrets".split())
+@pytest.fixture(scope="session")
+def github_app() -> GitHubApp:
+    return GitHubApp(
+        name="dev-app-proxy",
+        id=238613,
+        private_key=os.environ["DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY"],
+    )
 
 
 @pytest_asyncio.fixture
-async def gh() -> GitHubAPI:
+async def gh(github_app: GitHubApp) -> GitHubAPI:
     """A global gidgethub session to use throughout the integration tests."""
 
     async with aiohttp.ClientSession() as session:
-        yield GitHubAPI(session, PANGEO_FORGE_DEPLOYMENT)
+        yield GitHubAPI(session, github_app.name)
 
 
 @pytest_asyncio.fixture
-async def gh_token(gh: GitHubAPI) -> SecretStr:
-    token = await get_access_token(gh)
+async def gh_token(github_app: GitHubApp, gh: GitHubAPI, gh_kws: dict) -> SecretStr:
+
+    payload = {
+        "iat": int(time.time()),
+        "exp": int(time.time()) + (10 * 60),
+        "iss": github_app.id,
+    }
+    gh_jwt = jwt.encode(payload, github_app.private_key.get_secret_value(), algorithm="RS256")
+
+    async for installation in gh.getiter("/app/installations", jwt=gh_jwt, **gh_kws):
+        # dev-app-proxy is only installed in one org (i.e., pforgetest), so
+        # the first iteration will give us the installation_id we're after
+        installation_id = installation["id"]
+        break
+    token_response = await get_installation_access_token(
+        gh,
+        installation_id=installation_id,
+        app_id=github_app.id,
+        private_key=github_app.private_key.get_secret_value(),
+    )
     # wrap in SecretStr to avoid leaking in failed test logs,
     # see https://github.com/pytest-dev/pytest/issues/8613
-    return SecretStr(token)
+    return SecretStr(token_response["token"])
 
 
 @pytest.fixture
