@@ -1,7 +1,9 @@
+import json
 import os
 import random
+import subprocess
 import time
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import jwt
@@ -77,9 +79,21 @@ def gh_kws() -> dict:
 
 
 @pytest.fixture
-def app_netloc() -> str:
-    """Url on the public internet at which the app to test against is currently running."""
-    return urlparse(os.environ["REVIEW_APP_URL"]).netloc
+def app_url() -> str:
+    """The review app url as provided by Heroku."""
+    return os.environ["REVIEW_APP_URL"]
+
+
+@pytest.fixture
+def app_netloc(app_url) -> str:
+    """Netloc of review app as parsed from app_url fixture."""
+    return urlparse(app_url).netloc
+
+
+@pytest.fixture
+def app_recipe_runs_route(app_url) -> str:
+    """Route on review app under test at which recipe runs can be retrieved."""
+    return urljoin(app_url, "/recipe_runs/")
 
 
 @pytest.fixture
@@ -98,7 +112,7 @@ def source_pr() -> dict[str, str]:
 
 
 @pytest.fixture
-def base(source_pr):
+def base(source_pr: dict[str, str]):
     if "staged-recipes" in source_pr["repo_full_name"]:
         return "pforgetest/test-staged-recipes"
     elif source_pr["repo_full_name"].endswith("-feedstock"):
@@ -138,7 +152,7 @@ async def pr_label(gh: GitHubAPI, gh_token: SecretStr, gh_kws: dict, base: str, 
 
 
 @pytest_asyncio.fixture
-async def staged_recipes_pr(
+async def recipe_pr(
     gh: GitHubAPI,
     gh_token: SecretStr,
     gh_kws: dict,
@@ -238,21 +252,106 @@ async def staged_recipes_pr(
     )
 
 
-@pytest.mark.asyncio
-async def test_dataflow(
+@pytest_asyncio.fixture
+async def recipe_run_id(recipe_pr: dict, app_recipe_runs_route: str):
+    # at the start of this test, the recipes_pr fixture has already made a pr on github, but we
+    # don't know exactly how long it take for that pr to be synchronized to the review app, so we
+    # run a loop to check for when the synchronization is complete.
+
+    # (when heroku re-builds a review app that has previously been built, the database attached to
+    # that review app persists between builds. the database is only reset if the review app is
+    # deleted, not simply rebuilt. therefore, even though each invocation of this test creates
+    # just one recipe_run, there can easily be many recipe runs in the heroku review app database.
+    # as such, we parse which specific recipe_run we're currently testing by comparing head_shas.)
+    time.sleep(10)
+    start = time.time()
+    print("\nQuerying review app database for recipe run id...")
+    while True:
+        elapsed = time.time() - start
+        async with aiohttp.ClientSession() as session:
+            get_runs = await session.get(app_recipe_runs_route)
+            runs = await get_runs.json()
+            print(f"{len(runs) = }")
+            print(f"{elapsed = }")
+        if any([r["head_sha"] == recipe_pr["head"]["sha"] for r in runs]):
+            print("inside any block")
+            run_id = [r for r in runs if r["head_sha"] == recipe_pr["head"]["sha"]][0]["id"]
+            break
+        elif elapsed > 60:
+            # synchronization should only take a few seconds, so if more than 30
+            # seconds has elapsed, something has gone wrong and we should bail out.
+            pytest.fail(f"Time {elapsed = } on synchronization.")
+        else:
+            # if no head_shas match, the sync task may
+            # still be running, so wait 2s then retry.
+            time.sleep(5)
+    yield run_id
+
+
+@pytest_asyncio.fixture
+async def dataflow_job_id(
+    recipe_run_id: int,
+    app_recipe_runs_route: str,
     gh: GitHubAPI,
     gh_token: SecretStr,
     gh_kws: dict,
     base: str,
-    staged_recipes_pr: dict,
+    recipe_pr: dict,
 ):
-    time.sleep(10)
-
+    # now we know the pr is synced, it's time to dispatch the `/run` command
     await gh.post(
-        f"/repos/{base}/issues/{staged_recipes_pr['number']}/comments",
+        f"/repos/{base}/issues/{recipe_pr['number']}/comments",
+        # FIXME: parametrize the recipe_id (currently hardcoded as gpcp-from-gcs).
+        # this is necessary to test against other recipes.
         data=dict(body="/run gpcp-from-gcs"),
         oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
+    # start polling the review app database to see if the job has been deployed to dataflow.
+    # if the job was deployed to dataflow, a job_id field will exist in the recipe_run message.
+    start = time.time()
+    while True:
+        elapsed = time.time() - start
+        async with aiohttp.ClientSession() as session:
+            get_run = await session.get(urljoin(app_recipe_runs_route, str(recipe_run_id)))
+            run = await get_run.json()
+        message = json.loads(run["message"] or "{}")
+        if "job_id" in message:
+            job_id = message["job_id"]
+            break
+        elif elapsed > 60 * 5:
+            # job submission is taking longer than 5 minutes, something must be wrong, so bail.
+            pytest.fail(f"Time {elapsed = } on job submission exceedes 5 minutes.")
+        else:
+            # if there is no job_id in the message, and less than 5 minutes has elapsed in this
+            # loop, the job submission might still be in process, so wait 30 seconds and retry
+            time.sleep(30)
+    yield job_id
 
-    time.sleep(60)
+
+@pytest.mark.asyncio
+async def test_dataflow(dataflow_job_id: str):
+    show_job = f"gcloud dataflow jobs show {dataflow_job_id} --format=json".split()
+    # at this point, the job has been submitted and we know the job_id, so time to start polling
+    # dataflow to see if its completed.
+    start = time.time()
+    while True:
+        elapsed = time.time() - start
+        print(f"Time {elapsed = }")
+        if elapsed > 60 * 12:
+            pytest.fail(f"Time {elapsed = } exceedes 12 minutes.")
+
+        # check job state
+        state_proc = subprocess.run(show_job, capture_output=True)
+        assert state_proc.returncode == 0
+        state = json.loads(state_proc.stdout)["state"]
+        print(f"Current {state = }")
+        if state == "Done":
+            # on Dataflow, "Done" means success
+            break
+        elif state == "Running":
+            # still running, let's give it another 30s then check again
+            time.sleep(30)
+        else:
+            # consider any other state a failure
+            pytest.fail(f"{state = } is neither 'Done' nor 'Running'")
