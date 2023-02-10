@@ -100,7 +100,7 @@ jobs:
 
       - name: Install deps
         run: |
-          python3 -m pip install aiohttp jwt pydantic pytest pytest-asyncio gidgethub
+          python3 -m pip install aiohttp PyJWT pydantic pytest pytest-asyncio gidgethub
 
       - name: Run test
         if: |
