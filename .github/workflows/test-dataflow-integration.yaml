@@ -98,14 +98,9 @@ jobs:
       - name: Checkout the repo
         uses: actions/checkout@v3
 
-      - name: Install orchestrator + deps
+      - name: Install deps
         run: |
-          python3 -m pip install '.[dev]'
-
-      - name: Install sops binary
-        uses: mdgreenwald/mozilla-sops-action@v1.4.1
-        with:
-          version: '3.7.3'
+          python3 -m pip install aiohttp jwt pydantic pytest pytest-asyncio gidgethub
 
       - name: Run test
         if: |
@@ -119,12 +114,8 @@ jobs:
         #   - parametrize SOURCE_REPO_FULL_NAME and SOURCE_REPO_PR_NUMBER
         #   - wait for the job to complete (5-6 mins)
         #   - check to make sure the job was successful
-        # FIXME:
-        #   - DATABASE_URL is actually not needed for the test itself. It is included because
-        #     currently pangeo_forge_orchestrator modules cannot be imported without it. This
-        #     will probably be fixed in traitlets refactor and then DATABASE_URL can be dropped.
         run: |
-          DATABASE_URL=sqlite:///`pwd`/pytest-database.sqlite \
+          DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY=${{ secrets.DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY }} \
           GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
           SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
           SOURCE_REPO_PR_NUMBER=22 \
