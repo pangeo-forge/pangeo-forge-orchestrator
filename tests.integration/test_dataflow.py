@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import random
@@ -236,7 +237,13 @@ async def recipe_pr(
     # https://github.com/pangeo-forge/pangeo-forge-orchestrator/pull/226#issuecomment-1423337307
     await add_file(src_files[1])
 
-    yield pr
+    # wait a moment to make sure new file is set on github, then get the pr
+    # in its current state (otherwise head_sha will not reflect latests commit)
+    await asyncio.sleep(3)
+    completed_pr = await gh.getitem(f"/repos/{base}/pulls/{pr['number']}", **gh_kws)
+
+    print(f"\nYielding {completed_pr['head']['sha'] = } from recipes_pr fixture...")
+    yield completed_pr
 
     # close pr and delete branch
     await gh.patch(
@@ -263,28 +270,26 @@ async def recipe_run_id(recipe_pr: dict, app_recipe_runs_route: str):
     # deleted, not simply rebuilt. therefore, even though each invocation of this test creates
     # just one recipe_run, there can easily be many recipe runs in the heroku review app database.
     # as such, we parse which specific recipe_run we're currently testing by comparing head_shas.)
-    time.sleep(10)
+    await asyncio.sleep(10)
     start = time.time()
-    print("\nQuerying review app database for recipe run id...")
+    print("Querying review app database for recipe run id...")
     while True:
         elapsed = time.time() - start
         async with aiohttp.ClientSession() as session:
             get_runs = await session.get(app_recipe_runs_route)
             runs = await get_runs.json()
-            print(f"{len(runs) = }")
-            print(f"{elapsed = }")
         if any([r["head_sha"] == recipe_pr["head"]["sha"] for r in runs]):
-            print("inside any block")
             run_id = [r for r in runs if r["head_sha"] == recipe_pr["head"]["sha"]][0]["id"]
+            print(f"Found matching recipe run in review app database with recipe_{run_id = }...")
             break
-        elif elapsed > 60:
+        elif elapsed > 30:
             # synchronization should only take a few seconds, so if more than 30
             # seconds has elapsed, something has gone wrong and we should bail out.
             pytest.fail(f"Time {elapsed = } on synchronization.")
         else:
             # if no head_shas match, the sync task may
             # still be running, so wait 2s then retry.
-            time.sleep(5)
+            await asyncio.sleep(5)
     yield run_id
 
 
@@ -299,16 +304,19 @@ async def dataflow_job_id(
     recipe_pr: dict,
 ):
     # now we know the pr is synced, it's time to dispatch the `/run` command
+    comment_body = "/run gpcp-from-gcs"
+    print(f"Making comment on test PR with {comment_body = }")
     await gh.post(
         f"/repos/{base}/issues/{recipe_pr['number']}/comments",
         # FIXME: parametrize the recipe_id (currently hardcoded as gpcp-from-gcs).
         # this is necessary to test against other recipes.
-        data=dict(body="/run gpcp-from-gcs"),
+        data=dict(body=comment_body),
         oauth_token=gh_token.get_secret_value(),
         **gh_kws,
     )
     # start polling the review app database to see if the job has been deployed to dataflow.
     # if the job was deployed to dataflow, a job_id field will exist in the recipe_run message.
+    print("Polling review app for dataflow job submission status...")
     start = time.time()
     while True:
         elapsed = time.time() - start
@@ -318,28 +326,38 @@ async def dataflow_job_id(
         message = json.loads(run["message"] or "{}")
         if "job_id" in message:
             job_id = message["job_id"]
+            print(f"Confirmed dataflow job submitted with {job_id = }")
             break
         elif elapsed > 60 * 5:
             # job submission is taking longer than 5 minutes, something must be wrong, so bail.
-            pytest.fail(f"Time {elapsed = } on job submission exceedes 5 minutes.")
+            pytest.fail(f"Time {elapsed = } on job submission.")
         else:
             # if there is no job_id in the message, and less than 5 minutes has elapsed in this
             # loop, the job submission might still be in process, so wait 30 seconds and retry
-            time.sleep(30)
+            await asyncio.sleep(30)
     yield job_id
 
 
 @pytest.mark.asyncio
 async def test_dataflow(dataflow_job_id: str):
-    show_job = f"gcloud dataflow jobs show {dataflow_job_id} --format=json".split()
+    # NOTE: much of this test is redundant with dataflow integration test
+    #    https://github.com/pangeo-forge/pangeo-forge-runner/
+    #    blob/c7c5e88c006ce5f5ea636d061423981bb9d23734/tests/integration/test_dataflow_integration.py
+
+    # 6 minutes seems like an average runtime for these jobs, but being optimistic
+    # let's start by waiting 5 minutes
+    start = time.time()
+    utc_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(start))
+    print(f"Waiting for 5 mins, starting at {utc_time = }")
+    time.sleep(60 * 5)
     # at this point, the job has been submitted and we know the job_id, so time to start polling
     # dataflow to see if its completed.
-    start = time.time()
+    show_job = f"gcloud dataflow jobs show {dataflow_job_id} --format=json".split()
     while True:
         elapsed = time.time() - start
         print(f"Time {elapsed = }")
         if elapsed > 60 * 12:
-            pytest.fail(f"Time {elapsed = } exceedes 12 minutes.")
+            pytest.fail(f"Time {elapsed = } on running job.")
 
         # check job state
         state_proc = subprocess.run(show_job, capture_output=True)
@@ -351,7 +369,7 @@ async def test_dataflow(dataflow_job_id: str):
             break
         elif state == "Running":
             # still running, let's give it another 30s then check again
-            time.sleep(30)
+            await asyncio.sleep(30)
         else:
             # consider any other state a failure
             pytest.fail(f"{state = } is neither 'Done' nor 'Running'")
