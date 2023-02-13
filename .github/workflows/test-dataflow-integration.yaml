@@ -102,6 +102,13 @@ jobs:
         run: |
           python3 -m pip install aiohttp PyJWT pydantic pytest pytest-asyncio gidgethub
 
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          # the creds to deploy jobs to dataflow are packaged with the review app itself, but
+          # this test needs its own read only creds so that it can poll dataflow for job status
+          credentials_json: '${{ secrets.GCP_DATAFLOW_READONLY_SERVICE_KEY }}'
+
       - name: Run test
         if: |
           env.DEPLOYMENT_STATE == 'success'
