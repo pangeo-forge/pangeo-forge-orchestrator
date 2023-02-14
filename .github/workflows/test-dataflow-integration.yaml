@@ -127,4 +127,4 @@ jobs:
           SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
           SOURCE_REPO_PR_NUMBER=22 \
           REVIEW_APP_URL=${{ env.REVIEW_APP_URL }} \
-          pytest -vx tests.integration/test_dataflow.py
+          pytest -vxs tests.integration/test_dataflow.py

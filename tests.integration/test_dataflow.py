@@ -338,8 +338,8 @@ async def dataflow_job_id(
     yield job_id
 
 
-@pytest.mark.asyncio
-async def test_dataflow(dataflow_job_id: str):
+@pytest_asyncio.fixture
+async def dataflow_job_state(dataflow_job_id: str):
     # NOTE: much of this test is redundant with dataflow integration test
     #    https://github.com/pangeo-forge/pangeo-forge-runner/
     #    blob/c7c5e88c006ce5f5ea636d061423981bb9d23734/tests/integration/test_dataflow_integration.py
@@ -373,3 +373,49 @@ async def test_dataflow(dataflow_job_id: str):
         else:
             # consider any other state a failure
             pytest.fail(f"{state = } is neither 'Done' nor 'Running'")
+    # if we get here without failing out, the yielded state should be 'Done'
+    yield state
+
+
+@pytest_asyncio.fixture
+async def job_status_notification_comment_body(
+    gh: GitHubAPI,
+    gh_kws: dict,
+    base: str,
+    recipe_pr: dict,
+    dataflow_job_state: str,
+):
+    # this value is not actually used below, but we include it as a fixture
+    # here to preserve the desired inheritance path of fixtures in this module
+    assert dataflow_job_state == "Done"
+
+    start = time.time()
+    while True:
+        elapsed = time.time() - start
+        if elapsed > 60 * 5:
+            pytest.fail(f"Time {elapsed = } waiting for job success notification comment.")
+
+        comments = await gh.getitem(
+            f"/repos/{base}/issues/{recipe_pr['number']}/comments",
+            **gh_kws,
+        )
+        if comments:
+            last_comment_body: str = comments[-1]["body"]
+            if not last_comment_body.startswith("/run"):
+                break
+
+        else:
+            await asyncio.sleep(15)
+
+    yield last_comment_body
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_integration(
+    job_status_notification_comment_body: str,
+    recipe_pr: dict,
+):
+    assert job_status_notification_comment_body.startswith(
+        # TODO: parametrize recipe_id (vs. hardcoded gpcp-from-gcs)
+        f":tada: The test run of `gpcp-from-gcs` at {recipe_pr['head']['sha']} succeeded!"
+    )
