@@ -8,6 +8,23 @@ on:
     types: [labeled]
 
 jobs:
+  matrix-generate-prs:
+    # Generates the matrix of reference prs to test against. Compare:
+    #  - https://blog.aspect.dev/github-actions-dynamic-matrix
+    #  - https://github.com/aspect-build/bazel-lib/blob/
+    #    0c8ef86684d5a3335bb5e911a51d64e5fab39f9b/.github/workflows/ci.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - id: default
+        run: echo "pr=22::gpcp-from-gcs" >> $GITHUB_OUTPUT
+    #  - id: also-test
+    #    if: contains( toJSON(github.event.pull_request.labels.*.name), 'also-test')
+    #    run: |
+    #      echo "pr=..." >> $GITHUB_OUTPUT
+    outputs:
+      # Will look like '["22::gpcp-from-gcs", etc...]'
+      prs: ${{ toJSON(steps.*.outputs.pr) }}
+
   test:
     # run when:
     #  - a PR is labeled 'test-dataflow'
@@ -16,6 +33,15 @@ jobs:
     #  - heroku marks a deployment with 'state' == 'success'
     #    (assuming PR also has 'test-dataflow' label)
     runs-on: ubuntu-latest
+
+    needs:
+      - matrix-generate-prs
+
+    strategy:
+      fail-fast: false
+      matrix:
+        prs: ${{ fromJSON(needs.matrix-generate-prs.outputs.prs) }}
+
     steps:
       # conditional step if triggering event is a pull_request
       - name: Maybe set REVIEW_APP_URL and DEPLOYMENT_STATE from pull_request
@@ -124,6 +150,6 @@ jobs:
         run: |
           DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY='${{ secrets.DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY }}' \
           GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
-          PR_NUMBER_AND_RECIPE_ID=22::gpcp-from-gcs \
+          PR_NUMBER_AND_RECIPE_ID=${{ matrix.prs }} \
           REVIEW_APP_URL=${{ env.REVIEW_APP_URL }} \
           pytest -vxs tests.integration/test_dataflow.py
