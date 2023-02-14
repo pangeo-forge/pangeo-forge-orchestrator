@@ -113,6 +113,12 @@ def source_pr() -> dict[str, str]:
 
 
 @pytest.fixture
+def recipe_id() -> str:
+    """The recipe_id of the recipe defined in the PR to run during this test."""
+    return os.environ["RECIPE_ID"]
+
+
+@pytest.fixture
 def base(source_pr: dict[str, str]):
     if "staged-recipes" in source_pr["repo_full_name"]:
         return "pforgetest/test-staged-recipes"
@@ -302,14 +308,13 @@ async def dataflow_job_id(
     gh_kws: dict,
     base: str,
     recipe_pr: dict,
+    recipe_id: str,
 ):
     # now we know the pr is synced, it's time to dispatch the `/run` command
-    comment_body = "/run gpcp-from-gcs"
+    comment_body = f"/run {recipe_id}"
     print(f"Making comment on test PR with {comment_body = }")
     await gh.post(
         f"/repos/{base}/issues/{recipe_pr['number']}/comments",
-        # FIXME: parametrize the recipe_id (currently hardcoded as gpcp-from-gcs).
-        # this is necessary to test against other recipes.
         data=dict(body=comment_body),
         oauth_token=gh_token.get_secret_value(),
         **gh_kws,
@@ -414,8 +419,8 @@ async def job_status_notification_comment_body(
 async def test_end_to_end_integration(
     job_status_notification_comment_body: str,
     recipe_pr: dict,
+    recipe_id: str,
 ):
     assert job_status_notification_comment_body.startswith(
-        # TODO: parametrize recipe_id (vs. hardcoded gpcp-from-gcs)
-        f":tada: The test run of `gpcp-from-gcs` at {recipe_pr['head']['sha']} succeeded!"
+        f":tada: The test run of `{recipe_id}` at {recipe_pr['head']['sha']} succeeded!"
     )

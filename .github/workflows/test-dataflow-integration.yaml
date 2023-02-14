@@ -126,5 +126,6 @@ jobs:
           GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
           SOURCE_REPO_FULL_NAME=pforgetest/test-staged-recipes \
           SOURCE_REPO_PR_NUMBER=22 \
+          RECIPE_ID=gpcp-from-gcs \
           REVIEW_APP_URL=${{ env.REVIEW_APP_URL }} \
           pytest -vxs tests.integration/test_dataflow.py
