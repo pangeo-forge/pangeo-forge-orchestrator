@@ -104,18 +104,23 @@ def gh_workflow_run_id() -> str:
 
 
 @pytest.fixture
-def source_pr() -> dict[str, str]:
-    """A PR to replicate for this test."""
-    return dict(
-        repo_full_name=os.environ["SOURCE_REPO_FULL_NAME"],
-        pr_number=os.environ["SOURCE_REPO_PR_NUMBER"],
-    )
+def source_recipe() -> tuple[str, str, str]:
+    repo_full_name, pr_number, recipe_id = os.environ["SOURCE_RECIPE"].split(":")
+    return repo_full_name, pr_number, recipe_id
 
 
 @pytest.fixture
-def recipe_id() -> str:
+def source_pr(source_recipe) -> dict[str, str]:
+    """A PR to replicate for this test."""
+    repo_full_name, pr_number, _ = source_recipe
+    return {"repo_full_name": repo_full_name, "pr_number": pr_number}
+
+
+@pytest.fixture
+def recipe_id(source_recipe) -> str:
     """The recipe_id of the recipe defined in the PR to run during this test."""
-    return os.environ["RECIPE_ID"]
+    _, _, recipe_id = source_recipe
+    return recipe_id
 
 
 @pytest.fixture
