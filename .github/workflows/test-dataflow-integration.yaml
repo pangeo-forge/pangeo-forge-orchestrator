@@ -17,10 +17,14 @@ jobs:
     steps:
       - id: default
         run: echo "pr=22::gpcp-from-gcs" >> $GITHUB_OUTPUT
-    #  - id: also-test
-    #    if: contains( toJSON(github.event.pull_request.labels.*.name), 'also-test')
-    #    run: |
-    #      echo "pr=..." >> $GITHUB_OUTPUT
+      - id: also-test
+        if: contains( join(github.event.pull_request.labels.*.name), 'also-test')
+        run: |
+          echo '${{ toJSON(github.event.pull_request.labels.*.name) }}' \
+          | python3 -c "
+          import json, sys;
+          print('\n'.join([f'pr={l}' for l in json.load(sys.stdin) if l.startswith('also-test')]))
+          " >> $GITHUB_OUTPUT
     outputs:
       # Will look like '["22::gpcp-from-gcs", etc...]'
       prs: ${{ toJSON(steps.*.outputs.pr) }}
