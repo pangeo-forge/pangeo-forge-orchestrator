@@ -104,33 +104,29 @@ def gh_workflow_run_id() -> str:
 
 
 @pytest.fixture
-def source_recipe() -> tuple[str, str, str]:
-    repo_full_name, pr_number, recipe_id = os.environ["SOURCE_RECIPE"].split(":")
-    return repo_full_name, pr_number, recipe_id
+def base():
+    """The base repo against which the reference (i.e. source) PR has been made."""
+    return "pforgetest/test-staged-recipes"
 
 
 @pytest.fixture
-def source_pr(source_recipe) -> dict[str, str]:
-    """A PR to replicate for this test."""
-    repo_full_name, pr_number, _ = source_recipe
-    return {"repo_full_name": repo_full_name, "pr_number": pr_number}
+def pr_number_and_recipe_id() -> tuple[str, str]:
+    pr_number, recipe_id = os.environ["PR_NUMBER_AND_RECIPE_ID"].split("::")
+    return pr_number, recipe_id
 
 
 @pytest.fixture
-def recipe_id(source_recipe) -> str:
+def source_pr_number(pr_number_and_recipe_id) -> dict[str, str]:
+    """The number of a PR on pforgetest/test-staged-recipes to replicate for this test."""
+    pr_number, _ = pr_number_and_recipe_id
+    return pr_number
+
+
+@pytest.fixture
+def recipe_id(pr_number_and_recipe_id) -> str:
     """The recipe_id of the recipe defined in the PR to run during this test."""
-    _, _, recipe_id = source_recipe
+    _, recipe_id = pr_number_and_recipe_id
     return recipe_id
-
-
-@pytest.fixture
-def base(source_pr: dict[str, str]):
-    if "staged-recipes" in source_pr["repo_full_name"]:
-        return "pforgetest/test-staged-recipes"
-    elif source_pr["repo_full_name"].endswith("-feedstock"):
-        # TODO: add a repo in `pforgetest` which can accept prs from any feedstock.
-        # this would essentially be just a blank repo containing an empty `feedstock/` directory.
-        raise NotImplementedError
 
 
 @pytest_asyncio.fixture
@@ -169,7 +165,7 @@ async def recipe_pr(
     gh_token: SecretStr,
     gh_kws: dict,
     gh_workflow_run_id: str,
-    source_pr: dict[str, str],
+    source_pr_number: str,
     base: str,
     pr_label: str,
 ):
@@ -197,7 +193,7 @@ async def recipe_pr(
 
     # populate that branch with content files from the source pr
     src_files = await gh.getitem(
-        f"repos/{source_pr['repo_full_name']}/pulls/{source_pr['pr_number']}/files",
+        f"repos/{base}/pulls/{source_pr_number}/files",
         **gh_kws,
     )
 
