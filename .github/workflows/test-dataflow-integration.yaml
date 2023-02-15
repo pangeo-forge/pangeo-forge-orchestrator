@@ -17,13 +17,36 @@ jobs:
     steps:
       - id: default
         run: echo "pr=22::gpcp-from-gcs" >> $GITHUB_OUTPUT
-      - id: also-test
-        if: contains( join(github.event.pull_request.labels.*.name), 'also-test')
+
+      - id: also-test-from-deployment-status
+        if: |
+          github.event_name == 'deployment_status'
         run: |
-          echo '${{ toJSON(github.event.pull_request.labels.*.name) }}' \
+          export ENVIRONMENT=${{ github.event.deployment_status.environment }} \
+          && python3 -c "
+          import os; print(os.environ['ENVIRONMENT'].split('-')[-1])" \
+          | xargs -I{} curl -s ${{ github.event.deployment_status.repository_url }}/pulls/{} \
           | python3 -c "
           import json, sys;
-          print('\n'.join([f'pr={l}' for l in json.load(sys.stdin) if l.startswith('also-test')]))
+          labels = json.load(sys.stdin)['labels'];
+          also_test = [l.split(":")[-1] for l in labels if l.startswith('also-test')]
+          if also_test:
+              for label in also_test:
+                  print(f'pr={label}')
+          " >> $GITHUB_OUTPUT
+
+      - id: also-test-from-pull-request
+        if: |
+          github.event_name == 'pull_request'
+          && contains( join(github.event.pull_request.labels.*.name), 'also-test')
+        run: |
+          python3 -c "
+          import json;
+          labels = json.loads('${{ toJSON(github.event.pull_request.labels.*.name) }}')
+          also_test = [l.split(":")[-1] for l in labels if l.startswith('also-test')]
+          if also_test:
+              for label in also_test:
+                  print(f'pr={label}')
           " >> $GITHUB_OUTPUT
     outputs:
       # Will look like '["22::gpcp-from-gcs", etc...]'
