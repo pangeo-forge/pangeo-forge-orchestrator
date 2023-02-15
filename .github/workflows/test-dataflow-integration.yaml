@@ -29,7 +29,7 @@ jobs:
           | python3 -c "
           import json, sys;
           labels = json.load(sys.stdin)['labels'];
-          also_test = [l.split(":")[-1] for l in labels if l.startswith('also-test')]
+          also_test = [l.split(':')[-1] for l in labels if l.startswith('also-test')]
           if also_test:
               for label in also_test:
                   print(f'pr={label}')
@@ -43,7 +43,7 @@ jobs:
           python3 -c "
           import json;
           labels = json.loads('${{ toJSON(github.event.pull_request.labels.*.name) }}')
-          also_test = [l.split(":")[-1] for l in labels if l.startswith('also-test')]
+          also_test = [l.split(':')[-1] for l in labels if l.startswith('also-test')]
           if also_test:
               for label in also_test:
                   print(f'pr={label}')
