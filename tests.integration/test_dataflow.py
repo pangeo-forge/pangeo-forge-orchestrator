@@ -110,23 +110,20 @@ def base():
 
 
 @pytest.fixture
-def pr_number_and_recipe_id() -> tuple[str, str]:
-    pr_number, recipe_id = os.environ["PR_NUMBER_AND_RECIPE_ID"].split("::")
-    return pr_number, recipe_id
+def pr_number_and_recipe_id() -> str:
+    return os.environ["PR_NUMBER_AND_RECIPE_ID"]
 
 
 @pytest.fixture
-def source_pr_number(pr_number_and_recipe_id) -> dict[str, str]:
+def source_pr_number(pr_number_and_recipe_id: str) -> str:
     """The number of a PR on pforgetest/test-staged-recipes to replicate for this test."""
-    pr_number, _ = pr_number_and_recipe_id
-    return pr_number
+    return pr_number_and_recipe_id.split("::")[0]
 
 
 @pytest.fixture
-def recipe_id(pr_number_and_recipe_id) -> str:
+def recipe_id(pr_number_and_recipe_id: str) -> str:
     """The recipe_id of the recipe defined in the PR to run during this test."""
-    _, recipe_id = pr_number_and_recipe_id
-    return recipe_id
+    return pr_number_and_recipe_id.split("::")[-1]
 
 
 @pytest_asyncio.fixture
@@ -168,6 +165,7 @@ async def recipe_pr(
     source_pr_number: str,
     base: str,
     pr_label: str,
+    pr_number_and_recipe_id: str,
 ):
     """Makes a PR to ``pforgetest/test-staged-recipes`` with labels ``f"fwd:{app_netloc}{route}"``,
     where ``{route}`` is optionally the path at which the app running at ``app_netloc`` receives
@@ -181,10 +179,18 @@ async def recipe_pr(
     # from that process here may introduce some sublte differences with production. for now, we are
     # accepting that as the cost for doing this more simply; i.e., all within a single repo.)
     main = await gh.getitem(f"/repos/{base}/branches/main", **gh_kws)
+
+    jobs = await gh.getitem(
+        f"/repos/pangeo-forge/pangeo-forge-orchestrator/actions/runs/{gh_workflow_run_id}/jobs"
+    )
+    this_job = [j for j in jobs["jobs"] if pr_number_and_recipe_id in j["name"]].pop(0)
+    # example working branch name would be runs/4179677701/jobs/7239892586, as parsed from html url
+    # 'https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/runs/4179677701/jobs/7239892586'
+    working_branch_name = this_job["html_url"].split("/actions/")[-1]
     working_branch = await gh.post(
         f"/repos/{base}/git/refs",
         data=dict(
-            ref=f"refs/heads/actions/runs/{gh_workflow_run_id}",
+            ref=f"refs/heads/{working_branch_name}",
             sha=main["commit"]["sha"],
         ),
         oauth_token=gh_token.get_secret_value(),
@@ -204,7 +210,7 @@ async def recipe_pr(
             data=dict(
                 message=f"Adding {f['filename']}",
                 content=content["content"],
-                branch=f"actions/runs/{gh_workflow_run_id}",
+                branch=working_branch_name,
             ),
             oauth_token=gh_token.get_secret_value(),
             **gh_kws,
@@ -219,10 +225,9 @@ async def recipe_pr(
         f"/repos/{base}/pulls",
         data=dict(
             title=f"[CI] Automated PR for workflow run {gh_workflow_run_id}",
-            head=f"actions/runs/{gh_workflow_run_id}",
+            head=working_branch_name,
             body=(
-                ":robot: Created for test run https://github.com/pangeo-forge/"
-                f"pangeo-forge-orchestrator/actions/runs/{gh_workflow_run_id}\n"
+                f":robot: Created by test run job {this_job['html_url']}\n"
                 f":memo: Which is testing {pr_label.replace('fwd:', 'https://')}"
             ),
             base="main",
