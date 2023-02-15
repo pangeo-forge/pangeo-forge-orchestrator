@@ -224,7 +224,7 @@ async def recipe_pr(
     pr = await gh.post(
         f"/repos/{base}/pulls",
         data=dict(
-            title=f"[CI] Automated PR for workflow run {gh_workflow_run_id}",
+            title=f"[CI] Automated PR for {working_branch_name}",
             head=working_branch_name,
             body=(
                 f":robot: Created by test run job {this_job['html_url']}\n"
