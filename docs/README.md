@@ -386,58 +386,15 @@ Both staging and prod are set up with [automatic certificate management](https:/
 
 ## `review`
 
-For each PR to `pangeo-forge-recipes`, Heroku creates a Review App which will hang around for two days.
-This is a live version of the app running against an ephemeral database. It can be used for manual
-checks or further integration testing.
+To build a Heroku Review App for a PR, simply add the `build-review-app` label to the PR. This will
+trigger a build of the review app which, once deployed, will be served at the ephemeral address
+https://pforge-pr-{PR_NUMBER}.herokuapp.com/.
 
 > We use Heroku's Review Apps
-> [injected-environment-variables](https://devcenter.heroku.com/articles/github-integration-review-apps#injected-environment-variables)
-> feature to dynamically set the `PANGEO_FORGE_DEPLOYMENT` env var for review apps to the value of the injected env var `HEROKU_APP_NAME`, which follows the pattern `pforge-pr-${PR number}`. Take a look at both `heroku.yml` and `scripts.deploy/release.sh` to see where this happens.
-
-> We also use Heroku's Review Apps
 > [postdeploy script](https://devcenter.heroku.com/articles/github-integration-review-apps#the-postdeploy-script)
 > feature to automatically seed each review app database with the
 > https://github.com/pforgetest/test-staged-recipes feedstock.
 > To see where this happens (and/or seed additional test data), see `postdeploy/seed_review_app_data.py`.
-
-To ensure a successful build of a Review App for your PR:
-
-1. Generate a `secrets/pforge-pr-${PR number}.yaml` secrets config for your review app, by:
-   1. Running:
-      ```console
-      $ python3 scripts.develop/generate_api_key.py pforge-pr-${PR number}
-      ```
-   2. Then running:
-      ```console
-      $ GITHUB_PAT=${Your GitHub PAT} python3 scripts.develop/new_github_app.py ${GitHub Username} review ${PR number}
-      ```
-      and following the link to complete the in-browser OAuth flow.
-2. Encrypting the secrets config with:
-   ```console
-   $ sops -e -i secrets/pforge-pr-${PR number}.yaml
-   ```
-3. Rename the review app bakery config as follows (where `SOME_OTHER_NUMBER` is a prior review app's PR number):
-   ```console
-   $ mv bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-SOME_OTHER_NUMBER.yaml bakeries/pangeo-ldeo-nsf-earthcube.pforge-pr-${PR number}.yaml
-   ```
-4. Push these changes (the secrets and bakeries config for your review app) to your PR
-5. From https://github.com/organizations/pforgetest/settings/apps, manually install the
-   `pforge-pr-${PR number}` app on all repos in the `pforgetest` org. (Optionally, suspend
-   all other installations from `pforgetest`, so that multiple apps are not active at one time.)
-6. Update the Review App's webhook url (decrypting your review app creds first):
-   ```console
-   $ sops -d -i secrets/pforge-pr-${PR number}.yaml
-   $ python3 scripts/update_hook_url.py review http://pforge-pr-${PR number}.herokuapp.com
-   ```
-
-> **Tip**: The first review app build often fails, perhaps because the PR was opened before all
-> of the above steps were complete. If the build fails, navigate to
-> [the Heroku Pipeline dashboard](https://dashboard.heroku.com/pipelines/17cc0239-494f-4a68-aa75-3da7c466709c)
-> and manually delete the Review App. Then, manually click
-> "create review app". Typically, this build will succeed if everything has been configured
-> correctly. If it fails, there may be a deeper issue in play. _**Important**_: A failed Review
-> App build _will not be fixed_ by simply re-releasing. It must be deleted and then rebuilt from
-> scratch.
 
 ## `staging`
 
@@ -800,7 +757,29 @@ rate limits, in the case of the GitHub API.
 
 ## Integration testing
 
-### Dataflow integration testing
+### Dataflow
+
+To run an Dataflow integration test from a PR, add the following two labels to the PR:
+
+- `build-review-app`: This builds a Heroku Review App for the PR.
+- `test-dataflow`: This deploys a job to Dataflow from the Heroku Review App for the PR.
+
+By default, the Dataflow integration test creates a automated PR on the `pforgetest/test-staged-recipes`
+repo by duplicating https://github.com/pforgetest/test-staged-recipes/pull/22, and then triggers a test
+run of the `gpcp-from-gcs` recipe in that PR by commenting `/run gpcp-from-gcs` on the auto-generated PR.
+
+To also test against additional recipes as part of this integration test, create and add a third label to
+the PR, following the format:
+
+- `also-test:{TEST_STAGED_RECIPES_PR_NUMBER}::{RECIPE_ID}`: Here, `TEST_STAGED_RECIPES_PR_NUMBER` is the
+  number of an actual PR on the `pforgetest/test-staged-recipes` repository which would would like to
+  duplicate for the test, and `RECIPE_ID` is the name of a recipe referenced in the `meta.yaml` of that PR.
+  You may need to first create a reference PR on `pforgetest/test-staged-recipes` containing the desired
+  files.
+
+Once the integration test is underway, you will find the automated PR on `pforgetest/test-staged-recipes`.
+During test session teardown, the auto-generated PR is closed and the branch used to create it is
+deleted automatically.
 
 ```mermaid
 
