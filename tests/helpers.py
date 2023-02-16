@@ -34,7 +34,6 @@ def compare_response(response_fixture, reponse_data):
 
 
 def create_with_dependencies(create_opts, mf, client):
-
     for dep in mf.dependencies:
         dep_create_opts = dep.model_fixture.create_opts[0]  # just use first create_opts
         dep_create_response = client.create(dep.model_fixture.path, dep_create_opts)

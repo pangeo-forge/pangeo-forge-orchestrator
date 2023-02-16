@@ -72,7 +72,6 @@ async def pr_merged_request_fixture(
     api_key,
     async_app_client,
 ):
-
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
         "action": "closed",

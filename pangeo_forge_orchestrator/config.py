@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 
 import yaml  # type: ignore
 from pydantic import BaseModel, Extra, Field, SecretStr
@@ -19,7 +19,7 @@ class GitHubAppConfig(BaseModel):
     app_name: str
     webhook_secret: str
     private_key: str
-    run_only_on: Optional[List[str]] = None
+    run_only_on: Optional[list[str]] = None
 
 
 def get_gcr_container_image_url():
@@ -102,7 +102,7 @@ class Bakery(BaseModel):
 class Config(BaseModel):
     fastapi: FastAPIConfig
     github_app: GitHubAppConfig
-    bakeries: Dict[str, Bakery]
+    bakeries: dict[str, Bakery]
 
 
 def get_app_config_path() -> str:
@@ -140,7 +140,7 @@ def get_secrets_dir():
     return f"{root}/secrets"
 
 
-def get_secret_bakery_args_paths() -> List[str]:
+def get_secret_bakery_args_paths() -> list[str]:
     return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
 
 

@@ -87,7 +87,6 @@ def test_read_single(model_fixture, client, authorized_client):
     # first create some data
     path = model_fixture.path
     for create_opts in model_fixture.create_opts:
-
         create_response = create_with_dependencies(create_opts, model_fixture, authorized_client)
 
         for rel in model_fixture.optional_relations:

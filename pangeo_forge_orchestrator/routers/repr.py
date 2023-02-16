@@ -13,14 +13,12 @@ def xarray(
         example="https://ncsa.osn.xsede.org/Pangeo/pangeo-forge/HadISST-feedstock/hadisst.zarr",
     )
 ):
-
     import xarray as xr
     import zarr
 
     error_message = f"An error occurred while fetching the data from URL: {url}"
 
     try:
-
         with xr.open_dataset(url, engine="zarr", chunks={}) as ds:
             html = ds._repr_html_().strip().encode("utf-8", "replace").decode("utf-8")
 

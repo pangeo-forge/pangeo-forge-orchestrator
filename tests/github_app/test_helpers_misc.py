@@ -1,4 +1,3 @@
-from typing import Tuple
 from urllib.parse import urlparse
 
 import jwt
@@ -150,7 +149,7 @@ async def test_make_dataflow_job_name(app_hook_config_url, recipe_run_id):
     gh_backend = _MockGitHubBackend(**gh_backend_kws)
     mock_gh = get_mock_github_session(gh_backend)(http_session)
 
-    def reverse_encoding(job_name: str) -> Tuple[str, int]:
+    def reverse_encoding(job_name: str) -> tuple[str, int]:
         # TODO: This code is duplicative of the code used in the submodule
         # `dataflow-status-monitoring/src/main.py` to decode job names. Ideally, we should be using
         # the *actual* decoding function to test here, however the submodule code is not currently

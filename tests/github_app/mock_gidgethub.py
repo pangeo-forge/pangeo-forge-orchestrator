@@ -1,7 +1,7 @@
 import hashlib
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from pangeo_forge_orchestrator.http import HttpSession
 from pangeo_forge_orchestrator.routers.github_app import get_jwt
@@ -22,13 +22,13 @@ def mock_access_token_from_jwt(jwt: str):
 @dataclass
 class _MockGitHubBackend:
     _app_hook_config_url: Optional[str] = None
-    _accessible_repos: Optional[List[dict]] = None
-    _repositories: Optional[Dict[str, dict]] = None
-    _app_hook_deliveries: Optional[List[dict]] = None
-    _app_installations: Optional[List[dict]] = None
-    _check_runs: Optional[List[dict]] = None
-    _pulls: Optional[Dict[str, Dict[int, dict]]] = None
-    _pulls_files: Optional[Dict[str, Dict[int, dict]]] = None
+    _accessible_repos: Optional[list[dict]] = None
+    _repositories: Optional[dict[str, dict]] = None
+    _app_hook_deliveries: Optional[list[dict]] = None
+    _app_installations: Optional[list[dict]] = None
+    _check_runs: Optional[list[dict]] = None
+    _pulls: Optional[dict[str, dict[int, dict]]] = None
+    _pulls_files: Optional[dict[str, dict[int, dict]]] = None
 
 
 @dataclass
@@ -46,7 +46,7 @@ class MockGitHubAPI:
         accept: Optional[str] = None,
         jwt: Optional[str] = None,
         oauth_token: Optional[str] = None,
-    ) -> Union[dict, List[dict]]:
+    ) -> Union[dict, list[dict]]:
         if path == "/app/hook/config":
             return {"url": self._backend._app_hook_config_url}
         # gidgethub allows us to call either the relative or absolute path, and we do both

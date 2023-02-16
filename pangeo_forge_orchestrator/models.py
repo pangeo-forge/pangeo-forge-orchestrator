@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
@@ -155,11 +155,11 @@ class RecipeRunRead(RecipeRunBase):
 
 
 class BakeryReadWithRecipeRuns(BakeryRead):
-    recipe_runs: List[RecipeRunRead]
+    recipe_runs: list[RecipeRunRead]
 
 
 class FeedstockReadWithRecipeRuns(FeedstockRead):
-    recipe_runs: List[RecipeRunRead]
+    recipe_runs: list[RecipeRunRead]
 
 
 class RecipeRunReadWithBakeryAndFeedstock(RecipeRunRead):
@@ -179,7 +179,7 @@ bakery_models = MultipleModels(
     relations=[
         RelationBuilder(
             field="recipe_runs",
-            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            annotation=list["RecipeRun"],  # type: ignore # noqa: F821
             back_populates="bakery",
         ),
     ],
@@ -193,7 +193,7 @@ feedstock_models = MultipleModels(
     relations=[
         RelationBuilder(
             field="recipe_runs",
-            annotation=List["RecipeRun"],  # type: ignore # noqa: F821
+            annotation=list["RecipeRun"],  # type: ignore # noqa: F821
             back_populates="feedstock",
         ),
     ],

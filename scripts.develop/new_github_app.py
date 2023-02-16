@@ -50,7 +50,6 @@ def get_app_name_and_desc(github_username, deployment, pr_number=None):
 
 
 def main(github_username, deployment, pr_number=None):
-
     app_name, description = get_app_name_and_desc(github_username, deployment, pr_number=pr_number)
 
     # We're going to serve from the `CACHEDIR` as base,
@@ -109,7 +108,6 @@ def main(github_username, deployment, pr_number=None):
 
 
 if __name__ == "__main__":
-
     user_token = os.environ.get("GITHUB_PAT", None)
     if not user_token:
         raise ValueError("Env variable 'GITHUB_PAT' required, but unset.")
