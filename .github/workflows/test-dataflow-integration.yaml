@@ -1,0 +1,184 @@
+name: Test Dataflow Integration
+
+on:
+  deployment_status:
+  # TODO: add on 'schedule' against staging deployment?
+  pull_request:
+    branches: ['main']
+    types: [labeled]
+
+jobs:
+  matrix-generate-prs:
+    # Generates the matrix of reference prs to test against. Compare:
+    #  - https://blog.aspect.dev/github-actions-dynamic-matrix
+    #  - https://github.com/aspect-build/bazel-lib/blob/
+    #    0c8ef86684d5a3335bb5e911a51d64e5fab39f9b/.github/workflows/ci.yaml
+    runs-on: ubuntu-latest
+    steps:
+      - id: default
+        run: echo "pr=22::gpcp-from-gcs" >> $GITHUB_OUTPUT
+
+      - id: also-test-from-deployment-status
+        if: |
+          github.event_name == 'deployment_status'
+        run: |
+          export ENVIRONMENT=${{ github.event.deployment_status.environment }} \
+          && python3 -c "
+          import os; print(os.environ['ENVIRONMENT'].split('-')[-1])" \
+          | xargs -I{} curl -s ${{ github.event.deployment_status.repository_url }}/pulls/{} \
+          | python3 -c "
+          import json, sys;
+          labels = json.load(sys.stdin)['labels'];
+          also_test = [
+            l['name'].split('also-test:')[-1] for l in labels if l['name'].startswith('also-test')
+          ]
+          if also_test:
+              for label in also_test:
+                  print(f'pr={label}')
+          " >> $GITHUB_OUTPUT
+
+      - id: also-test-from-pull-request
+        if: |
+          github.event_name == 'pull_request'
+          && contains( join(github.event.pull_request.labels.*.name), 'also-test')
+        run: |
+          python3 -c "
+          import json;
+          labels = json.loads('${{ toJSON(github.event.pull_request.labels.*.name) }}')
+          also_test = [l.split('also-test:')[-1] for l in labels if l.startswith('also-test')]
+          if also_test:
+              for label in also_test:
+                  print(f'pr={label}')
+          " >> $GITHUB_OUTPUT
+    outputs:
+      # Will look like '["22::gpcp-from-gcs", etc...]'
+      prs: ${{ toJSON(steps.*.outputs.pr) }}
+
+  test:
+    # run when:
+    #  - a PR is labeled 'test-dataflow'
+    #    (assuming it is also labeled 'build-review-app'
+    #    *and* the deployment for the head sha is a success)
+    #  - heroku marks a deployment with 'state' == 'success'
+    #    (assuming PR also has 'test-dataflow' label)
+    runs-on: ubuntu-latest
+
+    needs:
+      - matrix-generate-prs
+
+    strategy:
+      fail-fast: false
+      matrix:
+        prs: ${{ fromJSON(needs.matrix-generate-prs.outputs.prs) }}
+
+    steps:
+      # conditional step if triggering event is a pull_request
+      - name: Maybe set REVIEW_APP_URL and DEPLOYMENT_STATE from pull_request
+        if: |
+          github.event_name == 'pull_request'
+          && github.event.label.name == 'test-dataflow'
+          && contains( github.event.pull_request.labels.*.name, 'build-review-app')
+        # if we get here, this is a pull request, so we need to know the statuses url
+        # for the deployment associated with the head sha. we use the **base** repo
+        # deployments url, and look for deployments associated with pr's head sha.
+        # (the head repo deployments url would cause errors, if the pr is from a fork.)
+        run: |
+          export DEPLOYMENTS_URL=\
+          ${{ github.event.pull_request.base.repo.deployments_url }}\
+          \?environment\=pforge-pr-${{ github.event.pull_request.number }}\
+          \&sha\=${{ github.event.pull_request.head.sha }}
+          curl -s $DEPLOYMENTS_URL \
+          | python3 -c "
+          import sys, json; print(json.load(sys.stdin)[0]['statuses_url'])" \
+          | xargs -I{} curl -s {} \
+          | python3 -c "
+          import sys, json;
+          d = json.load(sys.stdin)[-1];
+          print('TEST_DATAFLOW=True');
+          print('DEPLOYMENT_STATE=' + d['state']);
+          print('REVIEW_APP_URL=' + d['environment_url']);" \
+          >> $GITHUB_ENV
+
+      # conditional step if triggering event is deployment_status
+      - name: Maybe set REVIEW_APP_URL and DEPLOYMENT_STATE from deployment_status
+        if: |
+          github.event_name == 'deployment_status'
+        # if we're here, we know this is a deployment_status event, but we don't know whether or not
+        # the PR has the 'test-dataflow' label. (it's possible the PR *only* has the 'build-review-app'
+        # label, but not the 'test-dataflow' label, in which case we do not want to deploy a dataflow job.
+        # so before we do anything else, we need to make sure this PR is labeled 'test-dataflow'.
+        # note that the github deployment "environments" for our review apps are named according to the
+        # convention "pforge-pr-${NUMBER}". so our most direct path to get the PR number from the deployment
+        # status event is to parse the PR number out of this string.
+        run: |
+          export ENVIRONMENT=${{ github.event.deployment_status.environment }} \
+          && python3 -c "
+          import os; print(os.environ['ENVIRONMENT'].split('-')[-1])" \
+          | xargs -I{} curl -s ${{ github.event.deployment_status.repository_url }}/pulls/{} \
+          | python3 -c "
+          import json, sys;
+          labels = json.load(sys.stdin)['labels'];
+          print('TEST_DATAFLOW=' + str(True if any([l['name'] == 'test-dataflow' for l in labels]) else False));
+          print('REVIEW_APP_URL=' + '${{ github.event.deployment_status.environment_url }}');
+          print('DEPLOYMENT_STATE=' + '${{ github.event.deployment_status.state }}');" \
+          >> $GITHUB_ENV
+
+      - name: Is app up?
+        if: ${{ env.DEPLOYMENT_STATE == 'success' }}
+        # Heroku updates deployment as 'success' when build succeedes, not when *release* succeedes.
+        # So there is actually still a latency between when this status is set, and when the review app
+        # is ready to receive requests. In general, the review apps take about 3 minutes to release.
+        # So here we wait 2 minutes, then start checking if the app is up, repeating every 30 seconds
+        # until it's either up, or if > 10 mins have elapsed, something's gone wrong, so we bail out.
+        run: |
+          python3 -c "
+          import sys, time;
+          from urllib.request import urlopen;
+          start = time.time();
+          time.sleep(60 * 2);
+          while True:
+              elapsed = time.time() - start;
+              if elapsed > 60 * 10:
+                  # releases shouldn't take > 10 mins; something's gone wrong, so exit.
+                  sys.exit(1)
+              contents = urlopen('${{ env.REVIEW_APP_URL }}').read().decode()
+              if contents == '{\"status\":\"ok\"}':
+                  # if we get this response from the review app, it's up and ready to go.
+                  print('IS_UP=True')
+                  break
+              else:
+                  time.sleep(30)" \
+          >> $GITHUB_ENV
+
+      - name: Checkout the repo
+        uses: actions/checkout@v3
+
+      - name: Install deps
+        run: |
+          python3 -m pip install aiohttp PyJWT pydantic pytest pytest-asyncio gidgethub
+
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          # the creds to deploy jobs to dataflow are packaged with the review app itself, but
+          # this test needs its own read only creds so that it can poll dataflow for job status
+          credentials_json: '${{ secrets.GCP_DATAFLOW_READONLY_SERVICE_KEY }}'
+
+      - name: Run test
+        if: |
+          env.DEPLOYMENT_STATE == 'success'
+          && env.IS_UP == 'True'
+          && env.TEST_DATAFLOW == 'True'
+        # So far here, we:
+        #   - programatically make a /run comment on an existing PR in pforgetest
+        #   - check to ensure a dataflow job was submitted within a plausible timeframe
+        # Remaining TODO:
+        #   - parametrize SOURCE_REPO_FULL_NAME and SOURCE_REPO_PR_NUMBER
+        #   - wait for the job to complete (5-6 mins)
+        #   - check to make sure the job was successful
+        run: |
+          DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY='${{ secrets.DEV_APP_PROXY_GITHUB_APP_PRIVATE_KEY }}' \
+          GH_WORKFLOW_RUN_ID=${{ github.run_id }} \
+          PR_NUMBER_AND_RECIPE_ID=${{ matrix.prs }} \
+          REVIEW_APP_URL=${{ env.REVIEW_APP_URL }} \
+          pytest -vxs tests.integration/test_dataflow.py

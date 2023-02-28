@@ -7,7 +7,9 @@ services:
   web:
     # For platform spec, see https://stackoverflow.com/a/70238851
     platform: linux/amd64
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.heroku
     ports:
       - '3000:8000'
     depends_on:

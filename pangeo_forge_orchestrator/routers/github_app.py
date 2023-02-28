@@ -87,8 +87,15 @@ async def get_access_token(gh: GitHubAPI) -> str:
 
 
 async def get_app_webhook_url(gh: GitHubAPI) -> str:
-    response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
-    return response["url"]
+    if heroku_app_name := os.environ.get("HEROKU_APP_NAME", None):
+        # This env var is only set on Heroku Review Apps, so if it's present, we know
+        # we need to generate the review app url here, because the GitHub App webhook
+        # url is a proxy url, and not the actual url for this review app instance.
+        return f"https://{heroku_app_name}.herokuapp.com/github/hooks/"
+    else:
+        # This is not a Review App, so we can query the GitHub App webhook url.
+        response = await gh.getitem("/app/hook/config", jwt=get_jwt(), accept=ACCEPT)
+        return response["url"]
 
 
 async def get_repo_id(repo_full_name: str, gh: GitHubAPI) -> str:
@@ -728,7 +735,7 @@ async def run(
             # Add the traceback for this deployment failure to the recipe run, otherwise it could
             # easily get buried in the server logs. TODO: Consider: is there anything of security
             # significance in the call stack captured in the trace?
-            message = json.loads(recipe_run.message)
+            message = json.loads(recipe_run.message or "{}")
             recipe_run.message = json.dumps(message | {"trace": trace})
             db_session.add(recipe_run)
             db_session.commit()
