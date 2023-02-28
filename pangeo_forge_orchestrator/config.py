@@ -10,10 +10,6 @@ GCP_PROJECT = "pangeo-forge-4967"
 root = Path(__file__).resolve().parent.parent
 
 
-class FastAPIConfig(BaseModel):
-    PANGEO_FORGE_API_KEY: str
-
-
 class GitHubAppConfig(BaseModel):
     id: int
     app_name: str
@@ -100,7 +96,6 @@ class Bakery(BaseModel):
 
 
 class Config(BaseModel):
-    fastapi: FastAPIConfig
     github_app: GitHubAppConfig
     bakeries: dict[str, Bakery]
 
@@ -142,14 +137,6 @@ def get_secrets_dir():
 
 def get_secret_bakery_args_paths() -> list[str]:
     return [p for p in os.listdir(get_secrets_dir()) if p.startswith("bakery-args")]
-
-
-def get_fastapi_config() -> FastAPIConfig:
-    """Get only the FastAPI config, for contexts where the GitHub App + Bakery config is
-    not needed, e.g. on app startup."""
-
-    kw = get_app_config_kws()
-    return FastAPIConfig(**kw["fastapi"])
 
 
 def get_config() -> Config:
