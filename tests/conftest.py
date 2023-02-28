@@ -1,6 +1,5 @@
 import os
 import secrets
-import uuid
 
 import pytest
 import pytest_asyncio
@@ -12,12 +11,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 from pytest_lazyfixture import lazy_fixture
-from sqlmodel import Session, SQLModel
 
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.api import app
-from pangeo_forge_orchestrator.database import maybe_create_db_and_tables
-from pangeo_forge_orchestrator.models import MODELS
 
 from .github_app.fixtures import *  # noqa: F401 F403
 from .interfaces import FastAPITestClientCRUD
@@ -37,13 +33,6 @@ def setup_and_teardown(
             f"Preexisting `{db_path}` may cause test failures. Please remove this file "
             "then restart test session."
         )
-    # TODO: remove this call to `maybe_create_db_and_tables`. This function is called on app
-    # start-up, so we really shouldn't need to call it manually. However, given how we are handling
-    # keeping the tables empty via the ``session`` fixture below, if we do not call this function
-    # here, there will not be a ``database.sqlite`` file available when ``session`` is collected.
-    # A forthcoming refactor of the test fixtures can resolve this, but for now it's okay to have
-    # this called twice (once now and once at app start-up), because it should be idempotent.
-    maybe_create_db_and_tables()
 
     # (2) github app test session setup
     def get_mock_app_config_path():
@@ -203,67 +192,15 @@ async def async_app_client():
 # General Fixtures --------------------------------------------------------------------------------
 
 
-def clear_table(session: Session, table_model: SQLModel):
-    session.query(table_model).delete()
-    if session.connection().engine.url.drivername == "postgresql":
-        # if testing against persistent local postgres server, reset primary keys
-        cmd = f"ALTER SEQUENCE {table_model.__name__}_id_seq RESTART WITH 1"
-        session.exec(cmd)
-    session.commit()
-    assert len(session.query(table_model).all()) == 0  # make sure the database is empty
-
-
-def clear_database():
-    # note this function is redundant with the `session` fixture below
-    # the difference is that this called explictly by the newer fixtures in `test_github_app`
-    # whereas the `session` fixture is called implicitly for the older fixtues used by `test_api`
-    # eventually, we should replace the older implict `session` with this more explicit approach
-    # for all tests. in the short term, to avoid breaking the older tests, we'll keep this as two
-    # separate approaches.
-    from pangeo_forge_orchestrator.database import engine
-
-    with Session(engine) as session:
-        for k in MODELS:
-            clear_table(session, MODELS[k].table)  # make sure the database is empty
-
-
-@pytest.fixture(scope="session")
-def api_key():
-    return uuid.uuid4().hex
-
-
 @pytest.fixture
-def session():
-    from pangeo_forge_orchestrator.database import engine
-
-    with Session(engine) as session:
-        for k in MODELS:
-            clear_table(session, MODELS[k].table)  # make sure the database is empty
-
-
-# the next two fixtures use the session fixture to clear the database
-
-
-@pytest.fixture
-def fastapi_test_crud_client(session):
+def fastapi_test_crud_client():
     with TestClient(app) as fastapi_test_client:
         yield FastAPITestClientCRUD(fastapi_test_client)
-
-
-@pytest.fixture
-def fastapi_test_crud_client_authorized(session, api_key):
-    with TestClient(app) as fastapi_test_client:
-        return FastAPITestClientCRUD(fastapi_test_client, api_key=api_key)
-
-
-# alias
-authorized_client = fastapi_test_crud_client_authorized
 
 
 @pytest.fixture(
     params=[
         lazy_fixture("fastapi_test_crud_client"),
-        lazy_fixture("fastapi_test_crud_client_authorized"),
     ]
 )
 def client(request):

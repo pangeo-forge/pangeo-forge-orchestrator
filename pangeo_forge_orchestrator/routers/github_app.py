@@ -16,13 +16,19 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import SQLModel
 
 from ..config import get_config
-from ..dependencies import get_session as get_database_session
 from ..http import http_session
 from ..logging import logger
-from ..models import MODELS
+from ..models import (
+    MODELS,
+    BakeryRead,
+    FeedstockRead,
+    RecipeRunConclusion,
+    RecipeRunRead,
+    RecipeRunStatus,
+)
 
 ACCEPT = "application/vnd.github+json"
 FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
@@ -121,7 +127,8 @@ async def list_accessible_repos(gh: GitHubAPI) -> list[str]:
 
 
 async def repo_id_and_spec_from_feedstock_id(
-    id: int, gh: GitHubAPI, db_session: Session
+    id: int,
+    gh: GitHubAPI,
 ) -> tuple[str, str]:
     """Given a feedstock id, return the corresponding GitHub repo id and feedstock spec.
 
@@ -133,7 +140,7 @@ async def repo_id_and_spec_from_feedstock_id(
     :param id: The feedstock's id in the Pangeo Forge database.
     """
 
-    feedstock = db_session.get(MODELS["feedstock"].table, id)
+    feedstock: FeedstockRead = ...  # type: ignore
     if not feedstock:
         raise HTTPException(status_code=404, detail=f"Id {id} not found in feedstock table.")
 
@@ -197,11 +204,10 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
 )
 async def get_feedstock_hook_deliveries(
     id: int,
-    db_session: Session = Depends(get_database_session),
     http_session: aiohttp.ClientSession = Depends(http_session),
 ):
     gh = get_github_session(http_session)
-    repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
+    repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh)
     deliveries = []
     async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
         if d["repository_id"] == repo_id:
@@ -218,11 +224,10 @@ async def get_feedstock_hook_deliveries(
 async def get_feedstock_check_runs(
     id: int,
     commit_sha: str,
-    db_session: Session = Depends(get_database_session),
     http_session: aiohttp.ClientSession = Depends(http_session),
 ):
     gh = get_github_session(http_session)
-    _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh, db_session)
+    _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh)
 
     token = await get_access_token(gh)
     check_runs = await gh.getitem(
@@ -243,7 +248,6 @@ async def receive_github_hook(  # noqa: C901
     request: Request,
     background_tasks: BackgroundTasks,
     http_session: aiohttp.ClientSession = Depends(http_session),
-    db_session: Session = Depends(get_database_session),
 ):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
@@ -256,7 +260,7 @@ async def receive_github_hook(  # noqa: C901
     # here in the route function and then pass them through to the background task as kwargs.
     # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
     gh = get_github_session(http_session)
-    session_kws = dict(gh=gh, db_session=db_session)
+    session_kws = dict(gh=gh)
     token = await get_access_token(gh)
     gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
@@ -288,12 +292,10 @@ async def receive_github_hook(  # noqa: C901
             background_tasks=background_tasks,
             session_kws=session_kws,
             gh_kws=gh_kws,
-            db_session=db_session,
         )
     elif event == "dataflow":
         return await handle_dataflow_event(
             payload=payload,
-            db_session=db_session,
             background_tasks=background_tasks,
             gh_kws=gh_kws,
             gh=gh,
@@ -315,7 +317,6 @@ async def receive_github_hook(  # noqa: C901
 async def handle_dataflow_event(
     *,
     payload: dict,
-    db_session: Session,
     background_tasks: BackgroundTasks,
     gh: GitHubAPI,
     gh_kws: dict,
@@ -331,22 +332,12 @@ async def handle_dataflow_event(
                 detail=f"No handling implemented for {payload['conclusion'] = }.",
             )
 
-        recipe_run = db_session.exec(
-            select(MODELS["recipe_run"].table).where(
-                MODELS["recipe_run"].table.id == int(payload["recipe_run_id"])
-            )
-        ).one()
-        feedstock = db_session.exec(
-            select(MODELS["feedstock"].table).where(
-                MODELS["feedstock"].table.id == recipe_run.feedstock_id
-            )
-        ).one()
-        bakery = db_session.exec(
-            select(MODELS["bakery"].table).where(MODELS["bakery"].table.id == recipe_run.bakery_id)
-        ).one()
+        recipe_run: RecipeRunRead = ...  # type: ignore
+        feedstock: FeedstockRead = ...  # type: ignore
+        bakery: BakeryRead = ...  # type: ignore
 
-        recipe_run.status = "completed"
-        recipe_run.conclusion = payload["conclusion"]
+        recipe_run.status = RecipeRunStatus("completed")
+        recipe_run.conclusion = RecipeRunConclusion(payload["conclusion"])
         recipe_run.completed_at = datetime.utcnow()
 
         if recipe_run.conclusion == "success":
@@ -356,8 +347,8 @@ async def handle_dataflow_event(
             recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
                 root_path=root_path
             )
-        db_session.add(recipe_run)
-        db_session.commit()
+        # db_session.add(recipe_run)
+        # db_session.commit()
 
         # Wow not every day you google a error and see a comment on it by Guido van Rossum
         # https://github.com/python/mypy/issues/1174#issuecomment-175854832
@@ -378,7 +369,6 @@ async def handle_pr_comment_event(
     gh_kws: dict,
     background_tasks: BackgroundTasks,
     session_kws: dict,
-    db_session: Session,
 ):
     """Handle a pull request comment event.
 
@@ -429,16 +419,10 @@ async def handle_pr_comment_event(
             detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
             # TODO: Maybe post a comment and/or emoji reaction explaining this error.
-        recipe_id = cmd_args.pop(0)
-        statement = (
-            # https://sqlmodel.tiangolo.com/tutorial/where/#multiple-where
-            select(MODELS["recipe_run"].table)
-            .where(MODELS["recipe_run"].table.recipe_id == recipe_id)
-            .where(MODELS["recipe_run"].table.head_sha == pr["head"]["sha"])
-        )
+
         # TODO: handle error if there is no matching result. this would arise if the slash
         # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
-        matching_recipe_run = db_session.exec(statement).one()
+        matching_recipe_run = ...
         logger.debug(matching_recipe_run)
         args = (  # type: ignore
             pr["head"]["repo"]["html_url"],
@@ -657,12 +641,8 @@ async def run(
     feedstock_subdir: Optional[str] = None,
     *,
     gh: GitHubAPI,
-    db_session: Session,
 ):
-    statement = select(MODELS["bakery"].table).where(
-        MODELS["bakery"].table.id == recipe_run.bakery_id
-    )
-    bakery = db_session.exec(statement).one()
+    bakery: BakeryRead = ...  # type: ignore
     bakery_config = get_config().bakeries[bakery.name]
 
     subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
@@ -707,8 +687,8 @@ async def run(
         # Start time was first set when recipe run was queued, which could have been ages ago,
         # so if we don't update it now, we won't capture how long the pipeline actually took.
         recipe_run.started_at = datetime.utcnow().replace(microsecond=0)
-        db_session.add(recipe_run)
-        db_session.commit()
+        # db_session.add(recipe_run)
+        # db_session.commit()
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
@@ -719,8 +699,8 @@ async def run(
                         job_name=p["job_name"], job_id=p["job_id"]
                     )
                     recipe_run.message = json.dumps(message)
-                    db_session.add(recipe_run)
-                    db_session.commit()
+                    # db_session.add(recipe_run)
+                    # db_session.commit()
 
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
@@ -737,9 +717,9 @@ async def run(
             # significance in the call stack captured in the trace?
             message = json.loads(recipe_run.message or "{}")
             recipe_run.message = json.dumps(message | {"trace": trace})
-            db_session.add(recipe_run)
-            db_session.commit()
-            db_session.refresh(recipe_run)
+            # db_session.add(recipe_run)
+            # db_session.commit()
+            # db_session.refresh(recipe_run)
             raise e  # raise the error, so that the calling function knows what happened
 
 
@@ -754,7 +734,6 @@ async def synchronize(
     base_full_name: str,
     *,
     gh: GitHubAPI,
-    db_session: Session,
     gh_kws: dict,
 ):
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
@@ -833,14 +812,8 @@ async def synchronize(
     #     pangeo-forge-runner, so that functionality is available to users.
 
     try:
-        feedstock_statement = select(MODELS["feedstock"].table).where(
-            MODELS["feedstock"].table.spec == base_full_name
-        )
-        feedstock = db_session.exec(feedstock_statement).one()
-        bakery_statement = select(MODELS["bakery"].table).where(
-            MODELS["bakery"].table.name == meta["bakery"]["id"]
-        )
-        bakery = db_session.exec(bakery_statement).one()
+        feedstock: FeedstockRead = ...  # type: ignore
+        bakery: BakeryRead = ...  # type: ignore
     except (MultipleResultsFound, NoResultFound) as e:
         if isinstance(e, NoResultFound):
             output = dict(
@@ -901,9 +874,9 @@ async def synchronize(
     created = []
     for nm in new_models:
         db_model = MODELS["recipe_run"].table.from_orm(nm)
-        db_session.add(db_model)
-        db_session.commit()
-        db_session.refresh(db_model)
+        # db_session.add(db_model)
+        # db_session.commit()
+        # db_session.refresh(db_model)
         created.append(db_model)
     summary = f"Recipe runs created at commit `{head_sha}`:"
     backend_app_webhook_url = await get_app_webhook_url(gh)
@@ -936,7 +909,6 @@ async def run_recipe_test(
     reactions_url: str,
     *,
     gh: GitHubAPI,
-    db_session: Session,
     gh_kws: dict,
 ):
     """ """
@@ -951,7 +923,7 @@ async def run_recipe_test(
     # TODO: create a check run on the head_sha this was deployed from to give
     # a point of user engagement & a details link to recipe run page on pangeo-forge.org
     try:
-        await run(*args, **kws, gh=gh, db_session=db_session)
+        await run(*args, **kws, gh=gh)
     except subprocess.CalledProcessError:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
         # We don't need to update the recipe_run in the database or handle the trace here,
@@ -1039,7 +1011,6 @@ async def create_feedstock_repo(
     base_repo_api_url: str,
     *,
     gh: GitHubAPI,
-    db_session: Session,
     gh_kws: dict,
 ):
     # (1) check changed files, if we're in a subdir of recipes, then proceed
@@ -1104,9 +1075,9 @@ async def create_feedstock_repo(
     )
     # (7) add new feedstock to database
     new_fstock_model = MODELS["feedstock"].creation(spec=feedstock_spec)
-    db_model = MODELS["feedstock"].table.from_orm(new_fstock_model)
-    db_session.add(db_model)
-    db_session.commit()
+    MODELS["feedstock"].table.from_orm(new_fstock_model)
+    # db_session.add(db_model)
+    # db_session.commit()
     # (8) merge PR - this deploys prod run via another call to /github/hooks route
     merged = await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge", **gh_kws)
     # (9) delete PR branch
@@ -1154,7 +1125,6 @@ async def deploy_prod_run(
     base_ref: str,
     *,
     gh: GitHubAPI,
-    db_session: Session,
     gh_kws: dict,
 ):
     # (1) expand meta
@@ -1181,14 +1151,8 @@ async def deploy_prod_run(
 
     # (2) find the feedstock and bakery in the database
     try:
-        feedstock_statement = select(MODELS["feedstock"].table).where(
-            MODELS["feedstock"].table.spec == base_full_name
-        )
-        feedstock = db_session.exec(feedstock_statement).one()
-        bakery_statement = select(MODELS["bakery"].table).where(
-            MODELS["bakery"].table.name == meta["bakery"]["id"]
-        )
-        bakery = db_session.exec(bakery_statement).one()
+        feedstock: FeedstockRead = ...  # type: ignore
+        bakery: BakeryRead = ...  # type: ignore
     except NoResultFound as e:
         # TODO: notify the user of this somehow
         raise e
@@ -1220,9 +1184,9 @@ async def deploy_prod_run(
         )
 
         db_model = MODELS["recipe_run"].table.from_orm(model)
-        db_session.add(db_model)
-        db_session.commit()
-        db_session.refresh(db_model)
+        # db_session.add(db_model)
+        # db_session.commit()
+        # db_session.refresh(db_model)
         logger.debug(f"Created recipe run: {gh_deployment}")
         created.append(db_model)
 
@@ -1231,7 +1195,7 @@ async def deploy_prod_run(
         args = (base_html_url, merge_commit_sha, recipe_run, feedstock.spec)
         logger.info(f"Calling run with args: {args}")
         try:
-            await run(*args, gh=gh, db_session=db_session)  # type: ignore
+            await run(*args, gh=gh)  # type: ignore
         except subprocess.CalledProcessError:
             deployment_id = json.loads(recipe_run.message)["deployment_id"]
             await gh.post(
@@ -1266,6 +1230,6 @@ async def deploy_prod_run(
         message = json.loads(recipe_run.message)
         # save environment url for reuse when job completes, in `triage_prod_run_complete`
         recipe_run.message = json.dumps(message | {"environment_url": environment_url})
-        db_session.add(recipe_run)
-        db_session.commit()
-        db_session.refresh(recipe_run)
+        # db_session.add(recipe_run)
+        # db_session.commit()
+        # db_session.refresh(recipe_run)

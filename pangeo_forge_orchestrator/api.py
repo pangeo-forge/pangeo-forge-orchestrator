@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 
-from .database import maybe_create_db_and_tables
 from .http import http_session
 from .metadata import app_metadata
 from .routers.github_app import github_app_router
@@ -30,7 +29,6 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    maybe_create_db_and_tables()
     http_session.start()
 
 
