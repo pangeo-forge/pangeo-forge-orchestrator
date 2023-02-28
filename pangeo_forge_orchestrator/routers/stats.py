@@ -1,9 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, func
-from sqlmodel import Session
+from sqlalchemy import and_
 
-from ..dependencies import get_session
 from ..models import MODELS
 
 # TODO: this module is untested!
@@ -23,9 +21,10 @@ class StatsResponse(BaseModel):
     summary="Get statistics for recipe runs",
     tags=["stats"],
 )
-def get_recipe_stats(*, session: Session = Depends(get_session)):
-    model = MODELS["recipe_run"]
-    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+def get_recipe_stats():
+    MODELS["recipe_run"]
+    # return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+    return ...
 
 
 @stats_router.get(
@@ -34,9 +33,10 @@ def get_recipe_stats(*, session: Session = Depends(get_session)):
     summary="Get statistics for bakeries",
     tags=["stats"],
 )
-def get_bakery_stats(*, session: Session = Depends(get_session)):
-    model = MODELS["bakery"]
-    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+def get_bakery_stats():
+    MODELS["bakery"]
+    # return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+    return ...
 
 
 @stats_router.get(
@@ -45,9 +45,10 @@ def get_bakery_stats(*, session: Session = Depends(get_session)):
     summary="Get statistics for feedstocks",
     tags=["stats"],
 )
-def get_feedstock_stats(*, session: Session = Depends(get_session)):
-    model = MODELS["feedstock"]
-    return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+def get_feedstock_stats():
+    MODELS["feedstock"]
+    # return StatsResponse(count=session.query(func.count(model.table.id)).scalar())
+    return ...
 
 
 @stats_router.get(
@@ -58,22 +59,23 @@ def get_feedstock_stats(*, session: Session = Depends(get_session)):
 )
 def get_dataset_stats(
     *,
-    session: Session = Depends(get_session),
     exclude_test_runs: bool = Query(False, description="Exclude test runs"),
 ) -> StatsResponse:
     model = MODELS["recipe_run"]
 
     if exclude_test_runs:
-        statement = and_(
+        and_(
             model.table.dataset_public_url.isnot(None),
             model.table.is_test.isnot(True),
             model.table.status == "completed",
             model.table.conclusion == "success",
         )
 
-        results = session.query(model.table).filter(statement).count()
+        # results = session.query(model.table).filter(statement).count()
+        results = ...
 
     else:
-        results = session.query(func.count(model.table.dataset_public_url)).scalar()
+        # results = session.query(func.count(model.table.dataset_public_url)).scalar()
+        results = ...
 
     return StatsResponse(count=results)

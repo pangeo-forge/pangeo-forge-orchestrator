@@ -7,7 +7,6 @@ import pytest_asyncio
 
 import pangeo_forge_orchestrator
 
-from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
 
 
@@ -88,9 +87,6 @@ async def dataflow_request_fixture(
     }
 
     yield add_hash_signature(event_request, webhook_secret), _MockGitHubBackend(**backend_kws)
-
-    # database teardown
-    clear_database()
 
 
 @pytest.mark.asyncio

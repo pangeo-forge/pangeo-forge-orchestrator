@@ -5,7 +5,6 @@ import pytest_asyncio
 
 import pangeo_forge_orchestrator
 
-from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
 from .mock_pangeo_forge_runner import mock_subprocess_check_output
 
@@ -136,9 +135,6 @@ async def pr_merged_request_fixture(
     }
 
     yield add_hash_signature(event_request, webhook_secret), _MockGitHubBackend(**gh_backend_kws)
-
-    # database teardown
-    clear_database()
 
 
 @pytest.mark.asyncio

@@ -6,14 +6,11 @@ import subprocess
 
 import pytest
 import pytest_asyncio
-from sqlmodel import Session
 
-from pangeo_forge_orchestrator.database import engine
 from pangeo_forge_orchestrator.http import http_session
 from pangeo_forge_orchestrator.models import MODELS
 from pangeo_forge_orchestrator.routers.github_app import run
 
-from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, get_mock_github_session
 from .mock_pangeo_forge_runner import (
     mock_subprocess_check_output,
@@ -62,47 +59,41 @@ async def run_fixture(
     # In this test, we *do need* the `SQLModel` object, to pass to `run()`, and this seems to be a
     # (the only?) way to do that. In any case, this is how we create the object in the `github_app`
     # router itself, so even if there are other ways to do this, this is the most realistic:
-    with Session(engine) as db_session:
-        model = MODELS["recipe_run"].creation(
-            **{
-                "recipe_id": "eooffshore_ics_cmems_WIND",
-                "bakery_id": 1,
-                "feedstock_id": 1,
-                "head_sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
-                "version": "",
-                "started_at": "2022-09-19T16:31:43",
-                "completed_at": None,
-                "conclusion": None,
-                "status": "queued",
-                "is_test": request.param["is_test"],
-                "dataset_type": "zarr",
-                "dataset_public_url": None,
-                "message": None,
-            },
-        )
-        db_model = MODELS["recipe_run"].table.from_orm(model)
-        db_session.add(db_model)
-        db_session.commit()
-        db_session.refresh(db_model)
+    model = MODELS["recipe_run"].creation(
+        **{
+            "recipe_id": "eooffshore_ics_cmems_WIND",
+            "bakery_id": 1,
+            "feedstock_id": 1,
+            "head_sha": "037542663cb7f7bc4a04777c90d85accbff01c8c",
+            "version": "",
+            "started_at": "2022-09-19T16:31:43",
+            "completed_at": None,
+            "conclusion": None,
+            "status": "queued",
+            "is_test": request.param["is_test"],
+            "dataset_type": "zarr",
+            "dataset_public_url": None,
+            "message": None,
+        },
+    )
+    db_model = MODELS["recipe_run"].table.from_orm(model)
+    # db_session.add(db_model)
+    # db_session.commit()
+    # db_session.refresh(db_model)
 
     gh_backend_kws = {}
     gh_backend = _MockGitHubBackend(**gh_backend_kws)
     mock_gh = get_mock_github_session(gh_backend)(http_session)
 
-    with Session(engine) as db_session:
-        run_kws = dict(
-            html_url=f"{request.param['feedstock_spec']}",
-            ref=db_model.head_sha,
-            recipe_run=db_model,
-            feedstock_spec=request.param["feedstock_spec"],
-            feedstock_subdir=request.param["feedstock_subdir"],
-            gh=mock_gh,
-            db_session=db_session,
-        )
-        yield run_kws
-
-    # database teardown
-    clear_database()
+    run_kws = dict(
+        html_url=f"{request.param['feedstock_spec']}",
+        ref=db_model.head_sha,
+        recipe_run=db_model,
+        feedstock_spec=request.param["feedstock_spec"],
+        feedstock_subdir=request.param["feedstock_subdir"],
+        gh=mock_gh,
+    )
+    yield run_kws
 
 
 @pytest.mark.asyncio

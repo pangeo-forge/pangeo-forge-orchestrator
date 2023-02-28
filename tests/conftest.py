@@ -26,15 +26,6 @@ def setup_and_teardown(
     mock_secrets_dir,
     mock_bakeries_dir,
 ):
-    # (1) database test session setup
-    db_path = os.environ["DATABASE_URL"]
-    if db_path.startswith("sqlite") and os.path.exists(db_path.replace("sqlite:///", "")):
-        raise ValueError(
-            f"Preexisting `{db_path}` may cause test failures. Please remove this file "
-            "then restart test session."
-        )
-
-    # (2) github app test session setup
     def get_mock_app_config_path():
         return mock_app_config_path
 
@@ -102,11 +93,8 @@ def webhook_secret():
 
 
 @pytest.fixture(scope="session")
-def mock_config_kwargs(webhook_secret, private_key, api_key):
+def mock_config_kwargs(webhook_secret, private_key):
     return {
-        "fastapi": {
-            "PANGEO_FORGE_API_KEY": api_key,
-        },
         "github_app": {
             "id": 1234567,
             "app_name": "pytest-mock-github-app",

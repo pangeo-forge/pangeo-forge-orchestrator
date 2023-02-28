@@ -8,7 +8,6 @@ import pytest_asyncio
 import pangeo_forge_orchestrator
 from pangeo_forge_orchestrator.routers.github_app import DEFAULT_BACKEND_NETLOC
 
-from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, add_hash_signature, get_mock_github_session
 from .mock_pangeo_forge_runner import mock_subprocess_check_output
 
@@ -128,9 +127,6 @@ async def synchronize_request_fixture(
         expected_recipe_runs_response,
         expected_check_runs_response,
     )
-
-    # database teardown
-    clear_database()
 
 
 @pytest.mark.asyncio

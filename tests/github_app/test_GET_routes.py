@@ -5,7 +5,6 @@ import pytest_asyncio
 
 import pangeo_forge_orchestrator
 
-from ..conftest import clear_database
 from .fixtures import _MockGitHubBackend, get_mock_github_session
 
 
@@ -84,9 +83,6 @@ async def feedstock_deliveries_fixture(api_key, async_app_client, app_hook_deliv
     }
     yield app_hook_deliveries, _MockGitHubBackend(**gh_backend_kws)
 
-    # database teardown
-    clear_database()
-
 
 @pytest.mark.asyncio
 async def test_get_feedstock_deliveries(
@@ -146,9 +142,6 @@ async def check_run_create_kwargs(api_key, async_app_client):
         ),
         details_url="https://pangeo-forge.org/",  # TODO: make this more specific.
     )
-
-    # database teardown
-    clear_database()
 
 
 @pytest.mark.asyncio
