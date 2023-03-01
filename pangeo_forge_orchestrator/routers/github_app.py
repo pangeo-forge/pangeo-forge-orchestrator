@@ -861,6 +861,7 @@ async def synchronize(
             status="queued",
             output=dict(
                 title=f"Cloud deployment test for {recipe['id']} on {meta['bakery']['id']}",
+                # FIXME[IMPORTANT]: *** dataset_type is not always zarr ***
                 summary=json.dumps(dict(is_test=True, dataset_type="zarr")),
             ),
         )
@@ -924,16 +925,17 @@ async def run_recipe_test(
             ).dict(),
             **gh_kws,
         )
+        raise e
     # `run` was called successfully, so update check run with status = in_progress
-    existing_check_run = gh.getitem(f"{base_api_url}/check-runs/{check_run_id}", **gh_kws)
+    existing_check_run = await gh.getitem(f"{base_api_url}/check-runs/{check_run_id}", **gh_kws)
     summary: dict = json.loads(existing_check_run["output"]["summary"])
     summary.update(submitted_job.dict())
     await gh.patch(
         f"{base_api_url}/check-runs/{check_run_id}",
         data=CheckRunUpdate(
             status="in_progress",
-            output=dict(title="Job submission success.", summary=summary),
-        ).dict(exclude_none=True),
+            output=dict(title="Job submission success.", summary=json.dumps(summary)),
+        ).dict(exclude={"conclusion", "completed_at"}),
         **gh_kws,
     )
 
