@@ -70,9 +70,18 @@ class CheckRunCreate(BaseModel):
 
 class CheckRunUpdate(BaseModel):
     status: RecipeRunStatus = RecipeRunStatus.completed
-    conclusion: RecipeRunConclusion
     completed_at: str = Field(default_factory=now)
     output: CheckRunOutputField
+    conclusion: Optional[RecipeRunConclusion] = None
+
+
+class SubmittedJob(BaseModel):
+    job_name: str
+    job_id: str
+
+
+class FailedJobSubmission(Exception):
+    pass
 
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -215,12 +224,12 @@ async def maybe_specify_feedstock_subdir(
 
 
 def get_storage_subpath_identifier(
-        feedstock_spec: str,
-        is_test: bool,
-        check_run_id: int,
-        recipe_id: str,
-        dataset_type: str,
-    ):
+    feedstock_spec: str,
+    is_test: bool,
+    check_run_id: int,
+    recipe_id: str,
+    dataset_type: str,
+):
     # TODO: Other storage locations may prefer a different layout, but this is how
     # we're solving this for OSN. Eventaully we could expose higher up in Traitlets
     # config of `pangeo-forge-runner`. The basic idea is that path should be determined
@@ -386,7 +395,7 @@ async def handle_dataflow_event(
 
         if recipe_run.conclusion == "success":
             bakery_config = get_config().bakeries[bakery.name]
-            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)
+            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)  # type: ignore
             root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
             recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
                 root_path=root_path
@@ -467,7 +476,7 @@ async def handle_pr_comment_event(
         recipe_id = cmd_args[0]
         # use recipe_id to get check_run_id and dataset_type
         all_check_runs = await gh.getitem(
-            f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}",
+            f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}/check-runs",
             **gh_kws,
         )
         # FIXME: there could certainly be a situation where more than one bakery is specified,
@@ -494,6 +503,7 @@ async def handle_pr_comment_event(
             recipe_id,
             dataset_type,
             pr["base"]["repo"]["full_name"],
+            pr["base"]["repo"]["id"],
             check_run_id,
             bakery_name,
             reactions_url,
@@ -650,51 +660,11 @@ async def get_delivery(
 # Background task helpers -------------------------------------------------------------------------
 
 
-async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
-    github_app_webhook_url = await get_app_webhook_url(gh)
-    # Encode webhook url + recipe run id so that:
-    #   1. they are valid gcp labels (max 64 char, no special chars, no uppercase, etc.):
-    #      https://cloud.google.com/resource-manager/docs/creating-managing-labels#requirements
-    #   2. encoding can be reversed by webhook cloud function to determine:
-    #       (a) where (i.e. url) to post job completion webhook
-    #       (b) the recipe run id assocated with the job (in the database used by the backend
-    #           deployed at this url
-    # This feels brittle and has room for improvement but just doing it this way for now
-    # to get *something* wired together and working.
-    p = urlparse(github_app_webhook_url)
-    # if this is a named deployment (review, staging, or prod) we don't need to include the path
-    # because it will always be "/github/hooks/" and we don't want to waste valuable space in our
-    # 64 char length limit encoding that. but if the path is something else, this is local proxy
-    # server, and so we do need to preseve that.
-    to_encode = p.netloc if p.path == "/github/hooks/" else p.netloc + p.path
-    to_encode += "%"  # control character to separate webhook url encoding from recipe run id
-    as_hex = "".join([f"{ord(x):02x}" for x in to_encode])
-    # decoding is easier if recipe_run id encoded with an even length, so zero-pad if odd.
-    # note we are using ``f"0{recipe_run.id}"``, *not* ``f"{recipe_run_id:02}"`` to pad if odd,
-    # because we want the *number of digits* to be even regardless of the length of the odd input.
-    recipe_run_id_str = f"0{recipe_run.id}" if len(str(recipe_run.id)) % 2 else str(recipe_run.id)
-    encoded_webhook_url_plus_recipe_run_id = as_hex + recipe_run_id_str
-    # so, this will be reversable with:
-    #   ```
-    #   as_pairs = [
-    #       a + b for a, b in zip(
-    #           encoded_webhook_url_plus_recipe_run_id[::2],
-    #           encoded_webhook_url_plus_recipe_run_id[1::2],
-    #       )
-    #   ]
-    #   control_character_idx = [
-    #       i for i, val in enumerate(as_pairs) if chr(int(val, 16)) == "%"
-    #   ].pop(0)
-    #   recipe_run_id = int("".join(as_pairs[control_character_idx + 1:]))
-    #   webhook_url = "".join(
-    #       [chr(int(val, 16)) for val in as_pairs[:control_character_idx]]
-    #   )
-    #   ```
-    # Finally, dataflow job names *have to* start with a lowercase letter, so prepending "a":
-    job_name = f"a{encoded_webhook_url_plus_recipe_run_id}"
-    if len(job_name) > 64:
-        raise ValueError(f"{len(job_name) = } exceeds max dataflow job name len of 64 chars.")
-    return job_name
+async def make_dataflow_job_name(feedstock_repo_id: int, check_run_id: int):
+    # returns, e.g. 'repo537721725-checkrun11696408457', which conforms to the dataflow job name
+    # requirements of (1) less than 64 chars; (2) starts with lowercase letter; (3) only _ and -
+    # for special chars.
+    return f"repo{feedstock_repo_id}-checkrun{check_run_id}"
 
 
 async def run(
@@ -703,13 +673,12 @@ async def run(
     recipe_id: str,
     dataset_type: str,
     feedstock_spec: str,
+    feedstock_repo_id: int,
     check_run_id: int,
     bakery_name: str,
     is_test: bool = False,
     feedstock_subdir: Optional[str] = None,
-    *,
-    gh: GitHubAPI,
-):
+) -> SubmittedJob:
     bakery_config = get_config().bakeries[bakery_name]
 
     subpath = get_storage_subpath_identifier(
@@ -731,7 +700,7 @@ async def run(
         bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
     )
     if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
-        bakery_config.Bake.job_name = await make_dataflow_job_name(recipe_run, gh)
+        bakery_config.Bake.job_name = await make_dataflow_job_name(feedstock_repo_id, check_run_id)
 
     logger.debug(f"Dumping bakery config to json: {bakery_config.dict(exclude_none=True)}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
@@ -745,55 +714,32 @@ async def run(
             f"--ref={ref}",
             "--json",
         ]
-        if recipe_run.is_test:
+        if is_test:
             cmd.append("--prune")
 
-        cmd += [f"--Bake.recipe_id={recipe_run.recipe_id}", f"-f={f.name}"]
+        cmd += [f"--Bake.recipe_id={recipe_id}", f"-f={f.name}"]
 
         if feedstock_subdir:
             cmd.append(f"--feedstock-subdir={feedstock_subdir}")
 
         logger.debug(f"Running command: {cmd}")
 
-        # We're about to run this recipe, let's update its status to "in_progress"
-        recipe_run.status = "in_progress"
-        # Start time was first set when recipe run was queued, which could have been ages ago,
-        # so if we don't update it now, we won't capture how long the pipeline actually took.
-        recipe_run.started_at = datetime.utcnow().replace(microsecond=0)
-        # db_session.add(recipe_run)
-        # db_session.commit()
         try:
             out = subprocess.check_output(cmd)
             logger.debug(f"Command output is {out.decode('utf-8')}")
             for line in out.splitlines():
-                p = json.loads(line)
+                p: dict = json.loads(line)
                 if p.get("status") == "submitted":
-                    message = json.loads(recipe_run.message or "{}") | dict(
-                        job_name=p["job_name"], job_id=p["job_id"]
-                    )
-                    recipe_run.message = json.dumps(message)
-                    # db_session.add(recipe_run)
-                    # db_session.commit()
+                    submitted_job = SubmittedJob(job_name=p["job_name"], job_id=p["job_id"])
 
         except subprocess.CalledProcessError as e:
             for line in e.output.splitlines():
                 p = json.loads(line)
                 if p.get("status") == "failed":
                     trace = p["exc_info"]
+            raise FailedJobSubmission(trace) from e
 
-            logger.error(f"Recipe run {recipe_run} failed with: {trace}")
-
-            recipe_run.status = "completed"
-            recipe_run.conclusion = "failure"
-            # Add the traceback for this deployment failure to the recipe run, otherwise it could
-            # easily get buried in the server logs. TODO: Consider: is there anything of security
-            # significance in the call stack captured in the trace?
-            message = json.loads(recipe_run.message or "{}")
-            recipe_run.message = json.dumps(message | {"trace": trace})
-            # db_session.add(recipe_run)
-            # db_session.commit()
-            # db_session.refresh(recipe_run)
-            raise e  # raise the error, so that the calling function knows what happened
+        return submitted_job
 
 
 # Background tasks --------------------------------------------------------------------------------
@@ -936,6 +882,7 @@ async def run_recipe_test(
     recipe_id: str,
     dataset_type: str,
     feedstock_spec: str,
+    feedstock_repo_id: int,
     check_run_id: int,
     bakery_name: str,
     reactions_url: str,
@@ -949,20 +896,46 @@ async def run_recipe_test(
     # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
     # check which one this is, and if it's staged-recipes, specify the subdirectoy name kwarg.
     feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
-    args = (
-        head_html_url, head_sha, recipe_id, dataset_type, feedstock_spec, check_run_id, bakery_name,
-    )
     kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
-    kws.update(dict(is_test=True))
-    logger.info(f"Calling run with args, kws: {args}, {kws}")
-    # TODO: create a check run on the head_sha this was deployed from to give
-    # a point of user engagement & a details link to recipe run page on pangeo-forge.org
     try:
-        await run(*args, **kws, gh=gh)
-    except subprocess.CalledProcessError:
+        submitted_job = await run(
+            head_html_url,
+            head_sha,
+            recipe_id,
+            dataset_type,
+            feedstock_spec,
+            feedstock_repo_id,
+            check_run_id,
+            bakery_name,
+            **kws,
+            is_test=True,
+        )
+    except FailedJobSubmission as e:
         await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
-        # We don't need to update the recipe_run in the database or handle the trace here,
-        # because that's taken care of inside `run`.
+        await gh.patch(
+            f"{base_api_url}/check-runs/{check_run_id}",
+            data=CheckRunUpdate(
+                status="completed",
+                conclusion="failure",
+                output=dict(
+                    title="Job submission failed.",
+                    summary=e.args[0],
+                ),
+            ).dict(),
+            **gh_kws,
+        )
+    # `run` was called successfully, so update check run with status = in_progress
+    existing_check_run = gh.getitem(f"{base_api_url}/check-runs/{check_run_id}", **gh_kws)
+    summary: dict = json.loads(existing_check_run["output"]["summary"])
+    summary.update(submitted_job.dict())
+    await gh.patch(
+        f"{base_api_url}/check-runs/{check_run_id}",
+        data=CheckRunUpdate(
+            status="in_progress",
+            output=dict(title="Job submission success.", summary=summary),
+        ).dict(exclude_none=True),
+        **gh_kws,
+    )
 
 
 async def triage_test_run_complete(
