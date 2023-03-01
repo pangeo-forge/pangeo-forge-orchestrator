@@ -214,7 +214,13 @@ async def maybe_specify_feedstock_subdir(
     return None
 
 
-def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
+def get_storage_subpath_identifier(
+        feedstock_spec: str,
+        is_test: bool,
+        check_run_id: int,
+        recipe_id: str,
+        dataset_type: str,
+    ):
     # TODO: Other storage locations may prefer a different layout, but this is how
     # we're solving this for OSN. Eventaully we could expose higher up in Traitlets
     # config of `pangeo-forge-runner`. The basic idea is that path should be determined
@@ -224,12 +230,12 @@ def get_storage_subpath_identifier(feedstock_spec: str, recipe_run: SQLModel):
     # so just doing this here for the moment.
 
     app_name = get_config().github_app.app_name
-    if recipe_run.is_test:
-        prefix = f"{app_name}/test/{feedstock_spec}/recipe-run-{recipe_run.id}"
+    if is_test:
+        prefix = f"{app_name}/test/{feedstock_spec}/check-run-{check_run_id}"
     else:
         prefix = f"{app_name}/{feedstock_spec}"
 
-    return f"{prefix}/{recipe_run.recipe_id}.{recipe_run.dataset_type}"
+    return f"{prefix}/{recipe_id}.{dataset_type}"
 
 
 # Routes ------------------------------------------------------------------------------------------
@@ -458,17 +464,38 @@ async def handle_pr_comment_event(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
             # TODO: Maybe post a comment and/or emoji reaction explaining this error.
 
-        # TODO: handle error if there is no matching result. this would arise if the slash
-        # command arg was a recipe_id that doesn't exist for this feedstock + head_sha combo.
-        matching_recipe_run = ...
-        logger.debug(matching_recipe_run)
+        recipe_id = cmd_args[0]
+        # use recipe_id to get check_run_id and dataset_type
+        all_check_runs = await gh.getitem(
+            f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}",
+            **gh_kws,
+        )
+        # FIXME: there could certainly be a situation where more than one bakery is specified,
+        # in the future. would need to account for that here.
+        matching_check_run = [
+            c for c in all_check_runs["check_runs"] if c["name"].startswith(recipe_id)
+        ]
+        if not matching_check_run:
+            raise ValueError(f"No check runs matching {recipe_id = }")
+        else:
+            check_run_id = matching_check_run[0]["id"]
+            # FIXME: can we be confident that the summary will always be json-loadable and contain
+            # this field? if it's always created by this github app, and tested, then yes. confirm.
+            dataset_type = json.loads(matching_check_run[0]["output"]["summary"])["dataset_type"]
+            # NOTE: same comment as immediately above: we are relying on these names being always
+            # formatted a certain way. let's make sure that happens.
+            check_run_name: str = matching_check_run[0]["name"]
+            bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
         args = (  # type: ignore
             pr["head"]["repo"]["html_url"],
             pr["base"]["repo"]["url"],
             pr["head"]["sha"],
             pr["number"],
-            matching_recipe_run,
+            recipe_id,
+            dataset_type,
             pr["base"]["repo"]["full_name"],
+            check_run_id,
+            bakery_name,
             reactions_url,
         )
         logger.info(f"Creating run_recipe_test task with args: {args}")
@@ -673,16 +700,25 @@ async def make_dataflow_job_name(recipe_run: SQLModel, gh: GitHubAPI):
 async def run(
     html_url: str,
     ref: str,
-    recipe_run: SQLModel,
+    recipe_id: str,
+    dataset_type: str,
     feedstock_spec: str,
+    check_run_id: int,
+    bakery_name: str,
+    is_test: bool = False,
     feedstock_subdir: Optional[str] = None,
     *,
     gh: GitHubAPI,
 ):
-    bakery: BakeryRead = ...  # type: ignore
-    bakery_config = get_config().bakeries[bakery.name]
+    bakery_config = get_config().bakeries[bakery_name]
 
-    subpath = get_storage_subpath_identifier(feedstock_spec, recipe_run)
+    subpath = get_storage_subpath_identifier(
+        feedstock_spec,
+        is_test,
+        check_run_id,
+        recipe_id,
+        dataset_type,
+    )
     # root paths are an interesting configuration edge-case because they combine some stable
     # config (the base path) with some per-recipe config (the subpath). so they are partially
     # initialized when we get them, but we need to complete them here.
@@ -897,8 +933,11 @@ async def run_recipe_test(
     base_api_url: str,
     head_sha: str,
     pr_number: str,
-    recipe_run: SQLModel,
+    recipe_id: str,
+    dataset_type: str,
     feedstock_spec: str,
+    check_run_id: int,
+    bakery_name: str,
     reactions_url: str,
     *,
     gh: GitHubAPI,
@@ -910,8 +949,11 @@ async def run_recipe_test(
     # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
     # check which one this is, and if it's staged-recipes, specify the subdirectoy name kwarg.
     feedstock_subdir = await maybe_specify_feedstock_subdir(base_api_url, pr_number, gh)
-    args = (head_html_url, head_sha, recipe_run, feedstock_spec)
+    args = (
+        head_html_url, head_sha, recipe_id, dataset_type, feedstock_spec, check_run_id, bakery_name,
+    )
     kws = {"feedstock_subdir": feedstock_subdir} if feedstock_subdir else {}
+    kws.update(dict(is_test=True))
     logger.info(f"Calling run with args, kws: {args}, {kws}")
     # TODO: create a check run on the head_sha this was deployed from to give
     # a point of user engagement & a details link to recipe run page on pangeo-forge.org
