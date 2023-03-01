@@ -15,7 +15,8 @@ import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
-from sqlalchemy.orm.exc import MultipleResultsFound, NoResultFound
+from pydantic import BaseModel, Field
+from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import SQLModel
 
 from ..config import get_config
@@ -35,6 +36,43 @@ FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
 DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
 github_app_router = APIRouter()
+
+# FIXME: Remove DEFAULT_BAKERY. it is added as a shim to ease the transition
+# away from maintaining a database as part of this application.
+DEFAULT_BAKERY = BakeryRead(
+    id=1,
+    region="us-central",
+    name="pangeo-ldeo-nsf-earthcube",
+    description=(
+        "Bakery operated by Lamont-Doherty Earth Observatory (LDEO) Ocean Transport Group "
+        "with funding from National Science Foundation (NSF) EarthCube."
+    ),
+)
+
+
+class CheckRunOutputField(BaseModel):
+    title: str
+    summary: str = Field(default_factory=str)
+
+
+def now():
+    return f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z"
+
+
+class CheckRunCreate(BaseModel):
+    name: str
+    head_sha: str
+    status: RecipeRunStatus = RecipeRunStatus.in_progress
+    started_at: str = Field(default_factory=now)
+    output: CheckRunOutputField
+    details_url: str = "https://pangeo-forge.org/"
+
+
+class CheckRunUpdate(BaseModel):
+    status: RecipeRunStatus = RecipeRunStatus.completed
+    conclusion: RecipeRunConclusion
+    completed_at: str = Field(default_factory=now)
+    output: CheckRunOutputField
 
 
 # Helpers -----------------------------------------------------------------------------------------
@@ -463,7 +501,6 @@ async def handle_pr_event(
             pr["head"]["sha"],
             pr["number"],
             pr["base"]["repo"]["url"],
-            pr["base"]["repo"]["full_name"],
         )
         background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
         return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
@@ -731,32 +768,21 @@ async def synchronize(
     head_sha: str,
     pr_number: str,
     base_api_url: str,
-    base_full_name: str,
     *,
     gh: GitHubAPI,
     gh_kws: dict,
 ):
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
-    create_request = dict(
-        name="synchronize",
-        head_sha=head_sha,
-        status="in_progress",
-        started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(
-            title="Syncing latest commit to Pangeo Forge Cloud",
-            summary="",
-        ),
-        details_url="https://pangeo-forge.org/",
-    )  # required
 
-    checks_response = await gh.post(f"{base_api_url}/check-runs", data=create_request, **gh_kws)
-    # TODO: add upstream `pangeo-forge-runner get-image` command, which only grabs the spec'd
-    # image from meta.yaml, without importing the recipe. this will be used when we replace
-    # subprocess calls with `docker.exec`, to pull & start the appropriate docker container.
-    # TODO: make sure that `expand-meta` command verifies if python objects in recipe module exist
-    # for each recipe in meta.yaml (i.e., that meta.yaml doesn't contain "null recipe pointers").
-    # TODO: Also have pangeo-forge-runner raise descriptive effor for structure errors in the PR
-    # (i.e., incorrect directory structure), and translate that here to failed check run.
+    parse_meta_check = await gh.post(
+        f"{base_api_url}/check-runs",
+        data=CheckRunCreate(
+            name="Parse meta.yaml",
+            head_sha=head_sha,
+            output=dict(title="Parsing meta.yaml for latest commit"),
+        ).dict(),
+        **gh_kws,
+    )
     cmd = [
         "pangeo-forge-runner",
         "expand-meta",
@@ -775,20 +801,18 @@ async def synchronize(
             # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
             if ("status" in p) and p["status"] == "failed":
                 tracelines = p["exc_info"].splitlines()
-                logger.debug(f"Synchronize errored with:\n {tracelines}")
-                update_request = dict(
-                    status="completed",
-                    conclusion="failure",
-                    completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-                    output=dict(
-                        title="Synchronize error - click details for summary",
-                        summary=tracelines[-1],
-                    ),
-                )
+                logger.debug(f"Meta.yaml parsing errored with:\n {tracelines}")
 
                 await gh.patch(
-                    f"{base_api_url}/check-runs/{checks_response['id']}",
-                    data=update_request,
+                    f"{base_api_url}/check-runs/{parse_meta_check['id']}",
+                    data=CheckRunUpdate(
+                        status="completed",
+                        conclusion="failure",
+                        output=dict(
+                            title="Meta.yaml parsing error - click details for summary",
+                            summary=tracelines[-1],
+                        ),
+                    ).dict(),
                     **gh_kws,
                 )
                 raise ValueError(tracelines[-1]) from e
@@ -801,8 +825,6 @@ async def synchronize(
         # patch for https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/132
         if ("status" in p) and p["status"] == "completed":
             meta = p["meta"]
-    logger.debug(meta)
-
     # TODO[IMPORTANT]:
     #   - Add MetaYaml pydantic model to this somewhere. i'd say top level of this repo,
     #     but actually we want it to be user facing somehow). pangeo-forge-runner? its own
@@ -810,93 +832,64 @@ async def synchronize(
     #   - Then at this point in the synchronize task, parse ``meta`` dict into the model?
     #   - As I now think about this, I guess we want to parse ``meta`` dict into pydantic in
     #     pangeo-forge-runner, so that functionality is available to users.
-
-    try:
-        feedstock: FeedstockRead = ...  # type: ignore
-        bakery: BakeryRead = ...  # type: ignore
-    except (MultipleResultsFound, NoResultFound) as e:
-        if isinstance(e, NoResultFound):
-            output = dict(
-                title="Feedstock and/or bakery not present in database.",
-                summary=dedent(
-                    f"""\
-                    To resolve, a maintainer must ensure both of the following are in database:
-                    - **Feedstock**: {base_full_name}
-                    - **Bakery**: `{meta["bakery"]["id"]}`
-                    """
-                ),
-            )
-        elif isinstance(e, MultipleResultsFound):
-            output = dict(
-                title="Duplicate feedstock(s) and/or bakeries found in database.",
-                summary=dedent(
-                    f"""\
-                    To resolve, a maintainer must ensure there is only one each of:
-                    - **Feedstock**: {base_full_name}
-                    - **Bakery**: `{meta["bakery"]["id"]}`
-                    in the database.
-                    """
-                ),
-            )
-        update_request = dict(
+    logger.debug(meta)
+    await gh.patch(
+        f"{base_api_url}/check-runs/{parse_meta_check['id']}",
+        data=CheckRunUpdate(
             status="completed",
-            conclusion="failure",
-            completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-            output=output,
-        )
+            conclusion="success",
+            output=dict(
+                title="Meta.yaml successfully parsed.",
+                summary=json.dumps(meta, indent=4),
+            ),
+        ).dict(),
+        **gh_kws,
+    )
 
+    # FIXME: just temporarily enforcing only one bakery here, eventually swap this for checking
+    # that the specified bakery is part of the allowable set. possibly, this means verifying that
+    # it is a repository conforming to the appropriate template on github? or that it belongs to
+    # an "allow-list" here in this repository.
+    if not meta["bakery"]["id"] == DEFAULT_BAKERY.name:
         await gh.patch(
-            f"{base_api_url}/check-runs/{checks_response['id']}",
-            data=update_request,
+            f"{base_api_url}/check-runs/{parse_meta_check['id']}",
+            data=CheckRunUpdate(
+                conclusion="failure",
+                output=dict(
+                    title="Specified bakery not supported.",
+                    summary=dedent(
+                        f"""\
+                        Currently, the only supported bakery is '{DEFAULT_BAKERY.name}'.
+                        The specified {meta["bakery"]["id"] = } does not match this name.
+                        """
+                    ),
+                ),
+            ).dict(),
             **gh_kws,
         )
-        # ok, this seems maybe like the wrong way to do this?
-        # just want to raise the same error type but with a custom message
-        raise type(e)(json.dumps(output)) from e
+        raise ValueError(f"{meta['bakery']['id'] = } != {DEFAULT_BAKERY.name = }")
 
     # TODO: Derive `dataset_type` from recipe instance itself; hardcoding for now.
     # See https://github.com/pangeo-forge/pangeo-forge-recipes/issues/268
     # and https://github.com/pangeo-forge/staged-recipes/pull/154#issuecomment-1190925126
-    new_models = [
-        MODELS["recipe_run"].creation(
-            recipe_id=recipe["id"],
-            bakery_id=bakery.id,
-            feedstock_id=feedstock.id,
+    recipe_checks = [
+        CheckRunCreate(
+            name=f"{recipe['id']} / cloud deploy test (bakery: {meta['bakery']['id']})",
             head_sha=head_sha,
-            version="",
-            started_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-            is_test=True,
-            dataset_type="zarr",
+            status="queued",
+            output=dict(
+                title=f"Cloud deployment test for {recipe['id']} on {meta['bakery']['id']}",
+                summary=json.dumps(dict(is_test=True, dataset_type="zarr")),
+            ),
         )
         for recipe in meta["recipes"]
     ]
-
-    created = []
-    for nm in new_models:
-        db_model = MODELS["recipe_run"].table.from_orm(nm)
-        # db_session.add(db_model)
-        # db_session.commit()
-        # db_session.refresh(db_model)
-        created.append(db_model)
-    summary = f"Recipe runs created at commit `{head_sha}`:"
-    backend_app_webhook_url = await get_app_webhook_url(gh)
-    backend_netloc = urlparse(backend_app_webhook_url).netloc
-    # TODO: using urllib.parse.parse_qs / urlencode here would be more robust
-    query_param = f"feedstock_id={feedstock.id}"
-    if backend_netloc != DEFAULT_BACKEND_NETLOC:
-        query_param += f"&orchestratorEndpoint={backend_netloc}"
-    for model in created:
-        summary += f"\n- {FRONTEND_DASHBOARD_URL}/recipe-run/{model.id}?{query_param}"
-    update_request = dict(
-        status="completed",
-        conclusion="success",
-        completed_at=f"{datetime.utcnow().replace(microsecond=0).isoformat()}Z",
-        output=dict(title="Recipe runs queued for latest commit", summary=summary),
-    )
-
-    await gh.patch(
-        f"{base_api_url}/check-runs/{checks_response['id']}", data=update_request, **gh_kws
-    )
+    for rc in recipe_checks:
+        await gh.post(
+            f"{base_api_url}/check-runs",
+            data=rc.dict(),
+            **gh_kws,
+        )
 
 
 async def run_recipe_test(
