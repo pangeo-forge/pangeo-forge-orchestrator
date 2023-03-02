@@ -27,7 +27,6 @@ from ..models import (
     BakeryRead,
     FeedstockRead,
     RecipeRunConclusion,
-    RecipeRunRead,
     RecipeRunStatus,
 )
 
@@ -385,28 +384,44 @@ async def handle_dataflow_event(
                 detail=f"No handling implemented for {payload['conclusion'] = }.",
             )
 
-        recipe_run: RecipeRunRead = ...  # type: ignore
-        feedstock: FeedstockRead = ...  # type: ignore
-        bakery: BakeryRead = ...  # type: ignore
+        # parse job name into repo_id and check_run_id
+        # we assume job_names are formatted such as 'repo537721725-checkrun11696408457'
+        #
+        # FIXME: eventually the current function will be owned as part of bakery infrastructure,
+        # not github app infrastructure. when that happens, we want to make sure that the version
+        # of the job name _encoder_ used in the github app does not fall out of sync with this
+        # _decoding_ process. various options may exist to solve this problem, including factoring
+        # job name encode/decode into a small shared library?
+        # (NOTE: see identical comment in `dataflow-status-monistoring.src.main`)
+        job_name: str = payload["job_name"]
+        repo_id, check_run_id = job_name.split("-")
+        repo_id = repo_id.split("repo")[-1]
+        check_run_id = check_run_id.split("checkrun")[-1]
 
-        recipe_run.status = RecipeRunStatus("completed")
-        recipe_run.conclusion = RecipeRunConclusion(payload["conclusion"])
-        recipe_run.completed_at = datetime.utcnow()
-
-        if recipe_run.conclusion == "success":
-            bakery_config = get_config().bakeries[bakery.name]
-            subpath = get_storage_subpath_identifier(feedstock.spec, recipe_run)  # type: ignore
+        # get check run
+        check_run = await gh.getitem(f"/repositories/{repo_id}/check-runs/{check_run_id}", **gh_kws)
+        check_run_name: str = check_run["name"]
+        bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
+        check_run_summary = json.loads(check_run["output"]["summary"])
+        if payload["conclusion"] == "success":
+            bakery_config = get_config().bakeries[bakery_name]
+            # NOTE: naming storage subpaths will/should ultimately be the responsibility of the bakery,
+            # so eventually we should not be generating this here, but rather receiving this information
+            # as part of the job completion payload from the bakery.
+            subpath = get_storage_subpath_identifier(
+                feedstock_spec,
+                check_run_summary["is_test"],
+                check_run_id,
+                recipe_id,
+                check_run_summary["dataset_type"],
+            )
             root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
             recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
                 root_path=root_path
             )
-        # db_session.add(recipe_run)
-        # db_session.commit()
 
-        # Wow not every day you google a error and see a comment on it by Guido van Rossum
-        # https://github.com/python/mypy/issues/1174#issuecomment-175854832
         args: list[SQLModel] = [recipe_run]  # type: ignore
-        if recipe_run.is_test:
+        if check_run_summary["is_test"]:
             args.append(feedstock.spec)  # type: ignore
             logger.info(f"Calling `triage_test_run_complete` with {args=}")
             background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
@@ -660,7 +675,7 @@ async def get_delivery(
 # Background task helpers -------------------------------------------------------------------------
 
 
-async def make_dataflow_job_name(feedstock_repo_id: int, check_run_id: int):
+def make_dataflow_job_name(feedstock_repo_id: int, check_run_id: int):
     # returns, e.g. 'repo537721725-checkrun11696408457', which conforms to the dataflow job name
     # requirements of (1) less than 64 chars; (2) starts with lowercase letter; (3) only _ and -
     # for special chars.
@@ -700,7 +715,7 @@ async def run(
         bakery_config.MetadataCacheStorage.root_path.format(subpath=subpath)
     )
     if bakery_config.Bake.bakery_class.endswith("DataflowBakery"):
-        bakery_config.Bake.job_name = await make_dataflow_job_name(feedstock_repo_id, check_run_id)
+        bakery_config.Bake.job_name = make_dataflow_job_name(feedstock_repo_id, check_run_id)
 
     logger.debug(f"Dumping bakery config to json: {bakery_config.dict(exclude_none=True)}")
     # See https://github.com/yuvipanda/pangeo-forge-runner/blob/main/tests/test_bake.py
