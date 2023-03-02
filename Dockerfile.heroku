@@ -9,7 +9,7 @@ WORKDIR /opt/app
 # it, and then clone it from github at build time (otherwise we don't actually get these contents on heroku)
 # After cloning, reset to a specific commit, so we don't end up with the wrong contents.
 RUN apt-get update && apt-get -y install git
-RUN git clone -b main --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring \
+RUN git clone -b check-runs --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring \
     && cd dataflow-status-monitoring \
     && git reset --hard c64e44bdcfc47140289904006fb75a347a0d6b39 \
     && cd -
