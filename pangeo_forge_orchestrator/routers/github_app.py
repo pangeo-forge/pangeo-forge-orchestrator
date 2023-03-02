@@ -433,6 +433,7 @@ async def handle_dataflow_event(
                 dataset_public_url,
                 check_run_summary["dataset_type"],
                 recipe_id,
+                check_run["url"],
                 gh=gh,
                 gh_kws=gh_kws,
             )
@@ -973,6 +974,7 @@ async def triage_test_run_complete(
     dataset_public_url: str,
     dataset_type: str,
     recipe_id: str,
+    check_run_api_url: str,
     *,
     gh: GitHubAPI,
     gh_kws: dict,
@@ -981,6 +983,9 @@ async def triage_test_run_complete(
         if pr["head"]["sha"] == head_sha:
             comments_url = pr["comments_url"]
             break
+    # get the existing check run, so we can preserve and/or append to its summary
+    # TODO: more robust to make this a builtin feature of CheckRunUpdate?
+    check_run = await gh.getitem(check_run_api_url, **gh_kws)
 
     if conclusion == "failure":
         comment = dedent(
@@ -991,6 +996,17 @@ async def triage_test_run_complete(
             That feature is not quite ready yet, however, so please reach out on this thread to a
             maintainer, and they'll help you diagnose the problem.
             """
+        )
+
+        await gh.patch(
+            check_run_api_url,
+            data=CheckRunUpdate(
+                status="completed",
+                conclusion="failure",
+                # FIXME: point to logging information here
+                output=dict(title="Test run failure.", summary=check_run["summary"]),
+            ).dict(exclude={}),
+            **gh_kws,
         )
     elif conclusion == "success":
         if dataset_type == "zarr":
@@ -1018,8 +1034,17 @@ async def triage_test_run_complete(
             ```
             """
         ).format(recipe_id=recipe_id, sha=head_sha, to_open=to_open)
+        await gh.patch(
+            check_run_api_url,
+            data=CheckRunUpdate(
+                status="completed",
+                conclusion="success",
+                output=dict(title="Test run success!", summary=check_run["summary"]),
+            ).dict(),
+            **gh_kws,
+        )
 
-    _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
+    await gh.post(comments_url, data={"body": comment}, **gh_kws)
 
 
 async def triage_prod_run_complete(
