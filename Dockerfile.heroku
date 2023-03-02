@@ -11,7 +11,7 @@ WORKDIR /opt/app
 RUN apt-get update && apt-get -y install git
 RUN git clone -b check-runs --single-branch https://github.com/pangeo-forge/dataflow-status-monitoring \
     && cd dataflow-status-monitoring \
-    && git reset --hard c64e44bdcfc47140289904006fb75a347a0d6b39 \
+    && git reset --hard 39a7d57a478b3d4a5e3b08e41011bcce46cb88be \
     && cd -
 
 # the only deploy-time process which needs pangeo_forge_orchestrator installed is the review app's
