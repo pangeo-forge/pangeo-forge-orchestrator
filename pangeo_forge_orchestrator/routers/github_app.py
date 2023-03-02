@@ -398,9 +398,13 @@ async def handle_dataflow_event(
         repo_id = repo_id.split("repo")[-1]
         check_run_id = check_run_id.split("checkrun")[-1]
 
+        # get repo
+        repo = await gh.getitem(f"/repositories/{repo_id}", **gh_kws)
+
         # get check run
         check_run = await gh.getitem(f"/repositories/{repo_id}/check-runs/{check_run_id}", **gh_kws)
         check_run_name: str = check_run["name"]
+        recipe_id = check_run_name.split("/")[0].strip()
         bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
         check_run_summary = json.loads(check_run["output"]["summary"])
         if payload["conclusion"] == "success":
@@ -409,25 +413,32 @@ async def handle_dataflow_event(
             # so eventually we should not be generating this here, but rather receiving this information
             # as part of the job completion payload from the bakery.
             subpath = get_storage_subpath_identifier(
-                feedstock_spec,
+                repo["full_name"],
                 check_run_summary["is_test"],
-                check_run_id,
+                int(check_run_id),
                 recipe_id,
                 check_run_summary["dataset_type"],
             )
             root_path = bakery_config.TargetStorage.root_path.format(subpath=subpath)
-            recipe_run.dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
+            dataset_public_url = bakery_config.TargetStorage.public_url.format(  # type: ignore
                 root_path=root_path
             )
 
-        args: list[SQLModel] = [recipe_run]  # type: ignore
         if check_run_summary["is_test"]:
-            args.append(feedstock.spec)  # type: ignore
-            logger.info(f"Calling `triage_test_run_complete` with {args=}")
-            background_tasks.add_task(triage_test_run_complete, *args, gh=gh, gh_kws=gh_kws)
+            background_tasks.add_task(
+                triage_test_run_complete,
+                check_run["head_sha"],
+                repo["full_name"],
+                payload["conclusion"],
+                dataset_public_url,
+                check_run_summary["dataset_type"],
+                recipe_id,
+                gh=gh,
+                gh_kws=gh_kws,
+            )
         else:
-            logger.info(f"Calling `triage_prod_run_complete` with {args=}")
-            background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
+            ...
+            # background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
 
 
 async def handle_pr_comment_event(
@@ -956,18 +967,22 @@ async def run_recipe_test(
 
 
 async def triage_test_run_complete(
-    recipe_run: SQLModel,
+    head_sha: str,
     feedstock_spec: str,
+    conclusion: str,
+    dataset_public_url: str,
+    dataset_type: str,
+    recipe_id: str,
     *,
     gh: GitHubAPI,
     gh_kws: dict,
 ):
     async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls", **gh_kws):
-        if pr["head"]["sha"] == recipe_run.head_sha:
+        if pr["head"]["sha"] == head_sha:
             comments_url = pr["comments_url"]
             break
 
-    if recipe_run.conclusion == "failure":
+    if conclusion == "failure":
         comment = dedent(
             """\
             The test failed, but I'm sure we can find out why!
@@ -977,13 +992,13 @@ async def triage_test_run_complete(
             maintainer, and they'll help you diagnose the problem.
             """
         )
-    elif recipe_run.conclusion == "success":
-        if recipe_run.dataset_type == "zarr":
+    elif conclusion == "success":
+        if dataset_type == "zarr":
             to_open = dedent(
                 f"""\
                 import xarray as xr
 
-                store = "{recipe_run.dataset_public_url}"
+                store = "{dataset_public_url}"
                 ds = xr.open_dataset(store, engine='zarr', chunks={{}})
                 ds
                 """
@@ -991,7 +1006,7 @@ async def triage_test_run_complete(
         else:
             to_open = dedent(
                 f"""\
-                Demonstration code for opening {recipe_run.dataset_type = } not implemented yet.
+                Demonstration code for opening {dataset_type = } not implemented yet.
                 """
             )
         comment = dedent(
@@ -1002,7 +1017,7 @@ async def triage_test_run_complete(
             {to_open}
             ```
             """
-        ).format(recipe_id=recipe_run.recipe_id, sha=recipe_run.head_sha, to_open=to_open)
+        ).format(recipe_id=recipe_id, sha=head_sha, to_open=to_open)
 
     _ = await gh.post(comments_url, data={"body": comment}, **gh_kws)
 
