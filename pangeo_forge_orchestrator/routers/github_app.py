@@ -4,17 +4,16 @@ import json
 import os
 import subprocess
 import tempfile
-import time
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
-import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
+from gidgethub.apps import get_jwt as _get_jwt
 from pydantic import BaseModel, Field
 from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import SQLModel
@@ -105,15 +104,8 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 
 
 def get_jwt() -> str:
-    """Adapted from https://github.com/Mariatta/gh_app_demo"""
-
     github_app = get_config().github_app
-    payload = {
-        "iat": int(time.time()),
-        "exp": int(time.time()) + (10 * 60),
-        "iss": github_app.id,
-    }
-    return jwt.encode(payload, github_app.private_key, algorithm="RS256")
+    return _get_jwt(github_app.id, github_app.private_key)
 
 
 async def get_access_token(gh: GitHubAPI) -> str:
