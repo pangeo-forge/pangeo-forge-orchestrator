@@ -12,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from gidgethub.apps import get_jwt as _get_jwt
+from gidgethub.routing import Router as GitHubEventRouter
 from gidgethub.sansio import Event as GitHubEvent
 from pydantic import BaseModel, Field
 from sqlalchemy.orm.exc import NoResultFound
@@ -33,6 +34,7 @@ FRONTEND_DASHBOARD_URL = "https://pangeo-forge.org/dashboard"
 DEFAULT_BACKEND_NETLOC = "api.pangeo-forge.org"
 
 github_app_router = APIRouter()
+event_router = GitHubEventRouter()
 
 # FIXME: Remove DEFAULT_BAKERY. it is added as a shim to ease the transition
 # away from maintaining a database as part of this application.
@@ -308,57 +310,50 @@ async def receive_github_hook(  # noqa: C901
     # here in the route function and then pass them through to the background task as kwargs.
     # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
     gh = get_github_session(http_session)
+    # FIXME: session_kws is redundant now that there is no database session. remove.
     session_kws = dict(gh=gh)
     token = await get_access_token(gh)
+    # FIXME: use gidgethub's builtin header-constructor
     gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
-    payload = await parse_payload(request, payload_bytes, event)
-
-    # TODO: maybe bring this back as a way to filter which PRs run on which apps.
-    # With addition of `pforgetest` org, might not be necessary, however. TBD.
-    # logger.info("Checking to see if PR has {label} label...")
-    # if event in ["pull_request", "issue_comment"]:
-    #    obj = payload[event] if event == "pull_request" else payload["issue"]
-    #    if obj["labels"][0]["name"] != "{label}":
-    #        logger.info("PR does not have {label} label, skipping")
-    #        return {"message": "not a {label} pr, skipping"}
-    #    logger.info("PR label found, continuing...")
-
     if event.event == "pull_request":
-        return await handle_pr_event(
-            payload=payload,
+        await event_router.dispatch(
+            event,
             background_tasks=background_tasks,
             session_kws=session_kws,
             gh=gh,
             gh_kws=gh_kws,
         )
-    elif event.event == "issue_comment":
-        return await handle_pr_comment_event(
-            payload=payload,
-            gh=gh,
-            background_tasks=background_tasks,
-            session_kws=session_kws,
-            gh_kws=gh_kws,
-        )
-    elif event.event == "dataflow":
-        return await handle_dataflow_event(
-            payload=payload,
-            background_tasks=background_tasks,
-            gh_kws=gh_kws,
-            gh=gh,
-        )
-
-    elif event.event == "check_suite":
-        # We create check runs directly using the head_sha from the assocaited PR.
-        # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
-        # of these requests from GitHub, so just conveying that we expect that here, for now.
-        return {"status": "ok"}
-
     else:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="No handling implemented for this event type.",
-        )
+        # TODO: migrate this whole block to event_router.dispatch style
+        payload = await parse_payload(request, payload_bytes, event)
+        if event.event == "issue_comment":
+            return await handle_pr_comment_event(
+                payload=payload,
+                gh=gh,
+                background_tasks=background_tasks,
+                session_kws=session_kws,
+                gh_kws=gh_kws,
+            )
+        elif event.event == "dataflow":
+            return await handle_dataflow_event(
+                payload=payload,
+                background_tasks=background_tasks,
+                gh_kws=gh_kws,
+                gh=gh,
+            )
+
+        elif event.event == "check_suite":
+            # We create check runs directly using the head_sha from the assocaited PR.
+            # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
+            # of these requests from GitHub, so just conveying that we expect that here, for now.
+            return {"status": "ok"}
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="No handling implemented for this event type.",
+            )
 
 
 async def handle_dataflow_event(
@@ -534,6 +529,35 @@ async def handle_pr_comment_event(
         )
         logger.info(f"Creating run_recipe_test task with args: {args}")
         background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
+
+
+@event_router.register("pull_request", action="synchronize")
+async def handle_pr_synchronize_event(
+    event: GitHubEvent,
+    gh_kws: dict[str, Any],
+    gh: GitHubAPI,
+    session_kws: dict[str, Any],
+    background_tasks: BackgroundTasks,
+):
+    """Process a PR synchronize event."""
+
+    logger.info(f"Handling PR event with payload {event=}")
+
+    pr = event.data["pull_request"]
+
+    base_repo_name = pr["base"]["repo"]["full_name"]
+    if ignore_repo(base_repo_name):
+        return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
+    if pr["title"].lower().startswith("cleanup"):
+        return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
+    args = (
+        pr["head"]["repo"]["html_url"],
+        pr["head"]["sha"],
+        pr["number"],
+        pr["base"]["repo"]["url"],
+    )
+    background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
+    return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
 
 async def handle_pr_event(
