@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import json
 import os
 import subprocess
@@ -14,6 +12,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from gidgethub.apps import get_jwt as _get_jwt
+from gidgethub.sansio import Event as GitHubEvent
 from pydantic import BaseModel, Field
 from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import SQLModel
@@ -295,9 +294,10 @@ async def receive_github_hook(  # noqa: C901
 ):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
-
+    # GitHubEvent.from_http handles this validation for us.
     payload_bytes = await request.body()
-    await verify_hash_signature(request, payload_bytes)
+    webhook_secret = bytes(get_config().github_app.webhook_secret, encoding="utf-8")  # type: ignore
+    event = GitHubEvent.from_http(request.headers, payload_bytes, secret=webhook_secret)
 
     # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
     # dependencies. We can resolve these dependencies (i.e., github session, database session)
@@ -630,22 +630,6 @@ async def parse_payload(request, payload_bytes, event):
     # we would need to use a different method/module/language to get uniformity w/ GitHub?
     qs = parse_qs(payload_bytes.decode("utf-8"))
     return {k: v.pop(0) for k, v in qs.items()}
-
-
-async def verify_hash_signature(request: Request, payload_bytes: bytes) -> None:
-    if hash_signature := request.headers.get("X-Hub-Signature-256", None):
-        github_app = get_config().github_app
-        webhook_secret = bytes(github_app.webhook_secret, encoding="utf-8")  # type: ignore
-        h = hmac.new(webhook_secret, payload_bytes, hashlib.sha256)
-        if not hmac.compare_digest(hash_signature, f"sha256={h.hexdigest()}"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Request hash signature invalid."
-            )
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Request does not include a GitHub hash signature header.",
-        )
 
 
 @github_app_router.get(
