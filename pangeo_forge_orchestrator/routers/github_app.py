@@ -104,7 +104,7 @@ def html_url_to_repo_full_name(html_url: str) -> str:
 
 def get_jwt() -> str:
     github_app = get_config().github_app
-    return _get_jwt(github_app.id, github_app.private_key)
+    return _get_jwt(app_id=github_app.id, private_key=github_app.private_key)
 
 
 async def get_access_token(gh: GitHubAPI) -> str:
@@ -296,8 +296,12 @@ async def receive_github_hook(  # noqa: C901
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
     # GitHubEvent.from_http handles this validation for us.
     payload_bytes = await request.body()
-    webhook_secret = bytes(get_config().github_app.webhook_secret, encoding="utf-8")  # type: ignore
-    event = GitHubEvent.from_http(request.headers, payload_bytes, secret=webhook_secret)
+    event = GitHubEvent.from_http(
+        # gitdgethub wants lowercase headers keys
+        {k.lower(): v for k, v in request.headers.items()},
+        payload_bytes,
+        secret=get_config().github_app.webhook_secret,
+    )
 
     # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
     # dependencies. We can resolve these dependencies (i.e., github session, database session)
@@ -308,7 +312,6 @@ async def receive_github_hook(  # noqa: C901
     token = await get_access_token(gh)
     gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
-    event = request.headers.get("X-GitHub-Event")
     payload = await parse_payload(request, payload_bytes, event)
 
     # TODO: maybe bring this back as a way to filter which PRs run on which apps.
@@ -321,7 +324,7 @@ async def receive_github_hook(  # noqa: C901
     #        return {"message": "not a {label} pr, skipping"}
     #    logger.info("PR label found, continuing...")
 
-    if event == "pull_request":
+    if event.event == "pull_request":
         return await handle_pr_event(
             payload=payload,
             background_tasks=background_tasks,
@@ -329,7 +332,7 @@ async def receive_github_hook(  # noqa: C901
             gh=gh,
             gh_kws=gh_kws,
         )
-    elif event == "issue_comment":
+    elif event.event == "issue_comment":
         return await handle_pr_comment_event(
             payload=payload,
             gh=gh,
@@ -337,7 +340,7 @@ async def receive_github_hook(  # noqa: C901
             session_kws=session_kws,
             gh_kws=gh_kws,
         )
-    elif event == "dataflow":
+    elif event.event == "dataflow":
         return await handle_dataflow_event(
             payload=payload,
             background_tasks=background_tasks,
@@ -345,7 +348,7 @@ async def receive_github_hook(  # noqa: C901
             gh=gh,
         )
 
-    elif event == "check_suite":
+    elif event.event == "check_suite":
         # We create check runs directly using the head_sha from the assocaited PR.
         # TBH, I'm not sure if/how it would be better to use this object, but we get a lot
         # of these requests from GitHub, so just conveying that we expect that here, for now.
