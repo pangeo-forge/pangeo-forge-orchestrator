@@ -407,6 +407,8 @@ async def handle_dataflow_event(
         recipe_id = check_run_name.split("/")[0].strip()
         bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
         check_run_summary = json.loads(check_run["output"]["summary"])
+
+        dataset_public_url = None  # if job succeeded, this will be overwritten in the next block
         if payload["conclusion"] == "success":
             bakery_config = get_config().bakeries[bakery_name]
             # NOTE: naming storage subpaths will/should ultimately be the responsibility of the bakery,
@@ -430,10 +432,10 @@ async def handle_dataflow_event(
                 check_run["head_sha"],
                 repo["full_name"],
                 payload["conclusion"],
-                dataset_public_url,
                 check_run_summary["dataset_type"],
                 recipe_id,
                 check_run["url"],
+                dataset_public_url,
                 gh=gh,
                 gh_kws=gh_kws,
             )
@@ -971,10 +973,10 @@ async def triage_test_run_complete(
     head_sha: str,
     feedstock_spec: str,
     conclusion: str,
-    dataset_public_url: str,
     dataset_type: str,
     recipe_id: str,
     check_run_api_url: str,
+    dataset_public_url: Optional[str],
     *,
     gh: GitHubAPI,
     gh_kws: dict,
@@ -1004,7 +1006,7 @@ async def triage_test_run_complete(
                 status="completed",
                 conclusion="failure",
                 # FIXME: point to logging information here
-                output=dict(title="Test run failure.", summary=check_run["summary"]),
+                output=dict(title="Test run failure.", summary=check_run["output"]["summary"]),
             ).dict(exclude={}),
             **gh_kws,
         )
@@ -1039,7 +1041,7 @@ async def triage_test_run_complete(
             data=CheckRunUpdate(
                 status="completed",
                 conclusion="success",
-                output=dict(title="Test run success!", summary=check_run["summary"]),
+                output=dict(title="Test run success!", summary=check_run["output"]["summary"]),
             ).dict(),
             **gh_kws,
         )
