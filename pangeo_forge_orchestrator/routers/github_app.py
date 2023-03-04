@@ -317,7 +317,7 @@ async def receive_github_hook(  # noqa: C901
     # FIXME: use gidgethub's builtin header-constructor
     gh_kws = dict(oauth_token=token, accept=ACCEPT)
 
-    if event.event == "pull_request":
+    if event.event == "pull_request" or event.event == "issue_comment":
         await event_router.dispatch(
             event,
             background_tasks=background_tasks,
@@ -328,15 +328,7 @@ async def receive_github_hook(  # noqa: C901
     else:
         # TODO: migrate this whole block to event_router.dispatch style
         payload = await parse_payload(request, payload_bytes, event)
-        if event.event == "issue_comment":
-            return await handle_pr_comment_event(
-                payload=payload,
-                gh=gh,
-                background_tasks=background_tasks,
-                session_kws=session_kws,
-                gh_kws=gh_kws,
-            )
-        elif event.event == "dataflow":
+        if event.event == "dataflow":
             return await handle_dataflow_event(
                 payload=payload,
                 background_tasks=background_tasks,
@@ -451,19 +443,20 @@ async def handle_dataflow_event(
             # background_tasks.add_task(triage_prod_run_complete, *args, gh=gh, gh_kws=gh_kws)
 
 
+@assert_handler_signature
+@event_router.register("issue_comment", action="created")
 async def handle_pr_comment_event(
-    *,
-    payload: dict,
+    event: GitHubEvent,
+    gh_kws: dict[str, Any],
     gh: GitHubAPI,
-    gh_kws: dict,
+    session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
-    session_kws: dict,
 ):
     """Handle a pull request comment event.
 
     Parameters
     ----------
-    payload : dict
+    event : GitHubEvent
         The payload from the GitHub webhook request.
     gh : GitHubAPI
         The authenticated GitHub API client.
@@ -477,75 +470,73 @@ async def handle_pr_comment_event(
         The SQLAlchemy session.
 
     """
-    logger.info(f"Handling PR comment event with payload {payload=}")
+    logger.info(f"Handling PR comment event with payload {event = }")
 
-    action = payload["action"]
-    comment = payload["comment"]
-    pr = await gh.getitem(payload["issue"]["pull_request"]["url"], **gh_kws)
+    comment = event.data["comment"]
+    pr = await gh.getitem(event.data["issue"]["pull_request"]["url"], **gh_kws)
 
-    if action == "created":
-        comment_body = comment["body"]
-        if not comment_body.startswith("/"):
-            # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
-            # comment with automated emoji reactions.
-            return {"status": "ok", "message": "Comment is not a slash command."}
+    comment_body: str = comment["body"]
+    if not comment_body.startswith("/"):
+        # Exit early if this isn't a slash command, so we don't end up spamming *every* issue
+        # comment with automated emoji reactions.
+        return {"status": "ok", "message": "Comment is not a slash command."}
 
-        reactions_url = comment["reactions"]["url"]
+    reactions_url = comment["reactions"]["url"]
 
-        # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
-        # that the command was received, mimicing the slash command dispatch github action UX.
-        _ = await gh.post(reactions_url, data={"content": "eyes"}, **gh_kws)
+    # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
+    # that the command was received, mimicing the slash command dispatch github action UX.
+    _ = await gh.post(reactions_url, data={"content": "eyes"}, **gh_kws)
 
-        # So, what kind of slash command is this?
-        cmd, *cmd_args = comment_body.split()
-        if cmd != "/run":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No handling implemented for this event type.",
-            )
-
-        if len(cmd_args) != 1:
-            detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
-            # TODO: Maybe post a comment and/or emoji reaction explaining this error.
-
-        recipe_id = cmd_args[0]
-        # use recipe_id to get check_run_id and dataset_type
-        all_check_runs = await gh.getitem(
-            f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}/check-runs",
-            **gh_kws,
+    # So, what kind of slash command is this?
+    cmd, *cmd_args = comment_body.split()
+    if cmd != "/run":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No handling implemented for this event type.",
         )
-        # FIXME: there could certainly be a situation where more than one bakery is specified,
-        # in the future. would need to account for that here.
-        matching_check_run = [
-            c for c in all_check_runs["check_runs"] if c["name"].startswith(recipe_id)
-        ]
-        if not matching_check_run:
-            raise ValueError(f"No check runs matching {recipe_id = }")
-        else:
-            check_run_id = matching_check_run[0]["id"]
-            # FIXME: can we be confident that the summary will always be json-loadable and contain
-            # this field? if it's always created by this github app, and tested, then yes. confirm.
-            dataset_type = json.loads(matching_check_run[0]["output"]["summary"])["dataset_type"]
-            # NOTE: same comment as immediately above: we are relying on these names being always
-            # formatted a certain way. let's make sure that happens.
-            check_run_name: str = matching_check_run[0]["name"]
-            bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
-        args = (  # type: ignore
-            pr["head"]["repo"]["html_url"],
-            pr["base"]["repo"]["url"],
-            pr["head"]["sha"],
-            pr["number"],
-            recipe_id,
-            dataset_type,
-            pr["base"]["repo"]["full_name"],
-            pr["base"]["repo"]["id"],
-            check_run_id,
-            bakery_name,
-            reactions_url,
-        )
-        logger.info(f"Creating run_recipe_test task with args: {args}")
-        background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
+
+    if len(cmd_args) != 1:
+        detail = f"Command {cmd} not of form " "``['/run', RECIPE_NAME]``."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+        # TODO: Maybe post a comment and/or emoji reaction explaining this error.
+
+    recipe_id = cmd_args[0]
+    # use recipe_id to get check_run_id and dataset_type
+    all_check_runs = await gh.getitem(
+        f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}/check-runs",
+        **gh_kws,
+    )
+    # FIXME: there could certainly be a situation where more than one bakery is specified,
+    # in the future. would need to account for that here.
+    matching_check_run = [
+        c for c in all_check_runs["check_runs"] if c["name"].startswith(recipe_id)
+    ]
+    if not matching_check_run:
+        raise ValueError(f"No check runs matching {recipe_id = }")
+    else:
+        check_run_id = matching_check_run[0]["id"]
+        # FIXME: can we be confident that the summary will always be json-loadable and contain
+        # this field? if it's always created by this github app, and tested, then yes. confirm.
+        dataset_type = json.loads(matching_check_run[0]["output"]["summary"])["dataset_type"]
+        # NOTE: same comment as immediately above: we are relying on these names being always
+        # formatted a certain way. let's make sure that happens.
+        check_run_name: str = matching_check_run[0]["name"]
+        bakery_name = check_run_name.split("(")[-1].split(")")[0].split("bakery:")[-1].strip()
+    args = (  # type: ignore
+        pr["head"]["repo"]["html_url"],
+        pr["base"]["repo"]["url"],
+        pr["head"]["sha"],
+        pr["number"],
+        recipe_id,
+        dataset_type,
+        pr["base"]["repo"]["full_name"],
+        pr["base"]["repo"]["id"],
+        check_run_id,
+        bakery_name,
+        reactions_url,
+    )
+    logger.info(f"Creating run_recipe_test task with args: {args}")
+    background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
 
 
 @assert_handler_signature
