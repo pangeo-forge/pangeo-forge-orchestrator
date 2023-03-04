@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 from datetime import datetime
+from inspect import signature
 from textwrap import dedent
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
@@ -356,6 +357,22 @@ async def receive_github_hook(  # noqa: C901
             )
 
 
+def assert_handler_signature(f):
+    """Decorator to ensure that event handler functions have the required signature."""
+
+    params = signature(f).parameters
+    required_signature = {
+        "event": GitHubEvent,
+        "gh_kws": dict[str, Any],
+        "gh": GitHubAPI,
+        "session_kws": dict[str, Any],
+        "background_tasks": BackgroundTasks,
+    }
+    if not {params[p].name: params[p].annotation for p in params} == required_signature:
+        raise ValueError(f"Function {f.__name__} does not have {required_signature = }")
+    return f
+
+
 async def handle_dataflow_event(
     *,
     payload: dict,
@@ -531,8 +548,10 @@ async def handle_pr_comment_event(
         background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
 
 
+@assert_handler_signature
+@event_router.register("pull_request", action="opened")
 @event_router.register("pull_request", action="synchronize")
-async def handle_pr_synchronize_event(
+async def handle_pr_synchronize_or_opened_event(
     event: GitHubEvent,
     gh_kws: dict[str, Any],
     gh: GitHubAPI,
@@ -541,7 +560,7 @@ async def handle_pr_synchronize_event(
 ):
     """Process a PR synchronize event."""
 
-    logger.info(f"Handling PR event with payload {event=}")
+    logger.info(f"Handling PR event with payload {event.data=}")
 
     pr = event.data["pull_request"]
 
@@ -560,89 +579,73 @@ async def handle_pr_synchronize_event(
     return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
 
-async def handle_pr_event(
-    *,
-    payload: dict,
+@event_router.register("pull_request", action="closed")
+async def handle_pr_event_merged(
+    event: GitHubEvent,
     gh_kws: dict[str, Any],
     gh: GitHubAPI,
     session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
 ):
-    """Process a PR event."""
+    """Process a PR merged event."""
 
-    logger.info(f"Handling PR event with payload {payload=}")
+    logger.info("Received PR merged event...")
 
-    action = payload["action"]
-    pr = payload["pull_request"]
+    pr = event.data["pull_request"]
 
-    if action in ("synchronize", "opened"):
-        base_repo_name = pr["base"]["repo"]["full_name"]
-        if ignore_repo(base_repo_name):
-            return {"status": "ok", "message": f"Skipping synchronize for repo {base_repo_name}"}
+    if not pr["merged"]:
+        return {"status": "skip", "message": "PR closed but not merged."}
+
+    files_changed = await gh.getitem(
+        f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files",
+        **gh_kws,
+    )
+    # TODO[**IMPORTANT**]: make sure that `synchronize` task fails check run if
+    # PRs attempt to mix recipe + config changes, and that this failure is somehow
+    # connected to a branch protection rule for feedstocks + staged-recipes.
+    # See: https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/109
+    # If we get to this stage (pr merged) and `fnames_changed` includes a mixture
+    # of top-level (i.e. README, etc) files *and* recipes files, it will be too late
+    # to easily decide what automation (if any) to run in response to the merge.
+    fnames_changed = [files_changed[i]["filename"] for i in range(len(files_changed))]
+
+    if "staged-recipes" in pr["base"]["repo"]["full_name"]:
+        # this is staged-recipes, so (probably) create a new feedstock repository
+
         if pr["title"].lower().startswith("cleanup"):
             return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
-        args = (
-            pr["head"]["repo"]["html_url"],
-            pr["head"]["sha"],
+
+        # make sure this is a recipe PR (not top-level config or something)
+        if not all(fname.startswith("recipes/") for fname in fnames_changed):
+            return {"status": "skip", "message": "Not a recipes PR. Skipping."}
+
+        args = (  # type: ignore
+            pr["base"]["repo"]["owner"]["login"],
+            pr["base"]["ref"],
             pr["number"],
             pr["base"]["repo"]["url"],
         )
-        background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
-        return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
+        logger.info(f"Calling create_feedstock with args {args}")
+        background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
+    else:
+        # this is not staged recipes, but make sure it's a feedstock, and not some other repo
+        if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
+            return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
 
-    elif action == "closed" and pr["merged"]:
-        logger.info("Received PR merged event...")
+        # make sure this is a recipe PR (not config, readme, etc)
+        if not all(fname.startswith("feedstock/") for fname in fnames_changed):
+            return {"status": "skip", "message": "Not a recipes PR. Skipping."}
 
-        files_changed = await gh.getitem(
-            f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files",
-            **gh_kws,
+        # mypy doesn't like that `args` can have variable length depending on which
+        # conditional block it's defined within
+        args = (  # type: ignore
+            pr["base"]["repo"]["html_url"],
+            pr["merge_commit_sha"],
+            pr["base"]["repo"]["full_name"],
+            pr["base"]["repo"]["url"],
+            pr["base"]["ref"],
         )
-        # TODO[**IMPORTANT**]: make sure that `synchronize` task fails check run if
-        # PRs attempt to mix recipe + config changes, and that this failure is somehow
-        # connected to a branch protection rule for feedstocks + staged-recipes.
-        # See: https://github.com/pangeo-forge/pangeo-forge-orchestrator/issues/109
-        # If we get to this stage (pr merged) and `fnames_changed` includes a mixture
-        # of top-level (i.e. README, etc) files *and* recipes files, it will be too late
-        # to easily decide what automation (if any) to run in response to the merge.
-        fnames_changed = [files_changed[i]["filename"] for i in range(len(files_changed))]
-
-        if "staged-recipes" in pr["base"]["repo"]["full_name"]:
-            # this is staged-recipes, so (probably) create a new feedstock repository
-
-            if pr["title"].lower().startswith("cleanup"):
-                return {"status": "skip", "message": "This is an automated cleanup PR. Skipping."}
-
-            # make sure this is a recipe PR (not top-level config or something)
-            if not all(fname.startswith("recipes/") for fname in fnames_changed):
-                return {"status": "skip", "message": "Not a recipes PR. Skipping."}
-
-            args = (  # type: ignore
-                pr["base"]["repo"]["owner"]["login"],
-                pr["base"]["ref"],
-                pr["number"],
-                pr["base"]["repo"]["url"],
-            )
-            logger.info(f"Calling create_feedstock with args {args}")
-            background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
-        else:
-            # this is not staged recipes, but make sure it's a feedstock, and not some other repo
-            if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
-                return {"status": "skip", "message": "This not a -feedstock repo. Skipping."}
-
-            # make sure this is a recipe PR (not config, readme, etc)
-            if not all(fname.startswith("feedstock/") for fname in fnames_changed):
-                return {"status": "skip", "message": "Not a recipes PR. Skipping."}
-
-            # mypy doesn't like that `args` can have variable length depending on which
-            # conditional block it's defined within
-            args = (  # type: ignore
-                pr["base"]["repo"]["html_url"],
-                pr["merge_commit_sha"],
-                pr["base"]["repo"]["full_name"],
-                pr["base"]["repo"]["url"],
-                pr["base"]["ref"],
-            )
-            background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
+        background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
 
 
 async def parse_payload(request, payload_bytes, event):
