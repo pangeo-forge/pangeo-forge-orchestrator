@@ -5,7 +5,7 @@ import tempfile
 from datetime import datetime
 from inspect import signature
 from textwrap import dedent
-from typing import Any, Optional
+from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -93,8 +93,14 @@ def ignore_repo(repo: str) -> bool:
     return not repo.lower().endswith("-feedstock") and not repo.lower().endswith("staged-recipes")
 
 
-def get_github_session(http_session: aiohttp.ClientSession):
+def get_unauthenticated_github_session(http_session: aiohttp.ClientSession):
     return GitHubAPI(http_session, "pangeo-forge")
+
+
+async def get_authenticated_github_session(http_session: aiohttp.ClientSession):
+    unauthenticated = get_unauthenticated_github_session(http_session)
+    token = await get_access_token(unauthenticated)
+    return GitHubAPI(http_session, "pangeo-forge", oauth_token=token)
 
 
 def html_to_api_url(html_url: str) -> str:
@@ -252,7 +258,7 @@ async def get_feedstock_hook_deliveries(
     id: int,
     http_session: aiohttp.ClientSession = Depends(http_session),
 ):
-    gh = get_github_session(http_session)
+    gh = await get_authenticated_github_session(http_session)
     repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh)
     deliveries = []
     async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
@@ -272,7 +278,7 @@ async def get_feedstock_check_runs(
     commit_sha: str,
     http_session: aiohttp.ClientSession = Depends(http_session),
 ):
-    gh = get_github_session(http_session)
+    gh = await get_authenticated_github_session(http_session)
     _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh)
 
     token = await get_access_token(gh)
@@ -310,23 +316,19 @@ async def receive_github_hook(  # noqa: C901
     # dependencies. We can resolve these dependencies (i.e., github session, database session)
     # here in the route function and then pass them through to the background task as kwargs.
     # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
-    gh = get_github_session(http_session)
-    # FIXME: session_kws is redundant now that there is no database session. remove.
-    session_kws = dict(gh=gh)
-    token = await get_access_token(gh)
-    # FIXME: use gidgethub's builtin header-constructor
-    gh_kws = dict(oauth_token=token, accept=ACCEPT)
+    gh = await get_authenticated_github_session(http_session)
 
     if event.event == "pull_request" or event.event == "issue_comment":
         await event_router.dispatch(
             event,
-            background_tasks=background_tasks,
-            session_kws=session_kws,
             gh=gh,
-            gh_kws=gh_kws,
+            background_tasks=background_tasks,
         )
     else:
         # TODO: migrate this whole block to event_router.dispatch style
+        token = await get_access_token(gh)
+        gh_kws = dict(oauth_token=token, accept=ACCEPT)
+
         payload = await parse_payload(request, payload_bytes, event)
         if event.event == "dataflow":
             return await handle_dataflow_event(
@@ -355,9 +357,7 @@ def assert_handler_signature(f):
     params = signature(f).parameters
     required_signature = {
         "event": GitHubEvent,
-        "gh_kws": dict[str, Any],
         "gh": GitHubAPI,
-        "session_kws": dict[str, Any],
         "background_tasks": BackgroundTasks,
     }
     if not {params[p].name: params[p].annotation for p in params} == required_signature:
@@ -447,9 +447,7 @@ async def handle_dataflow_event(
 @event_router.register("issue_comment", action="created")
 async def handle_pr_comment_event(
     event: GitHubEvent,
-    gh_kws: dict[str, Any],
     gh: GitHubAPI,
-    session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
 ):
     """Handle a pull request comment event.
@@ -460,20 +458,13 @@ async def handle_pr_comment_event(
         The payload from the GitHub webhook request.
     gh : GitHubAPI
         The authenticated GitHub API client.
-    gh_kws : dict
-        The keyword arguments to pass to the GitHub API client.
     background_tasks : BackgroundTasks
         The FastAPI background tasks object.
-    session_kws : dict
-        The keyword arguments to pass to the SQLAlchemy session.
-    db_session : Session
-        The SQLAlchemy session.
-
     """
     logger.info(f"Handling PR comment event with payload {event = }")
 
     comment = event.data["comment"]
-    pr = await gh.getitem(event.data["issue"]["pull_request"]["url"], **gh_kws)
+    pr = await gh.getitem(event.data["issue"]["pull_request"]["url"])
 
     comment_body: str = comment["body"]
     if not comment_body.startswith("/"):
@@ -485,7 +476,7 @@ async def handle_pr_comment_event(
 
     # Now that we know this is a slash command, posting the `eyes` reaction confirms to the user
     # that the command was received, mimicing the slash command dispatch github action UX.
-    _ = await gh.post(reactions_url, data={"content": "eyes"}, **gh_kws)
+    _ = await gh.post(reactions_url, data={"content": "eyes"})
 
     # So, what kind of slash command is this?
     cmd, *cmd_args = comment_body.split()
@@ -504,7 +495,6 @@ async def handle_pr_comment_event(
     # use recipe_id to get check_run_id and dataset_type
     all_check_runs = await gh.getitem(
         f"/repos/{pr['base']['repo']['full_name']}/commits/{pr['head']['sha']}/check-runs",
-        **gh_kws,
     )
     # FIXME: there could certainly be a situation where more than one bakery is specified,
     # in the future. would need to account for that here.
@@ -536,7 +526,7 @@ async def handle_pr_comment_event(
         reactions_url,
     )
     logger.info(f"Creating run_recipe_test task with args: {args}")
-    background_tasks.add_task(run_recipe_test, *args, **session_kws, gh_kws=gh_kws)
+    background_tasks.add_task(run_recipe_test, *args, gh=gh)
 
 
 @assert_handler_signature
@@ -544,9 +534,7 @@ async def handle_pr_comment_event(
 @event_router.register("pull_request", action="synchronize")
 async def handle_pr_synchronize_or_opened_event(
     event: GitHubEvent,
-    gh_kws: dict[str, Any],
     gh: GitHubAPI,
-    session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
 ):
     """Process a PR synchronize event."""
@@ -566,16 +554,15 @@ async def handle_pr_synchronize_or_opened_event(
         pr["number"],
         pr["base"]["repo"]["url"],
     )
-    background_tasks.add_task(synchronize, *args, **session_kws, gh_kws=gh_kws)
+    background_tasks.add_task(synchronize, *args, gh=gh)
     return {"status": "ok", "background_tasks": [{"task": "synchronize", "args": args}]}
 
 
+@assert_handler_signature
 @event_router.register("pull_request", action="closed")
 async def handle_pr_event_merged(
     event: GitHubEvent,
-    gh_kws: dict[str, Any],
     gh: GitHubAPI,
-    session_kws: dict[str, Any],
     background_tasks: BackgroundTasks,
 ):
     """Process a PR merged event."""
@@ -587,10 +574,7 @@ async def handle_pr_event_merged(
     if not pr["merged"]:
         return {"status": "skip", "message": "PR closed but not merged."}
 
-    files_changed = await gh.getitem(
-        f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files",
-        **gh_kws,
-    )
+    files_changed = await gh.getitem(f"{pr['base']['repo']['url']}/pulls/{pr['number']}/files")
     # TODO[**IMPORTANT**]: make sure that `synchronize` task fails check run if
     # PRs attempt to mix recipe + config changes, and that this failure is somehow
     # connected to a branch protection rule for feedstocks + staged-recipes.
@@ -617,7 +601,7 @@ async def handle_pr_event_merged(
             pr["base"]["repo"]["url"],
         )
         logger.info(f"Calling create_feedstock with args {args}")
-        background_tasks.add_task(create_feedstock_repo, *args, **session_kws, gh_kws=gh_kws)
+        background_tasks.add_task(create_feedstock_repo, *args, gh=gh)
     else:
         # this is not staged recipes, but make sure it's a feedstock, and not some other repo
         if not pr["base"]["repo"]["full_name"].endswith("-feedstock"):
@@ -636,7 +620,7 @@ async def handle_pr_event_merged(
             pr["base"]["repo"]["url"],
             pr["base"]["ref"],
         )
-        background_tasks.add_task(deploy_prod_run, *args, **session_kws, gh_kws=gh_kws)
+        background_tasks.add_task(deploy_prod_run, *args, gh=gh)
 
 
 async def parse_payload(request, payload_bytes, event):
@@ -659,7 +643,7 @@ async def parse_payload(request, payload_bytes, event):
     tags=["github_app", "public"],
 )
 async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_session)):
-    gh = get_github_session(http_session)
+    gh = await get_authenticated_github_session(http_session)
 
     deliveries = []
     async for d in gh.getiter("/app/hook/deliveries", jwt=get_jwt(), accept=ACCEPT):
@@ -678,7 +662,7 @@ async def get_delivery(
     response_only: bool = Query(True, description="Return only response body, excluding request."),
     http_session: aiohttp.ClientSession = Depends(http_session),
 ):
-    gh = get_github_session(http_session)
+    gh = await get_authenticated_github_session(http_session)
     delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
     return delivery["response"] if response_only else delivery
 
@@ -778,7 +762,6 @@ async def synchronize(
     base_api_url: str,
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
     logger.info(f"Synchronizing {head_html_url} at {head_sha}.")
 
@@ -789,7 +772,6 @@ async def synchronize(
             head_sha=head_sha,
             output=dict(title="Parsing meta.yaml for latest commit"),
         ).dict(),
-        **gh_kws,
     )
     cmd = [
         "pangeo-forge-runner",
@@ -821,7 +803,6 @@ async def synchronize(
                             summary=tracelines[-1],
                         ),
                     ).dict(),
-                    **gh_kws,
                 )
                 raise ValueError(tracelines[-1]) from e
         # CalledProcessError's output *should* have a line where "status" == "failed", but just in
@@ -851,7 +832,6 @@ async def synchronize(
                 summary=json.dumps(meta, indent=4),
             ),
         ).dict(),
-        **gh_kws,
     )
 
     # FIXME: just temporarily enforcing only one bakery here, eventually swap this for checking
@@ -873,7 +853,6 @@ async def synchronize(
                     ),
                 ),
             ).dict(),
-            **gh_kws,
         )
         raise ValueError(f"{meta['bakery']['id'] = } != {DEFAULT_BAKERY.name = }")
 
@@ -897,7 +876,6 @@ async def synchronize(
         await gh.post(
             f"{base_api_url}/check-runs",
             data=rc.dict(),
-            **gh_kws,
         )
 
 
@@ -915,10 +893,9 @@ async def run_recipe_test(
     reactions_url: str,
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
     """ """
-    await gh.post(reactions_url, data={"content": "rocket"}, **gh_kws)
+    await gh.post(reactions_url, data={"content": "rocket"})
 
     # `run_recipe_test` could be called from either staged-recipes *or* a feedstock, therefore,
     # check which one this is, and if it's staged-recipes, specify the subdirectoy name kwarg.
@@ -938,7 +915,7 @@ async def run_recipe_test(
             is_test=True,
         )
     except FailedJobSubmission as e:
-        await gh.post(reactions_url, data={"content": "confused"}, **gh_kws)
+        await gh.post(reactions_url, data={"content": "confused"})
         await gh.patch(
             f"{base_api_url}/check-runs/{check_run_id}",
             data=CheckRunUpdate(
@@ -949,11 +926,10 @@ async def run_recipe_test(
                     summary=e.args[0],
                 ),
             ).dict(),
-            **gh_kws,
         )
         raise e
     # `run` was called successfully, so update check run with status = in_progress
-    existing_check_run = await gh.getitem(f"{base_api_url}/check-runs/{check_run_id}", **gh_kws)
+    existing_check_run = await gh.getitem(f"{base_api_url}/check-runs/{check_run_id}")
     summary: dict = json.loads(existing_check_run["output"]["summary"])
     summary.update(submitted_job.dict())
     await gh.patch(
@@ -962,7 +938,6 @@ async def run_recipe_test(
             status="in_progress",
             output=dict(title="Job submission success.", summary=json.dumps(summary)),
         ).dict(exclude={"conclusion", "completed_at"}),
-        **gh_kws,
     )
 
 
@@ -976,15 +951,14 @@ async def triage_test_run_complete(
     dataset_public_url: Optional[str],
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
-    async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls", **gh_kws):
+    async for pr in gh.getiter(f"/repos/{feedstock_spec}/pulls"):
         if pr["head"]["sha"] == head_sha:
             comments_url = pr["comments_url"]
             break
     # get the existing check run, so we can preserve and/or append to its summary
     # TODO: more robust to make this a builtin feature of CheckRunUpdate?
-    check_run = await gh.getitem(check_run_api_url, **gh_kws)
+    check_run = await gh.getitem(check_run_api_url)
 
     if conclusion == "failure":
         comment = dedent(
@@ -1005,7 +979,6 @@ async def triage_test_run_complete(
                 # FIXME: point to logging information here
                 output=dict(title="Test run failure.", summary=check_run["output"]["summary"]),
             ).dict(exclude={}),
-            **gh_kws,
         )
     elif conclusion == "success":
         if dataset_type == "zarr":
@@ -1040,17 +1013,15 @@ async def triage_test_run_complete(
                 conclusion="success",
                 output=dict(title="Test run success!", summary=check_run["output"]["summary"]),
             ).dict(),
-            **gh_kws,
         )
 
-    await gh.post(comments_url, data={"body": comment}, **gh_kws)
+    await gh.post(comments_url, data={"body": comment})
 
 
 async def triage_prod_run_complete(
     recipe_run: SQLModel,
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
     deployment_id = json.loads(recipe_run.message)["deployment_id"]
     environment_url = json.loads(recipe_run.message)["environment_url"]
@@ -1062,7 +1033,6 @@ async def triage_prod_run_complete(
             state=recipe_run.conclusion,
             environment_url=environment_url,
         ),
-        **gh_kws,
     )
     # Don't need to link deployment to recipe run page here; that was already done when the
     # recipe run was moved to "in_progress" (either by `recipe_run_test` or `deploy_prod_run`).
@@ -1075,10 +1045,9 @@ async def create_feedstock_repo(
     base_repo_api_url: str,
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
     # (1) check changed files, if we're in a subdir of recipes, then proceed
-    src_files = await gh.getitem(f"{base_repo_api_url}/pulls/{pr_number}/files", **gh_kws)
+    src_files = await gh.getitem(f"{base_repo_api_url}/pulls/{pr_number}/files")
     subdir = src_files[0]["filename"].split("/")[1]
     # (2) make a new repo with name `subdir-feedstock`, plus license + readme
     name = f"{subdir}-feedstock"
@@ -1097,19 +1066,18 @@ async def create_feedstock_repo(
         license_template="apache-2.0",
     )
     logger.debug(f"Creating new feedstock with kws: {data}")
-    await gh.post(f"/orgs/{base_repo_owner_login}/repos", data=data, **gh_kws)
+    await gh.post(f"/orgs/{base_repo_owner_login}/repos", data=data)
     feedstock_spec = f"{base_repo_owner_login}/{name}"
     # (3) TODO: add all contributors to PR as collaborators w/ write permission on repo
     # (4) create a new branch on feedstock repo
     logger.debug(f"Adding 'create-feedstock' branch on feedstock {feedstock_spec}")
-    main = await gh.getitem(f"/repos/{feedstock_spec}/branches/main", **gh_kws)
+    main = await gh.getitem(f"/repos/{feedstock_spec}/branches/main")
     working_branch = await gh.post(
         f"/repos/{feedstock_spec}/git/refs",
         data=dict(
             ref="refs/heads/create-feedstock",
             sha=main["commit"]["sha"],
         ),
-        **gh_kws,
     )
     # (5) add contents to new branch
     for f in src_files:
@@ -1117,7 +1085,7 @@ async def create_feedstock_repo(
         dst = f"feedstock/{os.path.basename(src)}"
         logger.debug(f"Copying file {src} -> {dst}")
 
-        content = await gh.getitem(f["contents_url"], **gh_kws)
+        content = await gh.getitem(f["contents_url"])
         await gh.put(
             f"/repos/{feedstock_spec}/contents/{dst}",
             data=dict(
@@ -1125,7 +1093,6 @@ async def create_feedstock_repo(
                 content=content["content"],
                 branch="create-feedstock",
             ),
-            **gh_kws,
         )
     # (6) open PR
     open_pr = await gh.post(
@@ -1135,7 +1102,6 @@ async def create_feedstock_repo(
             head="create-feedstock",
             base="main",
         ),
-        **gh_kws,
     )
     # (7) add new feedstock to database
     new_fstock_model = MODELS["feedstock"].creation(spec=feedstock_spec)
@@ -1143,19 +1109,18 @@ async def create_feedstock_repo(
     # db_session.add(db_model)
     # db_session.commit()
     # (8) merge PR - this deploys prod run via another call to /github/hooks route
-    merged = await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge", **gh_kws)
+    merged = await gh.put(f"/repos/{feedstock_spec}/pulls/{open_pr['number']}/merge")
     # (9) delete PR branch
     assert merged["merged"]
-    await gh.delete(working_branch["url"], **gh_kws)
+    await gh.delete(working_branch["url"])
     # (9) delete files from staged-recipes
-    base_branch = await gh.getitem(f"{base_repo_api_url}/branches/{base_ref}", **gh_kws)
+    base_branch = await gh.getitem(f"{base_repo_api_url}/branches/{base_ref}")
     cleanup_branch = await gh.post(
         f"{base_repo_api_url}/git/refs",
         data=dict(
             ref=f"refs/heads/cleanup-{int(datetime.now().timestamp())}",
             sha=base_branch["commit"]["sha"],
         ),
-        **gh_kws,
     )
     for f in src_files:
         await gh.delete(
@@ -1165,7 +1130,6 @@ async def create_feedstock_repo(
                 sha=f["sha"],
                 branch=cleanup_branch["ref"],
             ),
-            **gh_kws,
         )
     cleanup_pr = await gh.post(
         f"{base_repo_api_url}/pulls",
@@ -1174,11 +1138,10 @@ async def create_feedstock_repo(
             head=cleanup_branch["ref"],
             base=base_ref,
         ),
-        **gh_kws,
     )
-    merged = await gh.put(f"{base_repo_api_url}/pulls/{cleanup_pr['number']}/merge", **gh_kws)
+    merged = await gh.put(f"{base_repo_api_url}/pulls/{cleanup_pr['number']}/merge")
     assert merged["merged"]
-    await gh.delete(cleanup_branch["url"], **gh_kws)
+    await gh.delete(cleanup_branch["url"])
 
 
 async def deploy_prod_run(
@@ -1189,7 +1152,6 @@ async def deploy_prod_run(
     base_ref: str,
     *,
     gh: GitHubAPI,
-    gh_kws: dict,
 ):
     # (1) expand meta
     cmd = [
@@ -1232,7 +1194,6 @@ async def deploy_prod_run(
                 ref=base_ref,
                 environment=recipe["id"],
             ),
-            **gh_kws,
         )
         logger.debug(f"Created github deployment: {gh_deployment}")
         model = MODELS["recipe_run"].creation(
@@ -1265,12 +1226,10 @@ async def deploy_prod_run(
             await gh.post(
                 f"{base_api_url}/deployments/{deployment_id}/statuses",
                 data=dict(status="failure"),
-                **gh_kws,
             )
         # Don't update recipe_run as "failed" here, that's handled inside `run`.
         # Don't update recipe_run as "in_progress" here, that's handled inside `run`.
         # (4.5) Update deployment with link to recipe run page
-        logger.debug("HEREEEEEEEEEEEEEEEEEe")
         logger.debug(recipe_run.message)
         deployment_id = json.loads(recipe_run.message)["deployment_id"]
         environment_url = (
@@ -1289,7 +1248,6 @@ async def deploy_prod_run(
                 state="in_progress",
                 environment_url=environment_url,
             ),
-            **gh_kws,
         )
         message = json.loads(recipe_run.message)
         # save environment url for reuse when job completes, in `triage_prod_run_complete`
