@@ -10,9 +10,9 @@ from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from gidgethub.aiohttp import GitHubAPI
 from gidgethub.apps import get_installation_access_token
 from gidgethub.apps import get_jwt as _get_jwt
+from gidgethub.httpx import GitHubAPI
 from gidgethub.routing import Router as GitHubEventRouter
 from gidgethub.sansio import Event as GitHubEvent
 from pydantic import BaseModel, Field

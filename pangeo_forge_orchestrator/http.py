@@ -1,18 +1,25 @@
-import aiohttp
+from typing import Optional
+
+import httpx
 
 
-# See https://github.com/tiangolo/fastapi/issues/236#issuecomment-716548461
+# Adapted https://github.com/tiangolo/fastapi/issues/236#issuecomment-716548461
+# to use httpx instead of aiohttp. Mounts are optionally passable for mocking.
 class HttpSession:
-    session: aiohttp.ClientSession = None
+    session: httpx.AsyncClient = None
+
+    def __init__(self, mounts: Optional[dict] = None) -> None:
+        self.mounts = mounts
 
     def start(self):
-        self.session = aiohttp.ClientSession()
+        kw = dict(mounts=self.mounts) if self.mounts else {}
+        self.session = httpx.AsyncClient(**kw)
 
     async def stop(self):
-        await self.session.close()
+        await self.session.__aexit__()
         self.session = None
 
-    def __call__(self) -> aiohttp.ClientSession:
+    def __call__(self) -> httpx.AsyncClient:
         assert self.session is not None
         return self.session
 
