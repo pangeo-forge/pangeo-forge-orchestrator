@@ -3,8 +3,11 @@ import hmac
 import json
 from typing import TypedDict, Union
 
+import httpx
 import pytest
 import pytest_asyncio
+
+import pangeo_forge_orchestrator
 
 
 class EventRequest(TypedDict):
@@ -63,6 +66,24 @@ async def synchronize_request_fixture(
     request = {"headers": headers, "payload": payload}
 
     # setup mock github backend for this test
+
+    async def app_installations_handler(request: httpx.Request):
+        if request.url.path == "/app/installations":
+            return httpx.Response(200, json=[{"id": 1234567}])
+        elif request.url.path == f"/app/installations/{1234567}/access_tokens":
+            return httpx.Response(200, json={"token": "abcdefghijklmnop"})
+
+    async def check_runs_handler(request: httpx.Request):
+        return httpx.Response(200, json={"id": 1234567890})
+
+    gh_base_url = "https://api.github.com"
+    mounts = {
+        f"{gh_base_url}/app/installations": httpx.MockTransport(app_installations_handler),
+        f"{gh_base_url}/repos/pangeo-forge/staged-recipes/check-runs": httpx.MockTransport(
+            check_runs_handler
+        ),
+    }
+
     # gh_backend_kws = {
     #     "_app_installations": [{"id": 1234567}],
     #     "_accessible_repos": [
@@ -101,6 +122,7 @@ async def synchronize_request_fixture(
     yield (
         add_hash_signature(request, webhook_secret),
         expected_check_runs_response,
+        mounts,
     )
 
 
@@ -124,12 +146,19 @@ async def test_receive_synchronize_request(
     (
         synchronize_request,
         expected_check_runs_response,
+        mounts,
     ) = synchronize_request_fixture
-    # mocker.patch.object(
-    #     pangeo_forge_orchestrator.routers.github_app,
-    #     "get_github_session",
-    #     get_mock_github_session(gh_backend),
-    # )
+
+    def get_mock_http_session():
+        mock_session = httpx.AsyncClient(mounts=mounts)
+        return mock_session
+
+    mocker.patch.object(
+        pangeo_forge_orchestrator.routers.github_app,
+        "get_http_session",
+        get_mock_http_session,
+    )
+
     # mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
     response = await async_app_client.post(
         "/github/hooks/",

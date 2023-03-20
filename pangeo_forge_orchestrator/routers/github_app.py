@@ -8,7 +8,7 @@ from textwrap import dedent
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
-import aiohttp
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from gidgethub.apps import get_installation_access_token
 from gidgethub.apps import get_jwt as _get_jwt
@@ -20,7 +20,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlmodel import SQLModel
 
 from ..config import get_config
-from ..http import http_session
+from ..http import HttpSession
 from ..logging import logger
 from ..models import (
     MODELS,
@@ -87,17 +87,23 @@ class FailedJobSubmission(Exception):
 # Helpers -----------------------------------------------------------------------------------------
 
 
+def get_http_session():
+    http_session = HttpSession()
+    http_session.start()
+    return http_session
+
+
 def ignore_repo(repo: str) -> bool:
     """Return True if the repo should be ignored."""
 
     return not repo.lower().endswith("-feedstock") and not repo.lower().endswith("staged-recipes")
 
 
-def get_unauthenticated_github_session(http_session: aiohttp.ClientSession):
+def get_unauthenticated_github_session(http_session: httpx.AsyncClient):
     return GitHubAPI(http_session, "pangeo-forge")
 
 
-async def get_authenticated_github_session(http_session: aiohttp.ClientSession):
+async def get_authenticated_github_session(http_session: httpx.AsyncClient):
     unauthenticated = get_unauthenticated_github_session(http_session)
     token = await get_access_token(unauthenticated)
     return GitHubAPI(http_session, "pangeo-forge", oauth_token=token)
@@ -256,7 +262,7 @@ def get_storage_subpath_identifier(
 )
 async def get_feedstock_hook_deliveries(
     id: int,
-    http_session: aiohttp.ClientSession = Depends(http_session),
+    http_session: httpx.AsyncClient = Depends(get_http_session),
 ):
     gh = await get_authenticated_github_session(http_session)
     repo_id, _ = await repo_id_and_spec_from_feedstock_id(id, gh)
@@ -276,7 +282,7 @@ async def get_feedstock_hook_deliveries(
 async def get_feedstock_check_runs(
     id: int,
     commit_sha: str,
-    http_session: aiohttp.ClientSession = Depends(http_session),
+    http_session: httpx.AsyncClient = Depends(get_http_session),
 ):
     gh = await get_authenticated_github_session(http_session)
     _, feedstock_spec = await repo_id_and_spec_from_feedstock_id(id, gh)
@@ -299,8 +305,10 @@ async def get_feedstock_check_runs(
 async def receive_github_hook(  # noqa: C901
     request: Request,
     background_tasks: BackgroundTasks,
-    http_session: aiohttp.ClientSession = Depends(http_session),
+    # http_session: httpx.AsyncClient = Depends(get_http_session),
 ):
+    http_session = get_http_session()
+
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
     # GitHubEvent.from_http handles this validation for us.
@@ -642,7 +650,7 @@ async def parse_payload(request, payload_bytes, event):
     summary="Get all webhook deliveries, not filtered by originating feedstock repo.",
     tags=["github_app", "public"],
 )
-async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_session)):
+async def get_deliveries(http_session: httpx.AsyncClient = Depends(get_http_session)):
     gh = await get_authenticated_github_session(http_session)
 
     deliveries = []
@@ -660,7 +668,7 @@ async def get_deliveries(http_session: aiohttp.ClientSession = Depends(http_sess
 async def get_delivery(
     id: int,
     response_only: bool = Query(True, description="Return only response body, excluding request."),
-    http_session: aiohttp.ClientSession = Depends(http_session),
+    http_session: httpx.AsyncClient = Depends(get_http_session),
 ):
     gh = await get_authenticated_github_session(http_session)
     delivery = await gh.getitem(f"/app/hook/deliveries/{id}", jwt=get_jwt(), accept=ACCEPT)
