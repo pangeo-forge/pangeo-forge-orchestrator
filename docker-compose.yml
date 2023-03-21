@@ -12,31 +12,20 @@ services:
       dockerfile: Dockerfile.heroku
     ports:
       - '3000:8000'
-    depends_on:
-      - db
     environment:
-      # Nearly the same config as for postgres service in `.github/workflows/main.yaml`,
-      # with exception of hostname. For hostname, see https://docs.docker.com/compose/networking/
-      DATABASE_URL: 'postgres://postgres_user:postgres_password@db:5432/postgres_db'
       # Get the project_id dynamically after dataflow key file is decrypted in entrypoint.
       # Python command for parsing JSON is set as env var because putting it directly in
       # entrypoint is too many layers of nested quotation marks.
       GET_PROJECT_ID: "import sys, json; print(json.load(sys.stdin)['project_id'].strip())"
       DATAFLOW_CREDS: './secrets/dataflow-job-submission.json'
-    # Note on this entrypoint:
-    # - Sleep at start to allow postgres enought time to start. There are some more involved
-    #   solutions to this problem at https://docs.docker.com/compose/startup-order/, but because
-    #   this is just for testing, I think this should be enough, and is much lighter weight.
-    # - The commands following sleep combine the `release` and `web` directives from `heroku.yml`,
+    # - These commands combine the `release` and `web` directives from `heroku.yml`,
     #   with the following small differences:
     #     - docker-compose spec requires double $$ for string interpolation (vs. single $)
     #     - Only running one gunicorn worker here (as opposed to 4 in production). Specifying more
     #       than 1 worker fails in this context.
     #     - We bind to 0.0.0.0 (as opposed to default 127.0.0.1) to make port binding to host work
     entrypoint: >
-      /bin/sh -c 'sleep 1
-      && python3.9 -m alembic upgrade head
-      && aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+      /bin/sh -c 'aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
       && aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
       && sops -d -i ./secrets/bakery-args.pangeo-ldeo-nsf-earthcube.yaml
       && sops -d -i ./secrets/config.$${PANGEO_FORGE_DEPLOYMENT}.yaml
@@ -45,14 +34,3 @@ services:
       && cat $${DATAFLOW_CREDS} | python3.9 -c "$$GET_PROJECT_ID" | xargs -I{} gcloud config set project {}
       && export GOOGLE_APPLICATION_CREDENTIALS=$${DATAFLOW_CREDS}
       && gunicorn -w 1 -t 300 -k uvicorn.workers.UvicornWorker pangeo_forge_orchestrator.api:app -b 0.0.0.0:8000'
-  db:
-    platform: linux/amd64
-    image: postgres:latest
-    ports:
-      - '5432:5432'
-    environment:
-      # Identical config as for postgres service in `.github/workflows/main.yaml`
-      POSTGRES_DB: postgres_db
-      POSTGRES_PASSWORD: postgres_password
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres_user
