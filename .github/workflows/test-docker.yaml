@@ -35,5 +35,5 @@ jobs:
           && python3.9 -m alembic upgrade head
           && apt-get install -y git
           && pip install \".[dev]\"
-          && pytest tests -vx'"
+          && pytest tests_ -vx'"
           web
