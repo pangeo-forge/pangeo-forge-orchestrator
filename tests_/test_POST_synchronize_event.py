@@ -8,7 +8,8 @@ import httpx
 import pytest
 import pytest_asyncio
 
-import pangeo_forge_orchestrator
+from pangeo_forge_orchestrator.api import app
+from pangeo_forge_orchestrator.routers.github_app import get_http_session
 
 
 class EventRequest(TypedDict):
@@ -190,11 +191,8 @@ async def test_receive_synchronize_request(
         mock_session = httpx.AsyncClient(mounts=mounts)
         return mock_session
 
-    mocker.patch.object(
-        pangeo_forge_orchestrator.routers.github_app,
-        "get_http_session",
-        get_mock_http_session,
-    )
+    # https://fastapi.tiangolo.com/advanced/testing-dependencies/#testing-dependencies-with-overrides
+    app.dependency_overrides[get_http_session] = get_mock_http_session
 
     mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
     response = await async_app_client.post(

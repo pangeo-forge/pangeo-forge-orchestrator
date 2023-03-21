@@ -300,10 +300,8 @@ async def get_feedstock_check_runs(
 async def receive_github_hook(  # noqa: C901
     request: Request,
     background_tasks: BackgroundTasks,
-    # http_session: httpx.AsyncClient = Depends(get_http_session),
+    http_session: httpx.AsyncClient = Depends(get_http_session),
 ):
-    http_session = get_http_session()
-
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
     # GitHubEvent.from_http handles this validation for us.
