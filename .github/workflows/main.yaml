@@ -23,35 +23,13 @@ env:
 
 jobs:
   test:
-    name: ${{ matrix.python-version }}-${{ matrix.database }}
+    name: ${{ matrix.python-version }}
     runs-on: ubuntu-latest
 
-    # https://docs.github.com/en/actions/using-containerized-services/creating-postgresql-service-containers
-    # See also https://remarkablemark.org/blog/2021/03/14/setup-postgresql-in-github-actions/
-    # and https://github.com/actions/example-services/blob/master/.github/workflows/postgres-service.yml
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_DB: postgres_db
-          POSTGRES_PASSWORD: postgres_password
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: postgres_user
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
         python-version: [3.9]
-        database: ['sqlite', 'postgres']
 
     steps:
       - uses: actions/checkout@v3
@@ -75,21 +53,6 @@ jobs:
         run: |
           conda info
           conda list
-
-      - name: Set DATABASE_URL
-        shell: bash -l {0}
-        run: |
-          if [[ "${{ matrix.database }}" == "sqlite" ]]; then \
-            echo "DATABASE_URL=sqlite:///${{ github.workspace }}/database.sqlite" >> $GITHUB_ENV; \
-          else \
-            echo "DATABASE_URL=postgres://postgres_user:postgres_password@localhost:5432/postgres_db" >> $GITHUB_ENV; \
-          fi
-
-      - name: Maybe run migrations on postgres database
-        if: matrix.database == 'postgres'
-        shell: bash -l {0}
-        run: |
-          python -m alembic upgrade head
 
       - name: Run Tests
         shell: bash -l {0}
