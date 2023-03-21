@@ -216,12 +216,7 @@ async def maybe_specify_feedstock_subdir(
     """If this is staged-recipes, add the --feedstock-subdir option to the command."""
 
     if "staged-recipes" in api_url:
-        token = await get_access_token(gh)
-        files = await gh.getitem(
-            f"{api_url}/pulls/{pr_number}/files",
-            oauth_token=token,
-            accept=ACCEPT,
-        )
+        files = await gh.getitem(f"{api_url}/pulls/{pr_number}/files")
         subdir = files[0]["filename"].split("/")[1]
         return f"recipes/{subdir}"
 
