@@ -67,22 +67,20 @@ async def synchronize_request_fixture(
 
     # setup mock github backend for this test
 
-    async def app_installations_handler(request: httpx.Request):
-        if request.url.path == "/app/installations":
-            return httpx.Response(200, json=[{"id": 1234567}])
-        elif request.url.path == f"/app/installations/{1234567}/access_tokens":
-            return httpx.Response(200, json={"token": "abcdefghijklmnop"})
-
-    async def check_runs_handler(request: httpx.Request):
-        return httpx.Response(200, json={"id": 1234567890})
-
-    gh_base_url = "https://api.github.com"
-    mounts = {
-        f"{gh_base_url}/app/installations": httpx.MockTransport(app_installations_handler),
-        f"{gh_base_url}/repos/pangeo-forge/staged-recipes/check-runs": httpx.MockTransport(
-            check_runs_handler
+    mock_responses = {
+        "/app/installations": httpx.Response(200, json=[{"id": 1234567}]),
+        f"/app/installations/{1234567}/access_tokens": (
+            httpx.Response(200, json={"token": "abcdefghijklmnop"})
+        ),
+        "/repos/pangeo-forge/staged-recipes/check-runs": (
+            httpx.Response(200, json={"id": 1234567890})
         ),
     }
+
+    async def handler(request: httpx.Request):
+        return mock_responses[request.url.path]
+
+    mounts = {"https://api.github.com": httpx.MockTransport(handler)}
 
     # gh_backend_kws = {
     #     "_app_installations": [{"id": 1234567}],
