@@ -103,7 +103,9 @@ def get_unauthenticated_github_session(http_session: httpx.AsyncClient):
     return GitHubAPI(http_session, "pangeo-forge")
 
 
-async def get_authenticated_github_session(http_session: httpx.AsyncClient):
+async def get_authenticated_github_session(
+    http_session: httpx.AsyncClient = Depends(get_http_session),
+):
     unauthenticated = get_unauthenticated_github_session(http_session)
     token = await get_access_token(unauthenticated)
     return GitHubAPI(http_session, "pangeo-forge", oauth_token=token)
@@ -300,7 +302,10 @@ async def get_feedstock_check_runs(
 async def receive_github_hook(  # noqa: C901
     request: Request,
     background_tasks: BackgroundTasks,
-    http_session: httpx.AsyncClient = Depends(get_http_session),
+    # background task functions cannot use FastAPI's Depends to resolve dependencies,
+    # so we resolve the GitHubAPI here and then pass it through to the background task.
+    # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
+    gh: GitHubAPI = Depends(get_authenticated_github_session),
 ):
     # Hash signature validation documentation:
     # https://docs.github.com/en/developers/webhooks-and-events/webhooks/securing-your-webhooks#validating-payloads-from-github
@@ -312,12 +317,6 @@ async def receive_github_hook(  # noqa: C901
         payload_bytes,
         secret=get_config().github_app.webhook_secret,
     )
-
-    # NOTE: Background task functions cannot use FastAPI's Depends to resolve session
-    # dependencies. We can resolve these dependencies (i.e., github session, database session)
-    # here in the route function and then pass them through to the background task as kwargs.
-    # See: https://github.com/tiangolo/fastapi/issues/4956#issuecomment-1140313872.
-    gh = await get_authenticated_github_session(http_session)
 
     if event.event == "pull_request" or event.event == "issue_comment":
         await event_router.dispatch(
