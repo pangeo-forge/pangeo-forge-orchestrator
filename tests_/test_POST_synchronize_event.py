@@ -137,6 +137,13 @@ async def synchronize_request_fixture(
 
     mounts = {"https://api.github.com": httpx.MockTransport(handler)}
 
+    def get_mock_http_session():
+        mock_session = httpx.AsyncClient(mounts=mounts)
+        return mock_session
+
+    # https://fastapi.tiangolo.com/advanced/testing-dependencies/#testing-dependencies-with-overrides
+    app.dependency_overrides[get_http_session] = get_mock_http_session
+
     expected_check_runs_response = {
         "total_count": 1,
         "check_runs": [
@@ -160,8 +167,11 @@ async def synchronize_request_fixture(
     yield (
         add_hash_signature(request, webhook_secret),
         expected_check_runs_response,
-        mounts,
     )
+
+    # cleanup overrides set above
+    app.dependency_overrides = {}
+    assert not app.dependency_overrides
 
 
 @pytest.mark.asyncio
@@ -184,15 +194,7 @@ async def test_receive_synchronize_request(
     (
         synchronize_request,
         expected_check_runs_response,
-        mounts,
     ) = synchronize_request_fixture
-
-    def get_mock_http_session():
-        mock_session = httpx.AsyncClient(mounts=mounts)
-        return mock_session
-
-    # https://fastapi.tiangolo.com/advanced/testing-dependencies/#testing-dependencies-with-overrides
-    app.dependency_overrides[get_http_session] = get_mock_http_session
 
     mocker.patch.object(subprocess, "check_output", mock_subprocess_check_output)
     response = await async_app_client.post(
