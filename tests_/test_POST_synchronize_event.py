@@ -99,15 +99,17 @@ async def synchronize_request_fixture(
     # setup mock github backend for this test
 
     mock_responses = {
-        "/app/installations": httpx.Response(200, json=[{"id": 1234567}]),
-        f"/app/installations/{1234567}/access_tokens": (
-            httpx.Response(200, json={"token": "abcdefghijklmnop"})
-        ),
-        "/repos/pangeo-forge/staged-recipes/check-runs": (
-            httpx.Response(200, json={"id": 1234567890})
-        ),
-        "/repos/pangeo-forge/staged-recipes/pulls/1/files": (
-            httpx.Response(
+        "/app/installations": {
+            "GET": httpx.Response(200, json=[{"id": 1234567}]),
+        },
+        f"/app/installations/{1234567}/access_tokens": {
+            "POST": httpx.Response(200, json={"token": "abcdefghijklmnop"}),
+        },
+        "/repos/pangeo-forge/staged-recipes/check-runs": {
+            "POST": httpx.Response(200, json={"id": 1234567890})
+        },
+        "/repos/pangeo-forge/staged-recipes/pulls/1/files": {
+            "GET": httpx.Response(
                 200,
                 json=[
                     {
@@ -128,12 +130,14 @@ async def synchronize_request_fixture(
                     },
                 ],
             )
-        ),
-        "/repos/pangeo-forge/staged-recipes/check-runs/1234567890": httpx.Response(200),
+        },
+        "/repos/pangeo-forge/staged-recipes/check-runs/1234567890": {
+            "PATCH": httpx.Response(200),
+        },
     }
 
     async def handler(request: httpx.Request):
-        return mock_responses[request.url.path]
+        return mock_responses[request.url.path][request.method]
 
     mounts = {"https://api.github.com": httpx.MockTransport(handler)}
 
