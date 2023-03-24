@@ -4,7 +4,8 @@ import json
 import os
 import secrets
 import subprocess
-from typing import TypedDict, Union
+from collections.abc import AsyncGenerator
+from typing import Literal, Optional, TypedDict, Union
 
 import httpx
 import pytest
@@ -305,6 +306,24 @@ def add_hash_signature(request: EventRequest, webhook_secret: str) -> EventReque
     return request
 
 
+class MockHttpResponses(TypedDict, total=False):
+    GET: Optional[httpx.Response]
+    POST: Optional[httpx.Response]
+    PATCH: Optional[httpx.Response]
+    PUT: Optional[httpx.Response]
+    DELETE: Optional[httpx.Response]
+
+
+def make_mock_httpx_client(mock_responses: dict[str, MockHttpResponses]):
+    async def handler(request: httpx.Request):
+        method: Literal["GET", "POST", "PATCH", "PUT", "DELETE"] = request.method
+        return mock_responses[request.url.path][method]
+
+    mounts = {"https://api.github.com": httpx.MockTransport(handler)}
+
+    return httpx.AsyncClient(mounts=mounts)
+
+
 @pytest_asyncio.fixture(
     params=[
         dict(
@@ -320,7 +339,7 @@ async def recipe_pr(
     request: pytest.FixtureRequest,
     mocker: pytest_mock.MockerFixture,
     async_app_client: httpx.AsyncClient,
-):
+) -> AsyncGenerator[tuple[dict, httpx.AsyncClient], None]:
     fixture_request = request  # disambiguate with a more specific name
     headers = {"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "123-456-789"}
     payload = {
@@ -352,17 +371,17 @@ async def recipe_pr(
     # setup mock github backend for this test
 
     mock_github_responses = {
-        "/app/installations": {
-            "GET": httpx.Response(200, json=[{"id": 1234567}]),
-        },
-        f"/app/installations/{1234567}/access_tokens": {
-            "POST": httpx.Response(200, json={"token": "abcdefghijklmnop"}),
-        },
-        "/repos/pangeo-forge/staged-recipes/check-runs": {
-            "POST": httpx.Response(200, json={"id": 1234567890})
-        },
-        "/repos/pangeo-forge/staged-recipes/pulls/1/files": {
-            "GET": httpx.Response(
+        "/app/installations": MockHttpResponses(
+            GET=httpx.Response(200, json=[{"id": 1234567}]),
+        ),
+        f"/app/installations/{1234567}/access_tokens": MockHttpResponses(
+            POST=httpx.Response(200, json={"token": "abcdefghijklmnop"}),
+        ),
+        "/repos/pangeo-forge/staged-recipes/check-runs": MockHttpResponses(
+            POST=httpx.Response(200, json={"id": 1234567890})
+        ),
+        "/repos/pangeo-forge/staged-recipes/pulls/1/files": MockHttpResponses(
+            GET=httpx.Response(
                 200,
                 json=[
                     {
@@ -383,20 +402,14 @@ async def recipe_pr(
                     },
                 ],
             )
-        },
-        "/repos/pangeo-forge/staged-recipes/check-runs/1234567890": {
-            "PATCH": httpx.Response(200),
-        },
+        ),
+        "/repos/pangeo-forge/staged-recipes/check-runs/1234567890": MockHttpResponses(
+            PATCH=httpx.Response(200),
+        ),
     }
 
-    async def handler(request: httpx.Request):
-        return mock_github_responses[request.url.path][request.method]
-
-    mounts = {"https://api.github.com": httpx.MockTransport(handler)}
-
     def get_mock_http_session():
-        mock_session = httpx.AsyncClient(mounts=mounts)
-        return mock_session
+        return make_mock_httpx_client(mock_github_responses)
 
     # https://fastapi.tiangolo.com/advanced/testing-dependencies/#testing-dependencies-with-overrides
     app.dependency_overrides[get_http_session] = get_mock_http_session
@@ -418,7 +431,39 @@ async def recipe_pr(
     )
     assert webhook_response.status_code == 202
 
-    yield fixture_request.param
+    # there are two layers of github mocking: one for the routes accessed by the app itself (above).
+    # and another for routes that the tests need to access to make assertions against, here:
+    mock_gh_responses_for_pytest = {
+        (
+            f"/repos/{fixture_request.param['base_repo_full_name']}"
+            f"/commits/{fixture_request.param['head_sha']}/check-runs"
+        ): MockHttpResponses(
+            GET=httpx.Response(
+                200,
+                json={
+                    "total_count": 1,
+                    "check_runs": [
+                        {
+                            "name": "Parse meta.yaml",
+                            "head_sha": fixture_request.param["head_sha"],
+                            "status": "completed",
+                            "started_at": "2022-08-11T21:22:51Z",
+                            "output": {
+                                "title": "Recipe runs queued for latest commit",
+                                "summary": "",
+                            },
+                            "details_url": "https://pangeo-forge.org/",
+                            "id": 0,
+                            "conclusion": "success",
+                            "completed_at": "2022-08-11T21:22:51Z",
+                        }
+                    ],
+                },
+            )
+        ),
+    }
+
+    yield fixture_request.param, make_mock_httpx_client(mock_gh_responses_for_pytest)
 
     # cleanup overrides set above
     app.dependency_overrides = {}
