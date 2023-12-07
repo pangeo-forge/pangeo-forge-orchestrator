@@ -45,7 +45,7 @@ jobs:
       - name: Restore database from file
         run: |
           pg_restore --verbose --clean --no-acl --no-owner \
-          -h postgres -U postgres_user -d postgres_db \
+          -h localhost -U postgres_user -d postgres_db \
           db-backup/810fa5e1-9b78-4f3c-97e0-a1847b3a65e6
         env:
           PGPASSWORD: postgres_password
