@@ -41,13 +41,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
+      - name: Create database
+        run: |
+          echo "CREATE DATABASE restore;" | psql -h postgres -U postgres_user
+        env:
+          PGPASSWORD: postgres_password
+
       # https://devcenter.heroku.com/articles/heroku-postgres-import-export#restore-to-local-database
       - name: Restore database from file
         run: |
-          echo "CREATE DATABASE restore;" | psql
           pg_restore --verbose --clean --no-acl --no-owner \
-          -h localhost -U postgres_user -d restore \
+          -h postgres -U postgres_user -d restore \
           db-backup/810fa5e1-9b78-4f3c-97e0-a1847b3a65e6
+        env:
+          PGPASSWORD: postgres_password
 
       - name: Setup Python
         uses: actions/setup-python@v5
