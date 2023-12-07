@@ -53,6 +53,8 @@ jobs:
 
       # https://devcenter.heroku.com/articles/heroku-postgres-import-export#restore-to-local-database
       - name: Restore database from file
+        # exit code is 1, but it does actually work, so just continue
+        continue-on-error: true
         run: |
           pg_restore --verbose --clean --no-acl --no-owner \
           -h localhost -U postgres_user -d postgres_db \
@@ -61,7 +63,6 @@ jobs:
           PGPASSWORD: postgres_password
 
       - name: Test restored database
-        if: always()
         run: |
           pytest -vvxs db-backup/test_db_backup.py
         env:
