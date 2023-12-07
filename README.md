@@ -1,3 +1,9 @@
+# :warning: ARCHIVED
+
+This repository is ARCHIVED. It is no longer used to a deploy any active service.
+
+# Original README continues below 👇
+
 # Pangeo Forge Orchestrator
 
 [![Tests](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml/badge.svg)](https://github.com/pangeo-forge/pangeo-forge-orchestrator/actions/workflows/main.yaml)
