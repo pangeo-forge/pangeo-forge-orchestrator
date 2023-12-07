@@ -1,9 +1,9 @@
 name: Delete Review App
 
 on:
-  pull_request:
-    branches: ['main']
-    types: [unlabeled]
+  # pull_request:
+  #   branches: ['main']
+  #   types: [unlabeled]
 
 env:
   PIPELINE: '17cc0239-494f-4a68-aa75-3da7c466709c'

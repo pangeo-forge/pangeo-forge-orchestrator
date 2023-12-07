@@ -1,18 +1,18 @@
 name: Push Dataflow Container Image to GCR
 
 on:
-  push:
-    branches:
-      - main
-      - prod
-    paths:
-      - 'dataflow-container-image.txt'
-  pull_request:
-    branches:
-      - main
-      - prod
-    paths:
-      - 'dataflow-container-image.txt'
+  # push:
+  #   branches:
+  #     - main
+  #     - prod
+  #   paths:
+  #     - 'dataflow-container-image.txt'
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - prod
+  #   paths:
+  #     - 'dataflow-container-image.txt'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
