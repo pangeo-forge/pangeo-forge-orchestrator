@@ -1,11 +1,11 @@
 name: Test Dataflow Integration
 
 on:
-  deployment_status:
-  # TODO: add on 'schedule' against staging deployment?
-  pull_request:
-    branches: ['main']
-    types: [labeled]
+  # deployment_status:
+  # # TODO: add on 'schedule' against staging deployment?
+  # pull_request:
+  #   branches: ['main']
+  #   types: [labeled]
 
 jobs:
   matrix-generate-prs:

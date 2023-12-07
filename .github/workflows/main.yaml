@@ -1,18 +1,18 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - prod
-    paths-ignore:
-      - 'docs/**'
-  pull_request:
-    branches:
-      - main
-      - prod
-    paths-ignore:
-      - 'docs/**'
+  # push:
+  #   branches:
+  #     - main
+  #     - prod
+  #   paths-ignore:
+  #     - 'docs/**'
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - prod
+  #   paths-ignore:
+  #     - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
