@@ -39,8 +39,8 @@ jobs:
 
       - name: Install PostgreSQL client
         run: |
-          apt-get update
-          apt-get install --yes postgresql-client
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
 
       # https://devcenter.heroku.com/articles/heroku-postgres-import-export#restore-to-local-database
       - name: Restore database from file
